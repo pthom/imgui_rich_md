@@ -1695,11 +1695,11 @@ void Renderer::draw_loading_spinner()
 	{
 		float a = (float)i / (float)segments * 3.14159265358979f * 2.0f;
 		// Fade based on rotation phase
-		float fade = std::fmodf((float)i / (float)segments + t * 1.5f, 1.0f);
+		float fade = std::fmod((float)i / (float)segments + t * 1.5f, 1.0f);
 		ImU32 c = ImGui::GetColorU32(ImGuiCol_Text, fade * 0.8f);
 		float inner = radius * 0.5f;
-		ImVec2 p1(center.x + std::cosf(a) * inner, center.y + std::sinf(a) * inner);
-		ImVec2 p2(center.x + std::cosf(a) * radius, center.y + std::sinf(a) * radius);
+		ImVec2 p1(center.x + std::cos(a) * inner, center.y + std::sin(a) * inner);
+		ImVec2 p2(center.x + std::cos(a) * radius, center.y + std::sin(a) * radius);
 		dl->AddLine(p1, p2, c, thickness);
 	}
 	ImGui::Dummy(ImVec2(size, size));
