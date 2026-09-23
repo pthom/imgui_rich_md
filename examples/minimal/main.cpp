@@ -9,6 +9,11 @@
 #define GL_SILENCE_DEPRECATION
 #include <OpenGL/gl3.h>
 #else
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>  // GL/gl.h needs APIENTRY and WINGDIAPI
+#endif
 #include <GL/gl.h>
 #endif
 #define GLFW_INCLUDE_NONE
