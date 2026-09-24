@@ -160,10 +160,12 @@ namespace Snippets
         bool hasTitleLine = ! snippetData.DisplayedFilename.empty() || snippetData.ShowCursorPosition;
 
         float lineHeight;
+        float editorLineHeight;  // the editor's line pitch: it renders with ItemSpacing (0, 0)
         {
             auto codeFont = RichMd::GetCodeFont();
             ImGui::PushFont(codeFont.font, codeFont.size);
             lineHeight = ImGui::GetTextLineHeightWithSpacing();
+            editorLineHeight = ImGui::GetTextLineHeight() * editor.GetLineSpacing();
             ImGui::PopFont();
         }
 
@@ -183,7 +185,7 @@ namespace Snippets
                 nbVisibleLines = snippetData.MaxHeightInLines;
 
             // + ImGui::GetStyle().ScrollbarSize: account for a possible horizontal scrollbar
-            editorSize.y = lineHeight * (float)nbVisibleLines + ImGui::GetStyle().ScrollbarSize;
+            editorSize.y = editorLineHeight * (float)nbVisibleLines + ImGui::GetStyle().ScrollbarSize;
         }
 
         if (hasTitleLine)
@@ -232,7 +234,7 @@ namespace Snippets
             const ImGuiStyle& style = ImGui::GetStyle();
             float buttonWidth = lineHeight * 1.25f, buttonHeight = ImGui::GetFrameHeight(), pad = style.FramePadding.y;
             float right = editorMax.x - pad;
-            if ((float)editor.GetLineCount() * lineHeight > editorSize.y - style.ScrollbarSize)  // a vertical scrollbar
+            if ((float)editor.GetLineCount() * editorLineHeight > editorSize.y - style.ScrollbarSize)  // a vertical scrollbar
                 right -= style.ScrollbarSize;
             ImGui::SetCursorScreenPos(ImVec2(right - buttonWidth, editorMin.y + pad));
             ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav;
