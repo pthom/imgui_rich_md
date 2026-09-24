@@ -1,0 +1,297 @@
+// The checks of the Mermaid test corpus, shared by the test (mermaid_test.cpp) and the review tool.
+// A corpus file starts with comment lines:
+//   %% <what the diagram shows>
+//   %% expect: nodes=6 edges=6 subgraphs=3       (or participants=, messages=, notes=, loops=; error_line=N)
+//   %% known: label-on-node (<why>)              the checks known to fail until the layout improves
+// The layout checks need an ImGui frame, with the font the diagram is laid out with.
+#pragma once
+#include "imgui_rich_md/backends/mermaid/rich_md_mermaid.h"
+
+#include <algorithm>
+#include <map>
+#include <set>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace MermaidChecks
+{
+    using namespace RichMd::Mermaid;
+
+    struct Expectation
+    {
+        std::string description;
+        std::map<std::string, int> counts;
+        std::set<std::string> known;
+    };
+
+    struct Issue
+    {
+        std::string check, message;
+    };
+
+    struct Report
+    {
+        std::vector<Issue> failures;          // unexpected
+        std::vector<Issue> known;             // expected (listed in `%% known:`)
+        std::vector<std::string> fixedKnown;  // listed in `%% known:`, but they pass: the marker should go
+    };
+
+    inline Expectation ReadExpectation(const std::string& source)
+    {
+        Expectation e;
+        std::istringstream lines(source);
+        std::string line;
+        bool first = true;
+        while (std::getline(lines, line) && line.rfind("%%", 0) == 0)
+        {
+            std::string text = line.substr(line.find_first_not_of("% "));
+            std::istringstream words(text);
+            std::string word;
+            words >> word;
+            if (word == "expect:")
+            {
+                while (words >> word)
+                    if (size_t eq = word.find('='); eq != std::string::npos)
+                        e.counts[word.substr(0, eq)] = std::stoi(word.substr(eq + 1));
+            }
+            else if (word == "known:")
+            {
+                while (words >> word && word[0] != '(')
+                    e.known.insert(word);
+            }
+            else if (first)
+                e.description = text;
+            first = false;
+        }
+        return e;
+    }
+
+    namespace detail
+    {
+        struct Rect
+        {
+            ImVec2 min, max;
+            std::string name;
+        };
+
+        // Overlap of the interiors (touching is fine)
+        inline bool Overlap(const Rect& a, const Rect& b, float tolerance = 0.5f)
+        {
+            return a.min.x + tolerance < b.max.x && b.min.x + tolerance < a.max.x
+                && a.min.y + tolerance < b.max.y && b.min.y + tolerance < a.max.y;
+        }
+
+        inline bool Inside(const Rect& inner, const Rect& outer, float tolerance = 0.5f)
+        {
+            return inner.min.x + tolerance >= outer.min.x && inner.min.y + tolerance >= outer.min.y
+                && inner.max.x <= outer.max.x + tolerance && inner.max.y <= outer.max.y + tolerance;
+        }
+
+        // Whether the segment [p, q] goes through the interior of the rect (Liang-Barsky clipping)
+        inline bool SegmentThroughRect(ImVec2 p, ImVec2 q, const Rect& r, float tolerance = 1.f)
+        {
+            float x0 = r.min.x + tolerance, y0 = r.min.y + tolerance, x1 = r.max.x - tolerance, y1 = r.max.y - tolerance;
+            float t0 = 0.f, t1 = 1.f, dx = q.x - p.x, dy = q.y - p.y;
+            const float pp[4] = {-dx, dx, -dy, dy};
+            const float qq[4] = {p.x - x0, x1 - p.x, p.y - y0, y1 - p.y};
+            for (int i = 0; i < 4; ++i)
+            {
+                if (pp[i] == 0.f)
+                {
+                    if (qq[i] < 0.f)
+                        return false;
+                    continue;
+                }
+                float t = qq[i] / pp[i];
+                if (pp[i] < 0.f)
+                    t0 = std::max(t0, t);
+                else
+                    t1 = std::min(t1, t);
+                if (t0 > t1)
+                    return false;
+            }
+            return true;
+        }
+
+        inline Rect TextRect(ImVec2 pos, const std::string& text, const std::string& name)
+        {
+            ImVec2 ts = ImGui::CalcTextSize(text.c_str());
+            return Rect{pos, ImVec2(pos.x + ts.x, pos.y + ts.y), name};
+        }
+
+        inline std::string Describe(const Rect& r) { return "`" + r.name + "`"; }
+    }
+
+    inline std::vector<Issue> CheckParse(const Diagram& d, const Expectation& e)
+    {
+        std::vector<Issue> issues;
+        auto it = e.counts.find("error_line");
+        if (it != e.counts.end())
+        {
+            std::string expected = "line " + std::to_string(it->second) + ":";
+            if (d.error.rfind(expected, 0) != 0)
+                issues.push_back({"parse", "expected an error at " + expected + " got `" + d.error + "`"});
+            return issues;
+        }
+        if (!d.error.empty())
+        {
+            issues.push_back({"parse", d.error});
+            return issues;
+        }
+        std::map<std::string, int> counts;
+        if (d.kind == DiagramKind::Sequence)
+        {
+            counts["participants"] = (int)d.sequence.participantIds.size();
+            counts["messages"] = counts["notes"] = 0;
+            for (const SequenceRow& r : d.sequence.rows)
+                ++counts[r.isNote ? "notes" : "messages"];
+            counts["loops"] = (int)d.sequence.loops.size();
+        }
+        else
+        {
+            counts["nodes"] = (int)d.graph.nodes.size();
+            counts["edges"] = (int)d.graph.edges.size();
+            counts["subgraphs"] = (int)d.graph.subgraphs.size();
+        }
+        for (const auto& [key, value] : e.counts)
+        {
+            auto found = counts.find(key);
+            if (found == counts.end())
+                issues.push_back({"parse", "unknown count `" + key + "`"});
+            else if (found->second != value)
+                issues.push_back({"parse", key + ": expected " + std::to_string(value) + ", got " + std::to_string(found->second)});
+        }
+        return issues;
+    }
+
+    // The layout invariants: what the eye would otherwise have to catch
+    inline std::vector<Issue> CheckLayout(const Diagram& d)
+    {
+        using namespace detail;
+        std::vector<Issue> issues;
+        const float em = d.layoutFontSize;
+        // Draw reserves DiagramSize, and draws at (em, em / 2) inside it
+        ImVec2 size = DiagramSize(d);
+        const Rect bounds{ImVec2(-em, -em / 2.f), ImVec2(size.x - em, size.y - em / 2.f), "bounds"};
+        auto checkBounds = [&](const Rect& r) {
+            if (!Inside(r, bounds))
+                issues.push_back({"out-of-bounds", Describe(r) + " is outside the space reserved for the diagram"});
+        };
+
+        if (d.kind == DiagramKind::Sequence)
+        {
+            const Sequence& seq = d.sequence;
+            for (size_t i = 0; i < seq.participantIds.size(); ++i)
+                checkBounds(Rect{ImVec2(seq.xCenter[i] - seq.boxWidth[i] / 2.f, 0.f),
+                                 ImVec2(seq.xCenter[i] + seq.boxWidth[i] / 2.f, seq.height), seq.participantLabels[i]});
+            for (const SequenceRow& r : seq.rows)
+            {
+                checkBounds(Rect{r.textMin, r.textMax, r.text});
+                if (r.isNote)
+                    checkBounds(Rect{r.boxMin, r.boxMax, "note " + r.text});
+            }
+            for (const SequenceLoop& loop : seq.loops)
+                checkBounds(Rect{loop.frameMin, loop.frameMax, "loop " + loop.label});
+            return issues;
+        }
+
+        const Graph& g = d.graph;
+        std::vector<Rect> nodes;
+        for (const Node& n : g.nodes)
+            nodes.push_back(Rect{n.pos, ImVec2(n.pos.x + n.size.x, n.pos.y + n.size.y), n.id});
+        std::vector<Rect> labels;  // edge labels and cardinalities, with the edge they belong to
+        std::vector<int> labelEdge;
+        for (size_t i = 0; i < g.edges.size(); ++i)
+        {
+            const Edge& e = g.edges[i];
+            if (!e.label.empty())
+                labels.push_back(Rect{e.labelMin, e.labelMax, e.label}), labelEdge.push_back((int)i);
+            if (d.kind == DiagramKind::Class)
+            {
+                const Relation& r = d.relations[i];
+                if (!r.cardinalitySrc.empty())
+                    labels.push_back(TextRect(r.cardinalitySrcPos, r.cardinalitySrc, r.cardinalitySrc)), labelEdge.push_back((int)i);
+                if (!r.cardinalityDst.empty())
+                    labels.push_back(TextRect(r.cardinalityDstPos, r.cardinalityDst, r.cardinalityDst)), labelEdge.push_back((int)i);
+            }
+        }
+
+        for (size_t i = 0; i < nodes.size(); ++i)
+        {
+            checkBounds(nodes[i]);
+            for (size_t j = i + 1; j < nodes.size(); ++j)
+                if (Overlap(nodes[i], nodes[j]))
+                    issues.push_back({"node-overlap", Describe(nodes[i]) + " and " + Describe(nodes[j]) + " overlap"});
+            int sub = g.nodes[i].subgraph;
+            if (sub >= 0 && g.subgraphs[sub].hasBox)
+                if (!Inside(nodes[i], Rect{g.subgraphs[sub].boxMin, g.subgraphs[sub].boxMax, g.subgraphs[sub].id}))
+                    issues.push_back({"subgraph-member", Describe(nodes[i]) + " is outside its subgraph `" + g.subgraphs[sub].id + "`"});
+        }
+        for (size_t a = 0; a < g.subgraphs.size(); ++a)
+        {
+            if (!g.subgraphs[a].hasBox)
+                continue;
+            Rect ra{g.subgraphs[a].boxMin, g.subgraphs[a].boxMax, "subgraph " + g.subgraphs[a].id};
+            checkBounds(ra);
+            for (size_t b = a + 1; b < g.subgraphs.size(); ++b)
+                if (g.subgraphs[b].hasBox && Overlap(ra, Rect{g.subgraphs[b].boxMin, g.subgraphs[b].boxMax, ""}))
+                    issues.push_back({"subgraph-overlap", "subgraphs `" + g.subgraphs[a].id + "` and `" + g.subgraphs[b].id + "` overlap"});
+        }
+        for (size_t i = 0; i < g.edges.size(); ++i)
+        {
+            const Edge& e = g.edges[i];
+            std::string edgeName = g.nodes[e.src].id + " -> " + g.nodes[e.dst].id;
+            for (ImVec2 p : e.points)
+                checkBounds(Rect{p, p, "edge " + edgeName});
+            for (size_t k = 0; k + 1 < e.points.size(); ++k)
+            {
+                for (size_t v = 0; v < nodes.size(); ++v)
+                    if ((int)v != e.src && (int)v != e.dst && SegmentThroughRect(e.points[k], e.points[k + 1], nodes[v]))
+                    {
+                        issues.push_back({"edge-through-node", "edge " + edgeName + " goes through " + Describe(nodes[v])});
+                        break;
+                    }
+                for (size_t l = 0; l < labels.size(); ++l)
+                    if (labelEdge[l] != (int)i && SegmentThroughRect(e.points[k], e.points[k + 1], labels[l]))
+                        issues.push_back({"label-on-edge", "label " + Describe(labels[l]) + " hides a part of edge " + edgeName});
+            }
+        }
+        for (size_t l = 0; l < labels.size(); ++l)
+        {
+            checkBounds(labels[l]);
+            for (const Rect& n : nodes)
+                if (Overlap(labels[l], n))
+                    issues.push_back({"label-on-node", "label " + Describe(labels[l]) + " overlaps " + Describe(n)});
+            for (size_t m = l + 1; m < labels.size(); ++m)
+                if (Overlap(labels[l], labels[m]))
+                    issues.push_back({"label-on-label", "labels " + Describe(labels[l]) + " and " + Describe(labels[m]) + " overlap"});
+        }
+        return issues;
+    }
+
+    // Parses the source, lays it out with the current font, and checks it against its expectation
+    inline Report Evaluate(const std::string& source)
+    {
+        Expectation expectation = ReadExpectation(source);
+        Diagram d = Parse(source);
+        std::vector<Issue> issues = CheckParse(d, expectation);
+        if (d.error.empty())
+        {
+            Layout(d);
+            std::vector<Issue> layoutIssues = CheckLayout(d);
+            issues.insert(issues.end(), layoutIssues.begin(), layoutIssues.end());
+        }
+        Report report;
+        std::set<std::string> failing;
+        for (const Issue& issue : issues)
+        {
+            failing.insert(issue.check);
+            (expectation.known.count(issue.check) ? report.known : report.failures).push_back(issue);
+        }
+        for (const std::string& check : expectation.known)
+            if (!failing.count(check))
+                report.fixedKnown.push_back(check);
+        return report;
+    }
+}

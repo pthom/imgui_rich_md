@@ -1,0 +1,17 @@
+%% From Mermaid's documentation (MIT): members declared with `Class : member`
+%% expect: nodes=4 edges=3
+classDiagram
+    Animal <|-- Duck
+    Animal <|-- Fish
+    Animal <|-- Zebra
+    Animal : +int age
+    Animal : +String gender
+    Animal: +isMammal()
+    Animal: +mate()
+    Duck : +String beakColor
+    Duck : +swim()
+    Duck : +quack()
+    Fish : -int sizeInFeet
+    Fish : -canEat()
+    Zebra : +bool is_wild
+    Zebra : +run()

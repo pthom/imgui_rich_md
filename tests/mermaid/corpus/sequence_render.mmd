@@ -1,0 +1,17 @@
+%% Aliases, messages to itself, a loop, a note over two participants (the prototype's example)
+%% expect: participants=3 messages=8 notes=1 loops=1
+sequenceDiagram
+    participant App
+    participant MD as rich_md
+    participant Host as Host services
+    App->>MD: Render(text)
+    MD->>MD: resolve @import
+    MD->>Host: ReadAsset(path)
+    Host-->>MD: bytes
+    loop each formula
+        MD->>Host: RenderLatex(latex)
+        Host-->>MD: bitmap
+        MD->Host: UploadRgba(bitmap)
+    end
+    Note over MD,Host: textures are ImTextureData, created by the backend
+    MD-->>App: drawn

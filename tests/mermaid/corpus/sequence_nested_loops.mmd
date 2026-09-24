@@ -1,0 +1,14 @@
+%% A message across every column, nested loops
+%% expect: participants=4 messages=3 loops=2
+sequenceDiagram
+    participant A
+    participant B
+    participant C
+    participant D
+    A->>D: a long message that crosses every column of the diagram
+    loop outer
+        B->>C: inner work
+        loop inner
+            C-->>B: ack
+        end
+    end

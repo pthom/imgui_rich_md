@@ -5,6 +5,8 @@
 | imgui_md, the original renderer by Dmitry Mekhontsev (extensively rewritten here) | `imgui_rich_md/rich_md_renderer.{h,cpp}` | MIT (`imgui_rich_md/LICENSE.imgui_md`) |
 | md4c, the Markdown parser by Martin Mitáš | `external/md4c` (submodule) | MIT |
 | stb_image by Sean Barrett | `imgui_rich_md/third_party/stb_image.h` | public domain / MIT |
+| Tests only: stb_image_write by Sean Barrett | `tests/mermaid/stb_image_write.h` | public domain / MIT |
+| Tests only: diagrams from Mermaid's documentation (files whose first line says so) | `tests/mermaid/corpus` | MIT (Mermaid) |
 | Roboto | `assets/fonts/Roboto` | Apache 2.0 (`assets/fonts/Roboto/LICENSE.txt`) |
 | Inconsolata | `assets/fonts/Inconsolata-Medium.ttf` | OFL (`assets/fonts/Inconsolata-LICENSE-OFL.txt`) |
 | Latin Modern Math | `assets/fonts/latex` | GUST font license (`assets/fonts/latex/GUST-FONT-LICENSE.txt`) |

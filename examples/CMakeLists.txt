@@ -100,3 +100,11 @@ if(_fonts_ok)
         target_compile_definitions(imgui_rich_md_fonts PRIVATE FONTS_EXAMPLE_ASSETS="${_fonts_dir}")
     endif()
 endif()
+
+# Not an example: a development tool that renders the Mermaid test corpus (tests/mermaid) to a review page
+if(NOT EMSCRIPTEN)
+    add_executable(imgui_rich_md_mermaid_review ${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid/mermaid_review.cpp)
+    target_include_directories(imgui_rich_md_mermaid_review PRIVATE ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid)
+    target_link_libraries(imgui_rich_md_mermaid_review PRIVATE imgui_rich_md glfw OpenGL::GL)
+    target_compile_definitions(imgui_rich_md_mermaid_review PRIVATE MERMAID_CORPUS_DIR="${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid/corpus")
+endif()

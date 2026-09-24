@@ -1,0 +1,34 @@
+%% Compartments, an annotation, a namespace, the UML relations with labels and cardinalities (the prototype's example)
+%% expect: nodes=6 edges=6 subgraphs=1
+%% known: out-of-bounds (the bottom padding of the Geometry box, and the `default` label on its lane)
+classDiagram
+    namespace Geometry {
+        class Shape {
+            <<interface>>
+            +area() float
+            +perimeter() float
+        }
+        class Circle {
+            -radius: float
+            +area() float
+        }
+        class Polygon {
+            -points: List~Point~
+            +area() float
+        }
+    }
+    class Canvas {
+        +shapes: List~Shape~
+        +draw()
+    }
+    class Renderer
+    class Style {
+        +color: Color
+        +thickness: float
+    }
+    Shape <|-- Circle : implements
+    Shape <|-- Polygon
+    Canvas "1" *-- "many" Shape : owns
+    Canvas o-- Renderer : uses
+    Renderer ..> Style : depends on
+    Canvas --> Style : default

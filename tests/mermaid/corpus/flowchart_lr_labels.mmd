@@ -1,0 +1,7 @@
+%% Left to right, a diamond, labels on the links
+%% expect: nodes=5 edges=4
+graph LR
+    A[Source file] --> B[Sections]
+    B --> C{Imported?}
+    C -->|prose| D(Markdown)
+    C -->|code| E(Snippet)

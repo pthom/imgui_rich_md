@@ -21,3 +21,12 @@ target_include_directories(imgui_rich_md_smoke_test PRIVATE ${IMGUI_DIR}/backend
 target_link_libraries(imgui_rich_md_smoke_test PRIVATE imgui_rich_md)
 enable_testing()
 add_test(NAME smoke_test COMMAND imgui_rich_md_smoke_test)
+
+# The Mermaid test: the corpus of tests/mermaid, parsed, laid out and checked (the review page: tests/mermaid/mermaid_review.cpp)
+if(IMGUI_RICHMD_WITH_MERMAID)
+    add_executable(imgui_rich_md_mermaid_test ${CMAKE_CURRENT_LIST_DIR}/mermaid/mermaid_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
+    target_include_directories(imgui_rich_md_mermaid_test PRIVATE ${IMGUI_DIR}/backends)
+    target_link_libraries(imgui_rich_md_mermaid_test PRIVATE imgui_rich_md)
+    target_compile_definitions(imgui_rich_md_mermaid_test PRIVATE MERMAID_CORPUS_DIR="${CMAKE_CURRENT_LIST_DIR}/mermaid/corpus")
+    add_test(NAME mermaid_test COMMAND imgui_rich_md_mermaid_test)
+endif()

@@ -1,0 +1,15 @@
+%% Fan-out and fan-in: the endpoints spread along the sides
+%% expect: nodes=8 edges=12
+flowchart TD
+    A[Dispatcher] --> W1[Worker 1]
+    A --> W2[Worker 2]
+    A --> W3[Worker 3]
+    A --> W4[Worker 4]
+    A --> W5[Worker 5]
+    A --> W6[Worker 6]
+    W1 --> Z[Collector]
+    W2 --> Z
+    W3 --> Z
+    W4 --> Z
+    W5 --> Z
+    W6 --> Z

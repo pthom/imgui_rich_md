@@ -1,0 +1,6 @@
+%% Long node labels and long link labels, left to right
+%% expect: nodes=3 edges=2
+%% known: label-on-node label-on-label label-on-edge (labels wider than the gap between the layers)
+flowchart LR
+    A[A node with a rather long label] -->|a long label on a short link| B[Short]
+    B -->|another fairly long label| C[The last node, also with a long label]

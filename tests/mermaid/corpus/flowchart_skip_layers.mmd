@@ -1,0 +1,8 @@
+%% Edges that skip layers travel on lanes past the graph
+%% expect: nodes=4 edges=5
+flowchart TD
+    A[First] --> B[Second]
+    B --> C[Third]
+    C --> D[Fourth]
+    A --> D
+    B --> D
