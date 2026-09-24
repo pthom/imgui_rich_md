@@ -39,6 +39,7 @@
 #include <vector>
 #include <utility>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <memory>
 #include <iostream>
@@ -520,7 +521,7 @@ namespace RichMd
                     for (const auto& f : GetHostServices().DefaultMergeFonts())
                         mergeFonts.push_back(f);
                 for (const auto& mergeFont : mergeFonts)
-                    if (AddFontFromAsset(mergeFont, fontSize, true) == nullptr)
+                    if (AddFontFromAsset(mergeFont, fontSize, true) == nullptr && mMissingMergeFonts.insert(mergeFont).second)
                         GetHostServices().Log("merge font not found: " + mergeFont);
                 return font;
             }
@@ -560,6 +561,7 @@ namespace RichMd
             MarkdownFontOptions mMarkdownFontOptions;
             std::vector<std::pair<MarkdownEmphasis, ImFont*>> mFonts;
             ImFont* mFontCode;
+            mutable std::set<std::string> mMissingMergeFonts;  // each one is logged once, not once per markdown font
         };
 
     } //namespace MdFonts
