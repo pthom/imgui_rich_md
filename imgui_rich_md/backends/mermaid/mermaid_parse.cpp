@@ -426,6 +426,22 @@ namespace RichMd::Mermaid
                         open.pop_back();
                     continue;
                 }
+                if (word == "direction" && subgraph >= 0)
+                {
+                    Subgraph& sg = graph.subgraphs[subgraph];
+                    string_view direction = AfterFirstWord(line.text);
+                    if (direction == "TD" || direction == "TB" || direction == "BT")
+                        sg.vertical = true, sg.reversed = direction == "BT";
+                    else if (direction == "LR" || direction == "RL")
+                        sg.vertical = false, sg.reversed = direction == "RL";
+                    else
+                    {
+                        d.error = LineError(line.number, "unknown direction `" + std::string(direction) + "`");
+                        return;
+                    }
+                    sg.hasDirection = true;
+                    continue;
+                }
                 if (IsStylingLine(word))
                     continue;
                 // Nodes, and links between them: A --> B & C --> D (every node of a group to every node of the next)

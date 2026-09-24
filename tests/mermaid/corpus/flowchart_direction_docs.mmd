@@ -1,0 +1,16 @@
+%% Mermaid's docs example: a direction inside subgraphs (TOP in TB, B1 in RL, B2 in BT), links to the subgraphs
+%% expect: nodes=6 edges=5 subgraphs=3
+flowchart LR
+  subgraph TOP
+    direction TB
+    subgraph B1
+        direction RL
+        i1 -->f1
+    end
+    subgraph B2
+        direction BT
+        i2 -->f2
+    end
+  end
+  A --> TOP --> B
+  B1 --> B2

@@ -1,0 +1,9 @@
+%% A subgraph with a direction, one of its nodes linked to the outside: the direction is ignored (as in Mermaid)
+%% expect: nodes=5 edges=4 subgraphs=1
+flowchart TD
+    Start --> Parse
+    subgraph Steps
+        direction LR
+        Parse --> Check --> Build
+    end
+    Build --> Ship

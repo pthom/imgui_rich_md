@@ -1,0 +1,15 @@
+%% Directions nested: TD, a subgraph in LR, a subgraph in TD inside it; a label and a back edge inside
+%% expect: nodes=6 edges=6 subgraphs=2
+flowchart TD
+    Input --> Pipeline
+    subgraph Pipeline
+        direction LR
+        Load --> Clean
+        Clean -->|rows| Stats
+        subgraph Stats[Statistics]
+            direction TD
+            Mean --> Var[Variance]
+            Var -.->|retry| Mean
+        end
+    end
+    Pipeline --> Report
