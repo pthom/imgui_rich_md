@@ -334,6 +334,9 @@ namespace RichMd
         ImTextureData* data = IM_NEW(ImTextureData)();
         data->Create(ImTextureFormat_RGBA32, w, h);
         memcpy(data->GetPixels(), rgba, (size_t)w * (size_t)h * 4);
+        // Every pixel is to upload. Backends upload the whole texture on WantCreate anyway, except some
+        // (wgpu-py's) which upload UpdateRect only, left empty by Create().
+        data->UpdateRect = ImTextureRect{0, 0, (unsigned short)w, (unsigned short)h};
         data->SetStatus(ImTextureStatus_WantCreate);
         ImGui::RegisterUserTexture(data);
         tex.ref._TexData = data;
