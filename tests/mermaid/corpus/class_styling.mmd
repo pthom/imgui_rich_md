@@ -1,0 +1,10 @@
+%% Styling and interaction lines are skipped, :::class suffixes removed
+%% expect: nodes=2 edges=1
+classDiagram
+    class Animal:::someclass
+    Animal <|-- Duck
+    style Animal fill:#f9f,stroke:#333
+    classDef someclass fill:#f96
+    cssClass "Duck" someclass
+    click Duck href "https://github.com/pthom/imgui_rich_md" "a tooltip"
+    callback Animal "callbackFunction" "a tooltip"

@@ -1,6 +1,8 @@
 // Part of ImGui Bundle - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_bundle
 #include "rich_md_mermaid.h"
+#include "imgui_rich_md/rich_md.h"
 
+#include <cfloat>
 #include <unordered_map>
 
 namespace RichMd::Mermaid
@@ -40,4 +42,19 @@ namespace RichMd::Mermaid
     }
 
     void ClearCache() { gCache.clear(); }
+
+    ImFont* ItalicFont()
+    {
+        if (!RichMd::GetCurrentContext())
+            return nullptr;
+        return RichMd::GetFont(RichMd::MarkdownFontSpec(true)).font;
+    }
+
+    ImVec2 ClassLineSize(const ClassLine& line)
+    {
+        ImFont* italic = line.isAbstract ? ItalicFont() : nullptr;
+        if (!italic)
+            return ImGui::CalcTextSize(line.text.c_str());
+        return italic->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, 0.f, line.text.c_str());
+    }
 }

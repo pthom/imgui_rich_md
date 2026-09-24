@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
@@ -97,10 +98,15 @@ namespace RichMd::Mermaid
         }
 
         // For each edge: where it leaves its source and enters its target, as fractions of the node's side, spread
-        // so that the edges of a node do not share a point (ordered by the position of their other end)
+        // so that the edges of a node do not share a point (ordered by the position of their other end; the lane edges
+        // last, on the side of the lanes)
         std::vector<std::pair<float, float>> Anchors(const Graph& graph)
         {
-            auto cross = [&](int v) { return graph.vertical ? graph.nodes[v].pos.x : graph.nodes[v].pos.y; };
+            auto cross = [&](int edge, int v) {
+                if (UsesLane(graph, graph.edges[edge]))
+                    return FLT_MAX;
+                return graph.vertical ? graph.nodes[v].pos.x : graph.nodes[v].pos.y;
+            };
             std::map<int, std::vector<int>> out, in;
             for (size_t i = 0; i < graph.edges.size(); ++i)
             {
@@ -110,13 +116,13 @@ namespace RichMd::Mermaid
             std::vector<std::pair<float, float>> result(graph.edges.size(), {0.5f, 0.5f});
             for (auto& [v, edges] : out)
             {
-                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(graph.edges[a].dst) < cross(graph.edges[b].dst); });
+                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(a, graph.edges[a].dst) < cross(b, graph.edges[b].dst); });
                 for (size_t k = 0; k < edges.size(); ++k)
                     result[edges[k]].first = (float)(k + 1) / (float)(edges.size() + 1);
             }
             for (auto& [v, edges] : in)
             {
-                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(graph.edges[a].src) < cross(graph.edges[b].src); });
+                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(a, graph.edges[a].src) < cross(b, graph.edges[b].src); });
                 for (size_t k = 0; k < edges.size(); ++k)
                     result[edges[k]].second = (float)(k + 1) / (float)(edges.size() + 1);
             }
@@ -161,14 +167,15 @@ namespace RichMd::Mermaid
                 return {pa, ImVec2(a1.x + halfGap, pa.y), ImVec2(a1.x + halfGap, ly),
                         ImVec2(b0.x - halfGap, ly), ImVec2(b0.x - halfGap, pb.y), pb};
             }
+            auto channel = graph.channels.find(a.rank);
             if (vertical)
             {
-                float midY = (a1.y + b0.y) / 2.f;
+                float midY = channel != graph.channels.end() ? channel->second : (a1.y + b0.y) / 2.f;
                 if (std::fabs(pa.x - pb.x) < 1.f)
                     return {pa, pb};
                 return {pa, ImVec2(pa.x, midY), ImVec2(pb.x, midY), pb};
             }
-            float midX = (a1.x + b0.x) / 2.f;
+            float midX = channel != graph.channels.end() ? channel->second : (a1.x + b0.x) / 2.f;
             if (std::fabs(pa.y - pb.y) < 1.f)
                 return {pa, pb};
             return {pa, ImVec2(midX, pa.y), ImVec2(midX, pb.y), pb};
@@ -189,8 +196,12 @@ namespace RichMd::Mermaid
                     continue;
                 size_t k = e.points.size() > 2 ? e.points.size() / 2 - 1 : 0;
                 ImVec2 s0 = e.points[k], s1 = e.points[k + 1];
+                ImVec2 c((s0.x + s1.x) / 2.f, (s0.y + s1.y) / 2.f);
+                auto channel = graph.channels.find(graph.nodes[e.src].rank);
+                if (!UsesLane(graph, e) && channel != graph.channels.end())  // a forward edge: its label in the channel
+                    (graph.vertical ? c.y : c.x) = channel->second;
                 ImVec2 ts = ImGui::CalcTextSize(e.label.c_str());
-                ImVec2 mid((s0.x + s1.x) / 2.f - ts.x / 2.f, (s0.y + s1.y) / 2.f - ts.y / 2.f);
+                ImVec2 mid(c.x - ts.x / 2.f, c.y - ts.y / 2.f);
                 e.labelMin = ImVec2(mid.x - 2.f, mid.y);
                 e.labelMax = ImVec2(mid.x + ts.x + 2.f, mid.y + ts.y);
             }
@@ -224,8 +235,8 @@ namespace RichMd::Mermaid
                 float w = 0.f, h = 0.f;
                 for (const auto& compartment : node.compartments)
                 {
-                    for (const std::string& text : compartment)
-                        w = std::max(w, ImGui::CalcTextSize(text.c_str()).x);
+                    for (const ClassLine& line : compartment)
+                        w = std::max(w, ClassLineSize(line).x);
                     h += (float)compartment.size() * ImGui::GetTextLineHeight() + 0.6f * em;
                 }
                 return ImVec2(w + 2.f * pad, h);
@@ -250,8 +261,12 @@ namespace RichMd::Mermaid
             }
         }
 
-        // Subgraph boxes: the bounding box of the members, padded, with room for the title above them
-        void ComputeSubgraphBoxes(Graph& graph, float boxPad, float titleHeight)
+        // The width a box needs for its title
+        float TitleWidth(const Subgraph& sub, float em) { return ImGui::CalcTextSize(sub.title.c_str()).x + 1.5f * em; }
+
+        // Subgraph boxes: the bounding box of the members, padded, with room for the title above them, and at least
+        // as wide as the title
+        void ComputeSubgraphBoxes(Graph& graph, float boxPad, float titleHeight, float em)
         {
             for (size_t b = 0; b < graph.subgraphs.size(); ++b)
             {
@@ -268,6 +283,9 @@ namespace RichMd::Mermaid
                     sub.boxMin = ImVec2(std::min(sub.boxMin.x, p0.x), std::min(sub.boxMin.y, p0.y));
                     sub.boxMax = ImVec2(std::max(sub.boxMax.x, p1.x), std::max(sub.boxMax.y, p1.y));
                 }
+                float missing = TitleWidth(sub, em) - (sub.boxMax.x - sub.boxMin.x);
+                if (sub.hasBox && missing > 0.f)
+                    sub.boxMin.x -= missing / 2.f, sub.boxMax.x += missing / 2.f;
             }
         }
 
@@ -294,10 +312,11 @@ namespace RichMd::Mermaid
                 if (!e.label.empty())
                     flipBox(e.labelMin, e.labelMax);
             }
-            ComputeSubgraphBoxes(graph, boxPad, titleHeight);
+            ComputeSubgraphBoxes(graph, boxPad, titleHeight, ImGui::GetFontSize());
         }
 
-        void LayoutGraph(Graph& graph, float em)
+        // gapY: the gap between two layers; relations: the markers and cardinalities of a class diagram
+        void LayoutGraph(Graph& graph, float em, float gapY, const std::vector<Relation>* relations)
         {
             const int n = (int)graph.nodes.size();
             std::vector<std::vector<int>> succs(n);
@@ -375,7 +394,7 @@ namespace RichMd::Mermaid
                 }
 
             // Sizes
-            const float gapX = 1.5f * em, gapY = 2.5f * em;
+            const float gapX = 1.5f * em;
             const float lineHeight = ImGui::GetTextLineHeight();
             for (Node& node : graph.nodes)
                 node.size = NodeSize(node, em);
@@ -419,6 +438,10 @@ namespace RichMd::Mermaid
                     bandWidth[b] = std::max(bandWidth[b], w);
                 }
             }
+            if (vertical)
+                for (int b = 0; b < freeBand; ++b)
+                    if (bandWidth[b] > 0.f)
+                        bandWidth[b] = std::max(bandWidth[b], TitleWidth(graph.subgraphs[b], em));
             std::vector<float> bandStart(freeBand + 1, 0.f);
             float x = 0.f;
             for (int b = 0; b <= freeBand; ++b)
@@ -429,20 +452,63 @@ namespace RichMd::Mermaid
                 }
             const float totalCross = std::max(x - gapX, 0.f);
 
-            // The gap after each layer: wide enough for the labels of the edges that cross it
+            // The gap after each layer: wide enough for the label of each edge that crosses it (in its middle), and for
+            // the markers and cardinalities at its ends (class diagrams)
             std::map<int, float> gapAfter;
-            for (const Edge& e : graph.edges)
-                if (!e.label.empty() && !UsesLane(graph, e))
+            auto extent = [&](const std::string& text) {
+                ImVec2 ts = ImGui::CalcTextSize(text.c_str());
+                return vertical ? ts.y : ts.x + 4.f;
+            };
+            for (size_t i = 0; i < graph.edges.size(); ++i)
+            {
+                const Edge& e = graph.edges[i];
+                if (UsesLane(graph, e))
+                    continue;
+                float endRoom = 0.f;  // the room at each end, the same at both so that the label stays in the middle
+                if (relations)
                 {
-                    ImVec2 ts = ImGui::CalcTextSize(e.label.c_str());
-                    float needed = (vertical ? ts.y : ts.x + 4.f) + 1.5f * em;
-                    gapAfter[graph.nodes[e.src].rank] = std::max(gapAfter[graph.nodes[e.src].rank], needed);
+                    const Relation& r = (*relations)[i];
+                    for (const std::string* card : {&r.cardinalitySrc, &r.cardinalityDst})
+                        endRoom = std::max(endRoom, card->empty() ? 0.f : 1.3f * em + extent(*card) / 2.f + 0.3f * em);
+                    for (Marker m : {r.markerSrc, r.markerDst})
+                        endRoom = std::max(endRoom, m == Marker::None ? 0.f : 1.2f * em);
                 }
+                if (e.label.empty() && endRoom == 0.f)
+                    continue;
+                float needed = (e.label.empty() ? 0.f : extent(e.label)) + 2.f * endRoom + 1.5f * em;
+                gapAfter[graph.nodes[e.src].rank] = std::max(gapAfter[graph.nodes[e.src].rank], needed);
+            }
 
-            // Positions: the layers along the main axis, the nodes centered in their band
-            float offsetMain = 0.f, lastGap = 0.f;
+            // Along the main axis, a subgraph's box adds its padding before its first layer and after its last one, and
+            // its title before its first layer (TD), or after its last one (BT: mirrored afterwards)
+            std::map<int, float> before, after;
+            for (size_t b = 0; b < graph.subgraphs.size(); ++b)
+            {
+                int first = INT_MAX, last = INT_MIN;
+                for (const Node& nd : graph.nodes)
+                    if (nd.subgraph == (int)b)
+                        first = std::min(first, nd.rank), last = std::max(last, nd.rank);
+                if (first > last)
+                    continue;
+                float title = vertical ? titleHeight : 0.f;
+                before[first] = std::max(before[first], boxPad + (graph.reversed ? 0.f : title));
+                after[last] = std::max(after[last], boxPad + (graph.reversed ? title : 0.f));
+            }
+
+            // Positions: the layers along the main axis, the nodes centered in their band. Between two layers, the gap
+            // leaves the boxes' paddings and titles, and a channel in the middle of the free space, where the edges run
+            graph.channels.clear();
+            float offsetMain = layers.empty() ? 0.f : before[layers.begin()->first], previousEnd = 0.f;
+            int previous = -1;
             for (auto& [r, layer] : layers)
             {
+                if (previous >= 0)
+                {
+                    float free = std::max(1.5f * em, gapAfter[previous]);
+                    float gap = std::max({gapY, gapAfter[previous], after[previous] + before[r] + free});
+                    offsetMain = previousEnd + gap;
+                    graph.channels[previous] = (previousEnd + after[previous] + offsetMain - before[r]) / 2.f;
+                }
                 float thickness = 0.f;
                 for (int v : layer)
                     thickness = std::max(thickness, main(graph.nodes[v]));
@@ -464,17 +530,19 @@ namespace RichMd::Mermaid
                         cursor += cross(nd) + gapX;
                     }
                 }
-                lastGap = std::max(gapY, gapAfter[r]);
-                offsetMain += thickness + lastGap;
+                previousEnd = offsetMain + thickness;
+                previous = r;
             }
-            ComputeSubgraphBoxes(graph, boxPad, titleHeight);
+            const float mainEnd = previousEnd + (previous >= 0 ? after[previous] : 0.f);
+            ComputeSubgraphBoxes(graph, boxPad, titleHeight, em);
 
-            // Everything shifted along the main axis: room for the titles of the boxes above the first layer (TD),
-            // and for the back edges that come back in front of the first layer
-            float shift = (!graph.subgraphs.empty() && vertical && !graph.reversed ? titleHeight + boxPad : 0.f) + (!graph.backEdges.empty() ? 1.5f * em : 0.f);
+            // Everything shifted along the main axis: room for the back edges that come back in front of the first layer
+            float shift = !graph.backEdges.empty() ? 1.5f * em : 0.f;
             ImVec2 delta = vertical ? ImVec2(0.f, shift) : ImVec2(shift, 0.f);
             for (Node& nd : graph.nodes)
                 nd.pos = ImVec2(nd.pos.x + delta.x, nd.pos.y + delta.y);
+            for (auto& [r, channel] : graph.channels)
+                channel += shift;
             for (Subgraph& sub : graph.subgraphs)
             {
                 sub.boxMin = ImVec2(sub.boxMin.x + delta.x, sub.boxMin.y + delta.y);
@@ -485,11 +553,60 @@ namespace RichMd::Mermaid
                 if (UsesLane(graph, e))
                     ++graph.lanes;
             const float lanes = 1.2f * em * (float)graph.lanes;  // room on the right (TD) or below (LR) for the lane edges
-            const float mainTotal = offsetMain - lastGap + shift;
+            const float mainTotal = mainEnd + shift;
             graph.size = vertical ? ImVec2(totalCross + lanes, mainTotal) : ImVec2(mainTotal, totalCross + lanes);
             RouteEdges(graph, em);
             if (graph.reversed)
                 Mirror(graph, boxPad, titleHeight);
+        }
+
+        // Whether the segment [p, q] goes through the rect [r0, r1] (Liang-Barsky clipping)
+        bool SegmentThroughRect(ImVec2 p, ImVec2 q, ImVec2 r0, ImVec2 r1)
+        {
+            float t0 = 0.f, t1 = 1.f, dx = q.x - p.x, dy = q.y - p.y;
+            const float pp[4] = {-dx, dx, -dy, dy};
+            const float qq[4] = {p.x - r0.x, r1.x - p.x, p.y - r0.y, r1.y - p.y};
+            for (int i = 0; i < 4; ++i)
+            {
+                if (pp[i] == 0.f)
+                {
+                    if (qq[i] < 0.f)
+                        return false;
+                    continue;
+                }
+                float t = qq[i] / pp[i];
+                if (pp[i] < 0.f)
+                    t0 = std::max(t0, t);
+                else
+                    t1 = std::min(t1, t);
+                if (t0 > t1)
+                    return false;
+            }
+            return true;
+        }
+
+        // A title where no edge crosses it: on the left of its box, else on the right, else in the middle
+        void PlaceTitles(Graph& graph, float em)
+        {
+            for (Subgraph& sub : graph.subgraphs)
+            {
+                if (!sub.hasBox)
+                    continue;
+                ImVec2 ts = ImGui::CalcTextSize(sub.title.c_str());
+                float width = sub.boxMax.x - sub.boxMin.x;
+                const float candidates[3] = {0.5f * em, width - ts.x - 0.5f * em, (width - ts.x) / 2.f};
+                int bestCrossings = INT_MAX;
+                for (float x : candidates)
+                {
+                    ImVec2 t0(sub.boxMin.x + x, sub.boxMin.y + 0.2f * em), t1(t0.x + ts.x, t0.y + ts.y);
+                    int crossings = 0;
+                    for (const Edge& e : graph.edges)
+                        for (size_t k = 0; k + 1 < e.points.size(); ++k)
+                            crossings += SegmentThroughRect(e.points[k], e.points[k + 1], t0, t1) ? 1 : 0;
+                    if (crossings < bestCrossings)
+                        bestCrossings = crossings, sub.titleX = x;
+                }
+            }
         }
 
         // The bounding box of what a graph draws
@@ -795,9 +912,12 @@ namespace RichMd::Mermaid
             LayoutSequence(diagram.sequence, em);
         else
         {
-            LayoutGraph(diagram.graph, em);
+            // class diagrams: room for the UML markers at the ends of the lines
+            bool isClass = diagram.kind == DiagramKind::Class;
+            LayoutGraph(diagram.graph, em, isClass ? 3.3f * em : 2.5f * em, isClass ? &diagram.relations : nullptr);
             if (diagram.kind == DiagramKind::Class)
                 PlaceCardinalities(diagram.graph, diagram.relations, em);
+            PlaceTitles(diagram.graph, em);
             FitGraph(diagram.graph, diagram.relations, em);
         }
         diagram.layoutFont = ImGui::GetFont();

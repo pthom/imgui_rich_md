@@ -1,0 +1,22 @@
+%% Namespaces as UML packages: with a label, with a dotted name, nested (shown flattened), and classes outside
+%% expect: nodes=6 edges=4 subgraphs=4
+%% known: edge-through-title (an edge enters a box whose title is as wide as the box: it passes under the title)
+classDiagram
+    namespace Shapes["Geometric shapes"] {
+        class Shape
+        class Circle
+    }
+    namespace Render.Backends {
+        class OpenGL
+    }
+    namespace App {
+        class Window
+        namespace Widgets {
+            class Button
+        }
+    }
+    class Main
+    Shape <|-- Circle
+    Main --> Window
+    Window --> OpenGL
+    Main --> Shape

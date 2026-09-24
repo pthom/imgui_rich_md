@@ -1,0 +1,16 @@
+%% Generics: ~T~ shown as <T>, nested, in class names and members (the class Square~Shape~ comes from Mermaid's documentation, MIT)
+%% expect: nodes=2 edges=1
+classDiagram
+    class Square~Shape~{
+        int id
+        List~int~ position
+        setPoints(List~int~ points)
+        getPoints() List~int~
+    }
+    Square : -List~string~ messages
+    Square : +setMessages(List~string~ messages)
+    Square : +getDistanceMatrix() List~List~int~~
+    class Cache~K, V~ {
+        -Map~K, V~ entries
+    }
+    Square --> Cache

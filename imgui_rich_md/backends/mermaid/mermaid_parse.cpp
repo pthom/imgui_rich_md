@@ -728,49 +728,77 @@ namespace RichMd::Mermaid
         // Class diagrams
         // ---------------------------------------------------------------------------------------------------------
 
+        // Generics: List~int~ shown as List<int>, nested ones too (a ~ before a name opens, any other closes)
+        std::string Generics(string_view text)
+        {
+            std::string out;
+            for (size_t i = 0; i < text.size(); ++i)
+            {
+                if (text[i] != '~')
+                    out += text[i];
+                else
+                    out += (i + 1 < text.size() && IsWordChar(text[i + 1]) && i > 0 && IsWordChar(text[i - 1])) ? '<' : '>';
+            }
+            return out;
+        }
+
         int AddClass(Diagram& d, string_view name, int ns)
         {
             int index = FindNode(d.graph, name);
             if (index < 0)
             {
                 index = AddNode(d.graph, name, ns);
-                d.graph.nodes[index].compartments = {{std::string(name)}, {}, {}};
+                d.graph.nodes[index].compartments = {{ClassLine{std::string(name)}}, {}, {}};
             }
             else if (ns >= 0 && d.graph.nodes[index].subgraph < 0)
                 d.graph.nodes[index].subgraph = ns;
             return index;
         }
 
-        // <<annotation>> above the name, a member with parentheses in the methods, any other in the attributes
+        // <<annotation>> above the name, a member with parentheses in the methods, any other in the attributes. A $ at
+        // the end (or after the parentheses) makes a member static, a * abstract.
         void AddMember(Node& node, string_view member)
         {
             member = Trim(member);
             if (StartsWith(member, "<<") && EndsWith(member, ">>"))
-                node.compartments[0].insert(node.compartments[0].begin(), "\xC2\xAB" + std::string(member.substr(2, member.size() - 4)) + "\xC2\xBB");
-            else if (member.find('(') != string_view::npos)
-                node.compartments[2].emplace_back(member);
-            else
-                node.compartments[1].emplace_back(member);
+            {
+                std::string annotation = "\xC2\xAB" + std::string(Trim(member.substr(2, member.size() - 4))) + "\xC2\xBB";
+                node.compartments[0].insert(node.compartments[0].end() - 1, ClassLine{annotation});
+                return;
+            }
+            ClassLine line;
+            std::string text(member);
+            size_t paren = text.find(')');
+            for (size_t at : {text.empty() ? std::string::npos : text.size() - 1, paren == std::string::npos ? paren : paren + 1})
+            {
+                if (at >= text.size() || (text[at] != '$' && text[at] != '*'))
+                    continue;
+                (text[at] == '$' ? line.isStatic : line.isAbstract) = true;
+                text.erase(at, 1);
+                break;
+            }
+            line.text = Generics(Trim(text));
+            node.compartments[member.find('(') != string_view::npos ? 2 : 1].push_back(line);
         }
 
-        // The relation tokens, with their markers; a mirrored token swaps the two ends
-        struct RelationToken { string_view token; Marker src, dst; bool dashed, mirrored; };
-        const RelationToken kRelationTokens[] = {
-            {"<|--", Marker::Triangle, Marker::None, false, false},
-            {"*--", Marker::DiamondFilled, Marker::None, false, false},
-            {"o--", Marker::Diamond, Marker::None, false, false},
-            {"-->", Marker::None, Marker::Arrow, false, false},
-            {"--|>", Marker::Triangle, Marker::None, false, true},
-            {"--*", Marker::DiamondFilled, Marker::None, false, true},
-            {"--o", Marker::Diamond, Marker::None, false, true},
-            {"<--", Marker::None, Marker::Arrow, false, true},
-            {"..>", Marker::None, Marker::Arrow, true, false},
-            {"<..", Marker::None, Marker::Arrow, true, true},
-            {"..|>", Marker::Triangle, Marker::None, true, true},
-            {"<|..", Marker::Triangle, Marker::None, true, false},
-            {"--", Marker::None, Marker::None, false, false},
-            {"..", Marker::None, Marker::None, true, false},
-        };
+        // The ends of a relation: <|, *, o, <, () before the line (-- or ..), |>, *, o, >, () after it
+        Marker ScanRelationEnd(Scanner& sc, bool before)
+        {
+            struct EndToken { string_view token; Marker marker; };
+            static const EndToken beforeTokens[] = {{"<|", Marker::Triangle}, {"()", Marker::Lollipop}, {"*", Marker::DiamondFilled}, {"o", Marker::Diamond}, {"<", Marker::Arrow}};
+            static const EndToken afterTokens[] = {{"|>", Marker::Triangle}, {"()", Marker::Lollipop}, {"*", Marker::DiamondFilled}, {"o", Marker::Diamond}, {">", Marker::Arrow}};
+            for (const EndToken& t : before ? beforeTokens : afterTokens)
+            {
+                if (sc.Rest().substr(0, t.token.size()) != t.token)
+                    continue;
+                char next = sc.Peek(t.token.size());
+                if (before && next != '-' && next != '.')  // an o or a * before the line must touch it
+                    continue;
+                sc.i += t.token.size();
+                return t.marker;
+            }
+            return Marker::None;
+        }
 
         // An optional "cardinality"
         bool ScanQuoted(Scanner& sc, std::string* text)
@@ -786,7 +814,8 @@ namespace RichMd::Mermaid
             return true;
         }
 
-        // A "1" *-- "many" B : label
+        // A "1" *-- "many" B : label. The markers of a hierarchy (triangle, diamonds) go to the source, an arrow to
+        // the target, so that the parents and the wholes are laid out first.
         bool ScanRelation(string_view line, Diagram& d, int ns)
         {
             Scanner sc{line};
@@ -795,13 +824,13 @@ namespace RichMd::Mermaid
             if (src.empty() || !ScanQuoted(sc, &cardSrc))
                 return false;
             sc.SkipSpaces();
-            const RelationToken* found = nullptr;
-            for (const RelationToken& t : kRelationTokens)  // the longest token that matches
-                if (sc.Rest().substr(0, t.token.size()) == t.token && (!found || t.token.size() > found->token.size()))
-                    found = &t;
-            if (!found)
+            Relation relation;
+            relation.markerSrc = ScanRelationEnd(sc, true);
+            if (sc.Eat(".."))
+                relation.dashed = true;
+            else if (!sc.Eat("--"))
                 return false;
-            sc.i += found->token.size();
+            relation.markerDst = ScanRelationEnd(sc, false);
             if (!ScanQuoted(sc, &cardDst))
                 return false;
             sc.SkipSpaces();
@@ -809,17 +838,17 @@ namespace RichMd::Mermaid
             sc.SkipSpaces();
             std::string label;
             if (sc.Eat(":"))
-                label = std::string(Trim(sc.Rest()));
+                label = CleanLabel(sc.Rest());
             else if (!sc.AtEnd())
                 return false;
             if (dst.empty())
                 return false;
-            if (found->mirrored)
+            auto hierarchy = [](Marker m) { return m == Marker::Triangle || m == Marker::Diamond || m == Marker::DiamondFilled; };
+            if ((relation.markerSrc == Marker::None && hierarchy(relation.markerDst)) || (relation.markerSrc == Marker::Arrow && relation.markerDst == Marker::None))
+            {
                 std::swap(src, dst), std::swap(cardSrc, cardDst);
-            Relation relation;
-            relation.markerSrc = found->src;
-            relation.markerDst = found->dst;
-            relation.dashed = found->dashed;
+                std::swap(relation.markerSrc, relation.markerDst);
+            }
             relation.cardinalitySrc = cardSrc;
             relation.cardinalityDst = cardDst;
             Edge edge;
@@ -827,16 +856,113 @@ namespace RichMd::Mermaid
             edge.dst = AddClass(d, dst, ns);
             edge.label = label;
             edge.end = EdgeEnd::None;
-            edge.style = found->dashed ? LineStyle::Dotted : LineStyle::Solid;
+            edge.style = relation.dashed ? LineStyle::Dotted : LineStyle::Solid;
             d.graph.edges.push_back(edge);
             d.relations.push_back(relation);
             return true;
         }
 
+        // A note: its own node, linked to its class by a dotted line
+        bool ScanClassNote(string_view line, Diagram& d, int ns)
+        {
+            Scanner sc{line};
+            if (sc.Word() != "note")
+                return false;
+            sc.SkipSpaces();
+            int target = -1;
+            if (sc.Rest().substr(0, 4) == "for " )
+            {
+                sc.i += 4;
+                sc.SkipSpaces();
+                string_view name = sc.Word();
+                if (name.empty())
+                    return false;
+                target = AddClass(d, name, ns);
+                sc.SkipSpaces();
+            }
+            string_view text = Trim(sc.Rest());
+            if (text.size() < 2 || text.front() != '"' || text.back() != '"')
+                return false;
+            std::string label;
+            for (string_view rest = text.substr(1, text.size() - 2); !rest.empty();)  // \n: a line break
+            {
+                size_t escape = rest.find("\\n");
+                label += std::string(rest.substr(0, escape));
+                if (escape == string_view::npos)
+                    break;
+                label += "<br>";
+                rest.remove_prefix(escape + 2);
+            }
+            Node note;
+            note.id = "note " + std::to_string(d.graph.nodes.size());
+            note.label = CleanLabel(label);
+            note.shape = NodeShape::Note;
+            note.subgraph = target >= 0 ? d.graph.nodes[target].subgraph : ns;
+            d.graph.nodes.push_back(note);
+            if (target >= 0)
+            {
+                Edge edge;
+                edge.src = (int)d.graph.nodes.size() - 1;
+                edge.dst = target;
+                edge.end = EdgeEnd::None;
+                edge.style = LineStyle::Dotted;
+                Relation relation;
+                relation.dashed = true;
+                d.graph.edges.push_back(edge);
+                d.relations.push_back(relation);
+            }
+            return true;
+        }
+
+        // class Name, class Name~T~, class Name["Label"], class Name <<Annotation>>, class Name:::style, then maybe {
+        bool ScanClassDeclaration(string_view line, Diagram& d, int ns, int* opened)
+        {
+            Scanner sc{AfterFirstWord(line)};
+            string_view name = sc.Word();
+            if (name.empty())
+                return false;
+            int index = AddClass(d, name, ns);
+            Node& node = d.graph.nodes[index];
+            std::string display(name);
+            if (sc.Peek() == '~')  // generic: up to the last ~ of the line
+            {
+                size_t last = sc.s.rfind('~');
+                display = Generics(std::string(name) + std::string(sc.s.substr(sc.i, last + 1 - sc.i)));
+                sc.i = last + 1;
+            }
+            sc.SkipSpaces();
+            if (sc.Eat("["))
+            {
+                size_t close = sc.s.find(']', sc.i);
+                if (close == string_view::npos)
+                    return false;
+                display = CleanLabel(sc.s.substr(sc.i, close - sc.i));
+                sc.i = close + 1;
+                sc.SkipSpaces();
+            }
+            if (sc.Eat(":::"))
+                sc.Word(), sc.SkipSpaces();
+            if (sc.Rest().substr(0, 2) == "<<")
+            {
+                size_t close = sc.s.find(">>", sc.i);
+                if (close == string_view::npos)
+                    return false;
+                AddMember(node, sc.s.substr(sc.i, close + 2 - sc.i));
+                sc.i = close + 2;
+                sc.SkipSpaces();
+            }
+            node.compartments[0].back().text = display;
+            if (sc.Eat("{"))
+                *opened = index;
+            sc.SkipSpaces();
+            return sc.AtEnd();
+        }
+
         void ParseClass(const std::vector<SourceLine>& lines, Diagram& d)
         {
-            int ns = -1;
-            int current = -1;  // inside `class X {`
+            std::vector<std::pair<int, int>> namespaces;  // the open ones: subgraph, line of the opening
+            auto ns = [&]() { return namespaces.empty() ? -1 : namespaces.back().first; };
+            int current = -1, currentLine = 0;  // inside `class X {`
             for (const SourceLine& line : lines)
             {
                 string_view word = FirstWord(line.text);
@@ -850,40 +976,67 @@ namespace RichMd::Mermaid
                 }
                 if (word == "classDiagram")
                     continue;
-                if (word == "namespace")
+                if (word == "direction")
                 {
-                    string_view name = AfterFirstWord(line.text);
-                    if (EndsWith(name, "{"))
-                        name = Trim(name.substr(0, name.size() - 1));
-                    ns = AddSubgraph(d.graph, name, std::string(name));
+                    string_view direction = AfterFirstWord(line.text);
+                    d.graph.vertical = direction == "TB" || direction == "TD" || direction == "BT";
+                    d.graph.reversed = direction == "BT" || direction == "RL";
+                    if (!d.graph.vertical && direction != "LR" && direction != "RL")
+                    {
+                        d.error = LineError(line.number, "unknown direction `" + std::string(direction) + "`");
+                        return;
+                    }
+                    continue;
+                }
+                if (word == "namespace")  // namespace Name, namespace Name["Label"]; a nested one is shown as Outer.Inner
+                {
+                    string_view rest = AfterFirstWord(line.text);
+                    if (EndsWith(rest, "{"))
+                        rest = Trim(rest.substr(0, rest.size() - 1));
+                    string_view name = rest;
+                    std::string title;
+                    size_t bracket = rest.find('[');
+                    if (bracket != string_view::npos && EndsWith(rest, "]"))
+                    {
+                        name = Trim(rest.substr(0, bracket));
+                        title = CleanLabel(rest.substr(bracket + 1, rest.size() - bracket - 2));
+                    }
+                    std::string id = namespaces.empty() ? std::string(name) : d.graph.subgraphs[ns()].id + "." + std::string(name);
+                    namespaces.push_back({AddSubgraph(d.graph, id, title.empty() ? id : title), line.number});
                     continue;
                 }
                 if (line.text == "}")
                 {
-                    ns = -1;
+                    if (namespaces.empty())
+                    {
+                        d.error = LineError(line.number, "`}` without a block to close");
+                        return;
+                    }
+                    namespaces.pop_back();
                     continue;
                 }
                 if (word == "class")
                 {
-                    string_view name = AfterFirstWord(line.text);
-                    bool opens = EndsWith(name, "{");
-                    if (opens)
-                        name = Trim(name.substr(0, name.size() - 1));
-                    int index = AddClass(d, name, ns);
-                    if (opens)
-                        current = index;
+                    int opened = -1;
+                    if (!ScanClassDeclaration(line.text, d, ns(), &opened))
+                    {
+                        d.error = LineError(line.number, "cannot parse `" + std::string(line.text) + "`");
+                        return;
+                    }
+                    if (opened >= 0)
+                        current = opened, currentLine = line.number;
                     continue;
                 }
                 if (StartsWith(line.text, "<<") && line.text.find(">>") != string_view::npos)  // <<interface>> Shape
                 {
                     size_t close = line.text.find(">>");
-                    int index = AddClass(d, Trim(line.text.substr(close + 2)), ns);
+                    int index = AddClass(d, Trim(line.text.substr(close + 2)), ns());
                     AddMember(d.graph.nodes[index], line.text.substr(0, close + 2));
                     continue;
                 }
                 if (IsStylingLine(word))
                     continue;
-                if (ScanRelation(line.text, d, ns))
+                if (ScanClassNote(line.text, d, ns()) || ScanRelation(line.text, d, ns()))
                     continue;
                 // Name : member
                 Scanner sc{line.text};
@@ -891,12 +1044,16 @@ namespace RichMd::Mermaid
                 sc.SkipSpaces();
                 if (!name.empty() && sc.Eat(":") && !Trim(sc.Rest()).empty())
                 {
-                    AddMember(d.graph.nodes[AddClass(d, name, ns)], sc.Rest());
+                    AddMember(d.graph.nodes[AddClass(d, name, ns())], sc.Rest());
                     continue;
                 }
                 d.error = LineError(line.number, "cannot parse `" + std::string(line.text) + "`");
                 return;
             }
+            if (current >= 0)
+                d.error = LineError(currentLine, "the block of `" + d.graph.nodes[current].id + "` is not closed");
+            else if (!namespaces.empty())
+                d.error = LineError(namespaces.back().second, "the namespace `" + d.graph.subgraphs[namespaces.back().first].id + "` is not closed");
         }
     }
 

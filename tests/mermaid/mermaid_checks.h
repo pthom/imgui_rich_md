@@ -240,10 +240,18 @@ namespace MermaidChecks
                 if (g.subgraphs[b].hasBox && Overlap(ra, Rect{g.subgraphs[b].boxMin, g.subgraphs[b].boxMax, ""}))
                     issues.push_back({"subgraph-overlap", "subgraphs `" + g.subgraphs[a].id + "` and `" + g.subgraphs[b].id + "` overlap"});
         }
+        std::vector<Rect> titles;  // the titles of the subgraphs (the tab of a namespace)
+        for (const Subgraph& sub : g.subgraphs)
+            if (sub.hasBox)
+                titles.push_back(TextRect(ImVec2(sub.boxMin.x + sub.titleX, sub.boxMin.y + 0.2f * em), sub.title, sub.title));
         for (size_t i = 0; i < g.edges.size(); ++i)
         {
             const Edge& e = g.edges[i];
             std::string edgeName = g.nodes[e.src].id + " -> " + g.nodes[e.dst].id;
+            for (size_t k = 0; k + 1 < e.points.size(); ++k)
+                for (const Rect& title : titles)
+                    if (SegmentThroughRect(e.points[k], e.points[k + 1], title))
+                        issues.push_back({"edge-through-title", "edge " + edgeName + " goes through the title " + Describe(title)});
             for (ImVec2 p : e.points)
                 checkBounds(Rect{p, p, "edge " + edgeName});
             for (size_t k = 0; k + 1 < e.points.size(); ++k)

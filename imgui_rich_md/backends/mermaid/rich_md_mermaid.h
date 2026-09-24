@@ -5,6 +5,7 @@
 #pragma once
 #include "imgui.h"
 
+#include <map>
 #include <set>
 #include <string>
 #include <utility>
@@ -16,17 +17,25 @@ namespace RichMd::Mermaid
     enum class NodeShape
     {
         Rect, Rounded, Stadium, Subroutine, Cylinder, Circle, DoubleCircle, Diamond, Hexagon,
-        Parallelogram, ParallelogramAlt, Trapezoid, TrapezoidAlt, Asymmetric
+        Parallelogram, ParallelogramAlt, Trapezoid, TrapezoidAlt, Asymmetric,
+        Note  // class diagrams: a note (a sheet with a folded corner)
     };
     enum class LineStyle { Solid, Dotted, Thick, Invisible };
     enum class EdgeEnd { None, Arrow, Circle, Cross };
+
+    // A line of a class: its name, an annotation, an attribute or a method
+    struct ClassLine
+    {
+        std::string text;
+        bool isStatic = false, isAbstract = false;  // underlined, italic
+    };
 
     struct Node
     {
         std::string id, label;
         NodeShape shape = NodeShape::Rect;
         int subgraph = -1;                                   // index in Graph::subgraphs, -1: none
-        std::vector<std::vector<std::string>> compartments;  // class diagrams: the name (after its annotations), the attributes, the methods
+        std::vector<std::vector<ClassLine>> compartments;  // class diagrams: the name (after its annotations), the attributes, the methods
         // filled by the layout
         int rank = 0, order = 0;
         ImVec2 pos, size;                                    // relative to the diagram's origin
@@ -48,6 +57,7 @@ namespace RichMd::Mermaid
         std::string id, title;
         bool hasBox = false;       // filled by the layout (false when the subgraph has no node)
         ImVec2 boxMin, boxMax;
+        float titleX = 0.f;        // where the title starts, from the left of the box (where no edge crosses it)
     };
 
     struct Graph
@@ -60,11 +70,12 @@ namespace RichMd::Mermaid
         // filled by the layout
         std::set<std::pair<int, int>> backEdges;  // (src, dst) of the edges that close a cycle
         int lanes = 0;             // edges routed past the graph: back edges and edges that skip a layer
+        std::map<int, float> channels;  // along the main axis, where the edges from the layer r to the layer r + 1 run
         ImVec2 size;
     };
 
     // Class diagrams: a relation per edge of the graph, with its UML markers
-    enum class Marker { None, Triangle, Diamond, DiamondFilled, Arrow };
+    enum class Marker { None, Triangle, Diamond, DiamondFilled, Arrow, Lollipop };
 
     struct Relation
     {
@@ -148,6 +159,10 @@ namespace RichMd::Mermaid
     bool UsesLane(const Graph& graph, const Edge& e);
     // The outline of a node's shape, in its local coordinates (from (0, 0) to its size); curves are approximated
     std::vector<ImVec2> ShapeOutline(const Node& node, float em);
+    // The italic font of the markdown (abstract members), or nullptr outside of a markdown context
+    ImFont* ItalicFont();
+    // The size of a class line's text: abstract members are in italic
+    ImVec2 ClassLineSize(const ClassLine& line);
 
     // Parses (once per source), lays out (when the font changes) and draws
     struct RenderResult

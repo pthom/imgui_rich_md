@@ -184,6 +184,7 @@ namespace RichMd::Mermaid
             return result;
         }
 
+        // The boxes of the subgraphs, before the edges; their titles, after
         void SubgraphBoxes(ImDrawList* dl, const Graph& graph, ImVec2 origin, float em)
         {
             for (const Subgraph& sub : graph.subgraphs)
@@ -193,7 +194,23 @@ namespace RichMd::Mermaid
                 ImVec2 q0 = Add(origin, sub.boxMin), q1 = Add(origin, sub.boxMax);
                 dl->AddRectFilled(q0, q1, ImGui::GetColorU32(ImGuiCol_Text, 0.04f), 0.3f * em);
                 StrokeRect(dl, q0, q1, ImGui::GetColorU32(ImGuiCol_Text, 0.35f), 0.3f * em, 1.f);
-                dl->AddText(ImVec2(q0.x + 0.5f * em, q0.y + 0.2f * em), ImGui::GetColorU32(ImGuiCol_Text, 0.8f), sub.title.c_str());
+            }
+        }
+
+        void SubgraphTitles(ImDrawList* dl, const Graph& graph, ImVec2 origin, float em)
+        {
+            for (const Subgraph& sub : graph.subgraphs)
+            {
+                if (!sub.hasBox)
+                    continue;
+                ImVec2 q0 = Add(origin, sub.boxMin);
+                // the title on the box's own background: an edge that crosses it passes under it
+                ImVec2 t0(q0.x + sub.titleX, q0.y + 0.2f * em);
+                ImVec2 ts = ImGui::CalcTextSize(sub.title.c_str());
+                ImVec2 b0(t0.x - 2.f, t0.y), b1(t0.x + ts.x + 2.f, t0.y + ts.y);
+                dl->AddRectFilled(b0, b1, ImGui::GetColorU32(ImGuiCol_WindowBg));
+                dl->AddRectFilled(b0, b1, ImGui::GetColorU32(ImGuiCol_Text, 0.04f));
+                dl->AddText(t0, ImGui::GetColorU32(ImGuiCol_Text, 0.8f), sub.title.c_str());
             }
         }
 
@@ -211,6 +228,7 @@ namespace RichMd::Mermaid
                 if (!e.label.empty() && e.style != LineStyle::Invisible)
                     EdgeLabel(dl, e, origin, textCol, windowBg);
             }
+            SubgraphTitles(dl, graph, origin, em);
             for (const Node& node : graph.nodes)
                 DrawNode(dl, node, origin, fill, border, textCol, em);
         }
@@ -248,7 +266,56 @@ namespace RichMd::Mermaid
                 dl->AddLine(tip, ImVec2(base.x + s * 0.35f * px, base.y + s * 0.35f * py), col, 1.5f);
                 dl->AddLine(tip, ImVec2(base.x - s * 0.35f * px, base.y - s * 0.35f * py), col, 1.5f);
             }
+            if (kind == Marker::Lollipop)  // an interface: a circle at the end of the line
+            {
+                float r = 0.4f * em;
+                ImVec2 c(tip.x + r * ux, tip.y + r * uy);
+                dl->AddCircleFilled(c, r, bg);
+                dl->AddCircle(c, r, col, 0, 1.5f);
+                return ImVec2(c.x + r * ux, c.y + r * uy);
+            }
             return tip;
+        }
+
+        // Namespaces as UML packages: the box, before the edges; the name in a tab above it, after (an edge that
+        // crosses the tab passes under it)
+        void PackageBoxes(ImDrawList* dl, const Graph& graph, ImVec2 origin, float em, bool tabs)
+        {
+            ImU32 fill = ImGui::GetColorU32(ImGuiCol_Text, 0.04f), border = ImGui::GetColorU32(ImGuiCol_Text, 0.35f);
+            for (const Subgraph& sub : graph.subgraphs)
+            {
+                if (!sub.hasBox)
+                    continue;
+                ImVec2 q0 = Add(origin, sub.boxMin), q1 = Add(origin, sub.boxMax);
+                float tabHeight = ImGui::GetTextLineHeight() + 0.4f * em;
+                if (!tabs)
+                {
+                    dl->AddRectFilled(ImVec2(q0.x, q0.y + tabHeight), q1, fill);
+                    StrokeRect(dl, ImVec2(q0.x, q0.y + tabHeight), q1, border, 0.f, 1.f);
+                    continue;
+                }
+                ImVec2 tab0(q0.x + sub.titleX - 0.5f * em, q0.y);
+                ImVec2 tab1(tab0.x + ImGui::CalcTextSize(sub.title.c_str()).x + em, q0.y + tabHeight);
+                dl->AddRectFilled(tab0, tab1, ImGui::GetColorU32(ImGuiCol_WindowBg));
+                dl->AddRectFilled(tab0, tab1, fill);
+                StrokeRect(dl, tab0, tab1, border, 0.f, 1.f);
+                dl->AddText(ImVec2(q0.x + sub.titleX, q0.y + 0.2f * em), ImGui::GetColorU32(ImGuiCol_Text, 0.8f), sub.title.c_str());
+            }
+        }
+
+        // A class line: abstract members in italic, static ones underlined
+        void DrawClassLine(ImDrawList* dl, ImVec2 pos, ImU32 col, const ClassLine& line)
+        {
+            ImFont* italic = line.isAbstract ? ItalicFont() : nullptr;
+            if (italic)
+                dl->AddText(italic, ImGui::GetFontSize(), pos, col, line.text.c_str());
+            else
+                dl->AddText(pos, col, line.text.c_str());
+            if (line.isStatic)
+            {
+                ImVec2 ts = ClassLineSize(line);
+                dl->AddLine(ImVec2(pos.x, pos.y + ts.y), ImVec2(pos.x + ts.x, pos.y + ts.y), col, 1.f);
+            }
         }
 
         void DrawClass(const Graph& graph, const std::vector<Relation>& relations, ImVec2 origin, float em)
@@ -259,7 +326,7 @@ namespace RichMd::Mermaid
             ImU32 fill = ImGui::GetColorU32(ImGuiCol_FrameBg);
             ImU32 windowBg = ImGui::GetColorU32(ImGuiCol_WindowBg);
             const float lineHeight = ImGui::GetTextLineHeight();
-            SubgraphBoxes(dl, graph, origin, em);
+            PackageBoxes(dl, graph, origin, em, false);
             for (size_t i = 0; i < graph.edges.size(); ++i)
             {
                 const Edge& e = graph.edges[i];
@@ -277,9 +344,21 @@ namespace RichMd::Mermaid
                 if (!r.cardinalityDst.empty())
                     dl->AddText(Add(origin, r.cardinalityDstPos), textCol, r.cardinalityDst.c_str());
             }
+            PackageBoxes(dl, graph, origin, em, true);
             for (const Node& node : graph.nodes)
             {
                 ImVec2 p0 = Add(origin, node.pos), p1 = Add(p0, node.size);
+                if (node.shape == NodeShape::Note)  // a sheet with its top right corner folded
+                {
+                    float f = 0.7f * em;
+                    ImVec2 pts[5] = {p0, ImVec2(p1.x - f, p0.y), ImVec2(p1.x, p0.y + f), p1, ImVec2(p0.x, p1.y)};
+                    dl->AddConvexPolyFilled(pts, 5, ImGui::GetColorU32(ImGuiCol_FrameBgHovered));
+                    StrokeClosedPolyline(dl, pts, 5, border, 1.f);
+                    dl->AddLine(ImVec2(p1.x - f, p0.y), ImVec2(p1.x - f, p0.y + f), border, 1.f);
+                    dl->AddLine(ImVec2(p1.x - f, p0.y + f), ImVec2(p1.x, p0.y + f), border, 1.f);
+                    CenteredText(dl, ImVec2((p0.x + p1.x) / 2.f, (p0.y + p1.y) / 2.f), textCol, node.label);
+                    continue;
+                }
                 dl->AddRectFilled(p0, p1, fill, 0.15f * em);
                 StrokeRect(dl, p0, p1, border, 0.15f * em, 1.5f);
                 float y = p0.y;
@@ -290,10 +369,10 @@ namespace RichMd::Mermaid
                         dl->AddLine(ImVec2(p0.x, y), ImVec2(p1.x, y), border, 1.f);
                     for (size_t j = 0; j < compartment.size(); ++j)
                     {
-                        const std::string& text = compartment[j];
-                        ImVec2 ts = ImGui::CalcTextSize(text.c_str());
+                        const ClassLine& line = compartment[j];
+                        ImVec2 ts = ClassLineSize(line);
                         float x = i == 0 ? (p0.x + p1.x) / 2.f - ts.x / 2.f : p0.x + 0.6f * em;  // the name is centered
-                        dl->AddText(ImVec2(x, y + 0.3f * em + (float)j * lineHeight), textCol, text.c_str());
+                        DrawClassLine(dl, ImVec2(x, y + 0.3f * em + (float)j * lineHeight), textCol, line);
                     }
                     y += (float)compartment.size() * lineHeight + 0.6f * em;
                 }

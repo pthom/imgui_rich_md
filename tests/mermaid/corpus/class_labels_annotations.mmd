@@ -1,0 +1,13 @@
+%% Class labels, annotations inline and in the body, an enumeration
+%% expect: nodes=3 edges=2
+classDiagram
+    class Animal["Animal (base)"]
+    class Duck <<Interface>>
+    class Color {
+        <<Enumeration>>
+        RED
+        GREEN
+        BLUE
+    }
+    Animal <|-- Duck
+    Duck --> Color
