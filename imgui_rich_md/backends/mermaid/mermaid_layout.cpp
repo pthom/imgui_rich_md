@@ -460,6 +460,9 @@ namespace RichMd::Mermaid
 
         // The width a box needs for its title
         float TitleWidth(const Subgraph& sub, float em) { return ImGui::CalcTextSize(sub.title.c_str()).x + 1.5f * em; }
+        // A box: its padding around the members, and the room of its title
+        float BoxPadding(float em) { return 0.8f * em; }
+        float TitleRoom(float em) { return ImGui::GetTextLineHeight() + 0.4f * em; }
 
         // Subgraph boxes: the bounding box of the members, padded, with room for the title above them, and at least
         // as wide as the title
@@ -725,9 +728,9 @@ namespace RichMd::Mermaid
 
             // Sizes
             const float gapX = 1.5f * em;
-            const float lineHeight = ImGui::GetTextLineHeight();
             for (Node& node : graph.nodes)
-                node.size = NodeSize(node, em);
+                if (!node.keepSize)
+                    node.size = NodeSize(node, em);
             const bool vertical = graph.vertical;
             auto cross = [&](const Node& nd) { return vertical ? nd.size.x : nd.size.y; };
             auto main = [&](const Node& nd) { return vertical ? nd.size.y : nd.size.x; };
@@ -737,8 +740,8 @@ namespace RichMd::Mermaid
             // free nodes. A column is as wide as its widest layer, so that the subgraph boxes never overlap
             const int freeBand = (int)graph.subgraphs.size();  // the root
             auto band = [&](int v) { return graph.nodes[v].subgraph >= 0 ? graph.nodes[v].subgraph : freeBand; };
-            const float boxPad = 0.8f * em;
-            const float titleHeight = lineHeight + 0.4f * em;
+            const float boxPad = BoxPadding(em);
+            const float titleHeight = TitleRoom(em);
             std::vector<float> bandWidth(freeBand + 1, 0.f);
             auto membersWidth = [&](const std::vector<int>& members) {
                 float w = gapX * (float)(members.size() - 1);
@@ -1113,6 +1116,234 @@ namespace RichMd::Mermaid
                 move(r.cardinalitySrcPos), move(r.cardinalityDstPos);
         }
 
+        // Flowcharts, as Mermaid lays them out (its dagre wrapper): a subgraph that no edge links to the outside (an end
+        // on the subgraph itself does not count) is laid out on its own, in its `direction`, else in the flipped
+        // direction of the layout around it (TB -> LR, the others -> TB). In the layout around it, it is a node.
+        void LayoutFlowchart(Graph& graph, float em, float gapY)
+        {
+            const int nSub = (int)graph.subgraphs.size();
+            auto within = [&](int b, int s) {  // b is s, or inside it
+                for (; b >= 0; b = graph.subgraphs[b].parent)
+                    if (b == s)
+                        return true;
+                return false;
+            };
+            std::vector<bool> own(nSub, false);
+            for (int s = 0; s < nSub; ++s)
+            {
+                auto inside = [&](int node, int box) { return box >= 0 ? box != s && within(box, s) : within(graph.nodes[node].subgraph, s); };
+                bool members = false, linked = false;
+                for (const Node& nd : graph.nodes)
+                    members = members || within(nd.subgraph, s);
+                for (const Edge& e : graph.edges)
+                    linked = linked || inside(e.src, e.srcBox) != inside(e.dst, e.dstBox);
+                own[s] = members && !linked;
+            }
+            if (std::find(own.begin(), own.end(), true) == own.end())
+            {
+                LayoutGraph(graph, em, gapY, nullptr);
+                return;
+            }
+
+            // The scope of a subgraph or a node: the innermost subgraph laid out on its own around it, -1 for the root
+            auto scopeOfBox = [&](int b) {
+                for (b = graph.subgraphs[b].parent; b >= 0 && !own[b]; b = graph.subgraphs[b].parent) {}
+                return b;
+            };
+            auto scopeOfNode = [&](int v) {
+                int b = graph.nodes[v].subgraph;
+                for (; b >= 0 && !own[b]; b = graph.subgraphs[b].parent) {}
+                return b;
+            };
+            auto inScope = [&](int scope, int c) {  // scope is c, or a scope inside c
+                for (; scope >= 0; scope = scopeOfBox(scope))
+                    if (scope == c)
+                        return true;
+                return false;
+            };
+            auto firstMember = [&](int c) {
+                int v = 0;
+                while (!within(graph.nodes[v].subgraph, c))
+                    ++v;
+                return v;
+            };
+            // What stands for an edge's end in the layout of the scope s: the node, a box, or the node of a subgraph laid
+            // out on its own (inner: the end is inside it, the edge is laid out there); or nothing (outside the scope)
+            struct End { int node = -1, box = -1, compound = -1; bool inner = false, outside = false; };
+            const float boxPad = BoxPadding(em), titleHeight = TitleRoom(em);
+            graph.backEdges.clear();
+            std::vector<int> edgeScope(graph.edges.size(), -1);
+
+            // Returns the size of what the scope draws; its content is placed from (0, 0), the root's as LayoutGraph does
+            std::function<ImVec2(int, bool, bool)> layoutScope = [&](int s, bool vertical, bool reversed) {
+                // the subgraphs laid out on their own directly inside, first: their size is the size of their node here
+                std::map<int, ImVec2> inner;
+                for (int c = 0; c < nSub; ++c)
+                    if (own[c] && scopeOfBox(c) == s)
+                    {
+                        const Subgraph& sub = graph.subgraphs[c];
+                        const bool subVertical = sub.hasDirection ? sub.vertical : !(vertical && !reversed);
+                        const bool subReversed = sub.hasDirection && sub.reversed;
+                        inner[c] = layoutScope(c, subVertical, subReversed);
+                    }
+                auto end = [&](int node, int box) {
+                    End r;
+                    int c;
+                    if (box >= 0)
+                    {
+                        if (box == s)
+                            return r.outside = true, r;
+                        if (scopeOfBox(box) == s)
+                            return (own[box] ? r.compound : r.box) = box, r;
+                        c = scopeOfBox(box);
+                    }
+                    else
+                    {
+                        c = scopeOfNode(node);
+                        if (c == s)
+                            return r.node = node, r;
+                    }
+                    while (c >= 0 && scopeOfBox(c) != s)
+                        c = scopeOfBox(c);
+                    if (c < 0)
+                        r.outside = true;
+                    else
+                        r.compound = c, r.inner = true;
+                    return r;
+                };
+
+                Graph reduced;
+                reduced.vertical = vertical, reduced.reversed = reversed;
+                std::vector<int> subIndex(nSub, -1), nodeIndex(graph.nodes.size(), -1), compoundIndex(nSub, -1);
+                std::vector<int> fullNode, fullCompound;  // per node of the reduced graph: the node, or the subgraph, it stands for
+                auto parentIn = [&](int p) { return p < 0 || p == s ? -1 : subIndex[p]; };
+                for (int b = 0; b < nSub; ++b)
+                    if (!own[b] && scopeOfBox(b) == s)
+                    {
+                        Subgraph sub;
+                        sub.id = graph.subgraphs[b].id, sub.title = graph.subgraphs[b].title;
+                        sub.parent = parentIn(graph.subgraphs[b].parent);
+                        subIndex[b] = (int)reduced.subgraphs.size();
+                        reduced.subgraphs.push_back(sub);
+                    }
+                for (int v = 0; v < (int)graph.nodes.size(); ++v)  // in source order, a subgraph where its first node is
+                {
+                    End e = end(v, -1);
+                    if (e.node >= 0)
+                    {
+                        Node nd = graph.nodes[v];
+                        nd.subgraph = parentIn(nd.subgraph);
+                        nodeIndex[v] = (int)reduced.nodes.size();
+                        reduced.nodes.push_back(nd), fullNode.push_back(v), fullCompound.push_back(-1);
+                    }
+                    else if (e.compound >= 0 && compoundIndex[e.compound] < 0)
+                    {
+                        const Subgraph& sub = graph.subgraphs[e.compound];
+                        Node nd;
+                        nd.id = sub.id;
+                        nd.subgraph = parentIn(sub.parent);
+                        nd.keepSize = true;
+                        const ImVec2 content = inner[e.compound];
+                        nd.size = ImVec2(std::max(content.x + 2.f * boxPad, TitleWidth(sub, em)), content.y + 2.f * boxPad + titleHeight);
+                        compoundIndex[e.compound] = (int)reduced.nodes.size();
+                        reduced.nodes.push_back(nd), fullNode.push_back(-1), fullCompound.push_back(e.compound);
+                    }
+                }
+                std::vector<int> fullEdge;
+                for (size_t i = 0; i < graph.edges.size(); ++i)
+                {
+                    const Edge& fe = graph.edges[i];
+                    End a = end(fe.src, fe.srcBox), b = end(fe.dst, fe.dstBox);
+                    if (a.outside || b.outside || a.inner || b.inner)
+                        continue;  // the edge of another scope
+                    Edge re = fe;
+                    re.points.clear();
+                    re.src = a.node >= 0 ? nodeIndex[a.node] : a.compound >= 0 ? compoundIndex[a.compound] : -1;
+                    re.dst = b.node >= 0 ? nodeIndex[b.node] : b.compound >= 0 ? compoundIndex[b.compound] : -1;
+                    re.srcBox = a.box >= 0 ? subIndex[a.box] : -1;
+                    re.dstBox = b.box >= 0 ? subIndex[b.box] : -1;
+                    fullEdge.push_back((int)i);
+                    reduced.edges.push_back(re);
+                }
+                LayoutGraph(reduced, em, gapY, nullptr);
+
+                // Back into the graph, from (0, 0) (the root: as it is)
+                Extent extent;
+                for (const Node& nd : reduced.nodes)
+                    extent.Add(nd.pos, ImVec2(nd.pos.x + nd.size.x, nd.pos.y + nd.size.y));
+                for (const Subgraph& sub : reduced.subgraphs)
+                    if (sub.hasBox)
+                        extent.Add(sub.boxMin, sub.boxMax);
+                for (const Edge& e : reduced.edges)
+                {
+                    for (ImVec2 p : e.points)
+                        extent.Add(p, p);
+                    if (!e.label.empty())
+                        extent.Add(e.labelMin, e.labelMax);
+                }
+                const ImVec2 o = s < 0 ? ImVec2(0.f, 0.f) : extent.min;
+                auto moved = [&](ImVec2 p) { return ImVec2(p.x - o.x, p.y - o.y); };
+                const int rankBase = 1000 * (s + 1);  // the ranks of different scopes do not compare
+                for (size_t k = 0; k < reduced.nodes.size(); ++k)
+                {
+                    const Node& rn = reduced.nodes[k];
+                    if (fullNode[k] >= 0)
+                    {
+                        Node& nd = graph.nodes[fullNode[k]];
+                        nd.pos = moved(rn.pos), nd.size = rn.size, nd.rank = rankBase + rn.rank, nd.order = rn.order;
+                        continue;
+                    }
+                    // a subgraph laid out on its own: its box is the node, its content goes inside, under the title
+                    const int c = fullCompound[k];
+                    Subgraph& sub = graph.subgraphs[c];
+                    sub.hasBox = true;
+                    sub.boxMin = moved(rn.pos);
+                    sub.boxMax = ImVec2(sub.boxMin.x + rn.size.x, sub.boxMin.y + rn.size.y);
+                    const ImVec2 d(sub.boxMin.x + (rn.size.x - inner[c].x) / 2.f, sub.boxMin.y + boxPad + titleHeight);
+                    auto move = [&](ImVec2& p) { p = ImVec2(p.x + d.x, p.y + d.y); };
+                    for (Node& nd : graph.nodes)
+                        if (within(nd.subgraph, c))
+                            move(nd.pos);
+                    for (int b = 0; b < nSub; ++b)
+                        if (b != c && within(b, c))
+                            move(graph.subgraphs[b].boxMin), move(graph.subgraphs[b].boxMax);
+                    for (size_t i = 0; i < graph.edges.size(); ++i)
+                        if (edgeScope[i] >= 0 && inScope(edgeScope[i], c))
+                        {
+                            for (ImVec2& p : graph.edges[i].points)
+                                move(p);
+                            move(graph.edges[i].labelMin), move(graph.edges[i].labelMax);
+                        }
+                }
+                for (int b = 0; b < nSub; ++b)
+                    if (subIndex[b] >= 0)
+                    {
+                        const Subgraph& rs = reduced.subgraphs[subIndex[b]];
+                        graph.subgraphs[b].hasBox = rs.hasBox;
+                        graph.subgraphs[b].boxMin = moved(rs.boxMin), graph.subgraphs[b].boxMax = moved(rs.boxMax);
+                    }
+                auto nodeOf = [&](int k) { return fullNode[k] >= 0 ? fullNode[k] : firstMember(fullCompound[k]); };
+                for (size_t k = 0; k < reduced.edges.size(); ++k)
+                {
+                    const Edge& re = reduced.edges[k];
+                    Edge& fe = graph.edges[fullEdge[k]];
+                    fe.points.clear();
+                    for (ImVec2 p : re.points)
+                        fe.points.push_back(moved(p));
+                    fe.labelMin = moved(re.labelMin), fe.labelMax = moved(re.labelMax);
+                    fe.track = re.track, fe.lane = re.lane, fe.exitTrack = re.exitTrack, fe.entryTrack = re.entryTrack;
+                    fe.src = nodeOf(re.src), fe.dst = nodeOf(re.dst);
+                    if (reduced.backEdges.count({re.src, re.dst}))
+                        graph.backEdges.insert({fe.src, fe.dst});
+                    edgeScope[fullEdge[k]] = s;
+                }
+                if (s < 0)
+                    return graph.size = reduced.size;
+                return ImVec2(extent.max.x - extent.min.x, extent.max.y - extent.min.y);
+            };
+            layoutScope(-1, graph.vertical, graph.reversed);
+        }
+
         // The rows go down one after the other, each as tall as its text; a frame adds a header band where it starts
         // (and where each of its sections starts), and a margin where it ends
         void LayoutSequence(Sequence& seq, float em)
@@ -1355,7 +1586,10 @@ namespace RichMd::Mermaid
         {
             // class diagrams: room for the UML markers at the ends of the lines
             bool isClass = diagram.kind == DiagramKind::Class;
-            LayoutGraph(diagram.graph, em, isClass ? 3.3f * em : 2.5f * em, isClass ? &diagram.relations : nullptr);
+            if (isClass)
+                LayoutGraph(diagram.graph, em, 3.3f * em, &diagram.relations);
+            else
+                LayoutFlowchart(diagram.graph, em, 2.5f * em);
             if (diagram.kind == DiagramKind::Class)
                 PlaceCardinalities(diagram.graph, diagram.relations, em);
             PlaceTitles(diagram.graph, em);

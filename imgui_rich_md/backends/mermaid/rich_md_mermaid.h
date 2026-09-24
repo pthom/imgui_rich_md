@@ -36,6 +36,7 @@ namespace RichMd::Mermaid
         NodeShape shape = NodeShape::Rect;
         int subgraph = -1;                                   // index in Graph::subgraphs, -1: none
         std::vector<std::vector<ClassLine>> compartments;  // class diagrams: the name (after its annotations), the attributes, the methods
+        bool keepSize = false;                               // the layout keeps its size (a subgraph laid out on its own)
         // filled by the layout
         int rank = 0, order = 0;
         ImVec2 pos, size;                                    // relative to the diagram's origin

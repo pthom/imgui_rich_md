@@ -281,21 +281,23 @@ namespace MermaidChecks
                         issues.push_back({"label-on-edge", "label " + Describe(labels[l]) + " hides a part of edge " + edgeName});
             }
         }
-        // Two edges that share a stretch of line (not the fans: edges from the same node, or into the same node)
+        // Two edges that share a stretch of line, or run closer than a quarter of em along it (not the fans: edges from
+        // the same node, or into the same node; an end on a box is not an end on the member that stands for it)
         for (size_t i = 0; i < g.edges.size(); ++i)
             for (size_t j = i + 1; j < g.edges.size(); ++j)
             {
                 const Edge& e = g.edges[i];
                 const Edge& f = g.edges[j];
-                if (e.src == f.src || e.dst == f.dst || e.style == LineStyle::Invisible || f.style == LineStyle::Invisible)
+                if ((e.src == f.src && e.srcBox == f.srcBox) || (e.dst == f.dst && e.dstBox == f.dstBox)
+                    || e.style == LineStyle::Invisible || f.style == LineStyle::Invisible)
                     continue;
                 bool overlap = false;
                 for (size_t a = 0; a + 1 < e.points.size() && !overlap; ++a)
                     for (size_t b = 0; b + 1 < f.points.size() && !overlap; ++b)
                     {
                         ImVec2 p0 = e.points[a], p1 = e.points[a + 1], q0 = f.points[b], q1 = f.points[b + 1];
-                        bool horizontal = std::fabs(p0.y - p1.y) < 0.5f && std::fabs(q0.y - q1.y) < 0.5f && std::fabs(p0.y - q0.y) < 0.5f;
-                        bool vertical = std::fabs(p0.x - p1.x) < 0.5f && std::fabs(q0.x - q1.x) < 0.5f && std::fabs(p0.x - q0.x) < 0.5f;
+                        bool horizontal = std::fabs(p0.y - p1.y) < 0.5f && std::fabs(q0.y - q1.y) < 0.5f && std::fabs(p0.y - q0.y) < 0.25f * em;
+                        bool vertical = std::fabs(p0.x - p1.x) < 0.5f && std::fabs(q0.x - q1.x) < 0.5f && std::fabs(p0.x - q0.x) < 0.25f * em;
                         auto shared = [](float a0, float a1, float b0, float b1) {
                             return std::min(std::max(a0, a1), std::max(b0, b1)) - std::max(std::min(a0, a1), std::min(b0, b1));
                         };

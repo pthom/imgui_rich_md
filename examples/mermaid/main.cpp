@@ -19,11 +19,11 @@ the Mermaid Live Editor, to compare with Mermaid's own render.
 
 > [!NOTE]
 > A subset of Mermaid:
-> - **Supported**: flowcharts (shapes, links, labels, nested subgraphs and links to them, the four directions),
->   sequence diagrams (participants, actors, activations, notes, frames, autonumber), class diagrams (members,
->   relations, cardinalities, namespaces, notes, generics).
-> - **Not supported**: the other diagram types (state, ER, gantt, pie, git graphs, mind maps...), `direction` inside a
->   subgraph. Styles (`classDef`, `style`) and `click` are ignored.
+> - **Supported**: flowcharts (shapes, links, labels, nested subgraphs and links to them, the four directions, also
+>   inside a subgraph), sequence diagrams (participants, actors, activations, notes, frames, autonumber), class
+>   diagrams (members, relations, cardinalities, namespaces, notes, generics).
+> - **Not supported**: the other diagram types (state, ER, gantt, pie, git graphs, mind maps...). Styles (`classDef`,
+>   `style`) and `click` are ignored.
 >
 > A diagram that cannot be read is shown as code, with the line of the error.
 )md";
