@@ -269,7 +269,8 @@ namespace MermaidChecks
             for (size_t k = 0; k + 1 < e.points.size(); ++k)
             {
                 for (size_t v = 0; v < nodes.size(); ++v)
-                    if ((int)v != e.src && (int)v != e.dst && SegmentThroughRect(e.points[k], e.points[k + 1], nodes[v]))
+                    if (!((int)v == e.src && e.srcBox < 0) && !((int)v == e.dst && e.dstBox < 0)  // its own ends (not a box's member)
+                        && SegmentThroughRect(e.points[k], e.points[k + 1], nodes[v]))
                     {
                         issues.push_back({"edge-through-node", "edge " + edgeName + " goes through " + Describe(nodes[v])});
                         break;

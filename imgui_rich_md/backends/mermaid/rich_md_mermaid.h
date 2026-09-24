@@ -47,6 +47,8 @@ namespace RichMd::Mermaid
         std::string label;
         EdgeEnd start = EdgeEnd::None, end = EdgeEnd::Arrow;
         LineStyle style = LineStyle::Solid;
+        int srcBox = -1, dstBox = -1;  // an end on a subgraph's box (A --> SubgraphId): the subgraph; the layout then sets
+                                       // src or dst to a member of it
         // filled by the layout, relative to the diagram's origin
         std::vector<ImVec2> points;   // the polyline, from the source to the target
         float track = 0.f;            // where its segment across the channel runs, from the channel's middle

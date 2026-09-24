@@ -1,0 +1,12 @@
+%% Links to and from a subgraph: they end on its box (one declared before the subgraph)
+%% expect: nodes=5 edges=5 subgraphs=2
+flowchart TD
+    Client --> Backend
+    subgraph Backend
+        Api[API] --> Db[(Database)]
+    end
+    Backend --> Monitor
+    subgraph Ops
+        Monitor --> Alerts
+    end
+    Client -.-> Ops

@@ -113,8 +113,10 @@ namespace RichMd::Mermaid
             std::map<int, std::vector<int>> out, in;
             for (size_t i = 0; i < graph.edges.size(); ++i)
             {
-                out[graph.edges[i].src].push_back((int)i);
-                in[graph.edges[i].dst].push_back((int)i);
+                if (graph.edges[i].srcBox < 0)
+                    out[graph.edges[i].src].push_back((int)i);
+                if (graph.edges[i].dstBox < 0)
+                    in[graph.edges[i].dst].push_back((int)i);
             }
             std::vector<std::pair<float, float>> result(graph.edges.size(), {0.5f, 0.5f});
             for (auto& [v, edges] : out)
@@ -137,6 +139,39 @@ namespace RichMd::Mermaid
         // layer, along a lane past the graph, back through the gap before the target's layer, and into the target.
         // The ends are on the outlines of the shapes. BT and RL are laid out as TD and LR, then mirrored: the sides of
         // the shapes are those after the mirroring.
+        // Where an edge's end on a subgraph's box is, across: in front of the other end, inside the box (LR: below
+        // its title)
+        float BoxCross(const Graph& graph, int box, float other, float em)
+        {
+            const Subgraph& sub = graph.subgraphs[box];
+            float lo = graph.vertical ? sub.boxMin.x : sub.boxMin.y + ImGui::GetTextLineHeight() + 0.4f * em;
+            float hi = graph.vertical ? sub.boxMax.x : sub.boxMax.y;
+            return std::clamp(other, lo + em, std::max(lo + em, hi - em));
+        }
+
+        // The ends of an edge, across: where it leaves its source, where it enters its target (a node's anchor, or a
+        // point of a box)
+        std::pair<float, float> EndsAcross(const Graph& graph, const Edge& e, std::pair<float, float> anchor, float em)
+        {
+            auto nodeAt = [&](int v, float t) {
+                const Node& nd = graph.nodes[v];
+                return graph.vertical ? nd.pos.x + nd.size.x * t : nd.pos.y + nd.size.y * t;
+            };
+            auto center = [&](int box) {
+                const Subgraph& sub = graph.subgraphs[box];
+                return graph.vertical ? (sub.boxMin.x + sub.boxMax.x) / 2.f : (sub.boxMin.y + sub.boxMax.y) / 2.f;
+            };
+            float c0 = e.srcBox >= 0 ? 0.f : nodeAt(e.src, anchor.first);
+            float c1 = e.dstBox >= 0 ? 0.f : nodeAt(e.dst, anchor.second);
+            if (e.srcBox >= 0 && e.dstBox >= 0)
+                c0 = BoxCross(graph, e.srcBox, center(e.dstBox), em), c1 = BoxCross(graph, e.dstBox, c0, em);
+            else if (e.srcBox >= 0)
+                c0 = BoxCross(graph, e.srcBox, c1, em);
+            else if (e.dstBox >= 0)
+                c1 = BoxCross(graph, e.dstBox, c0, em);
+            return {c0, c1};
+        }
+
         // The extent of a layer along the main axis
         std::pair<float, float> LayerExtent(const Graph& graph, int rank)
         {
@@ -153,29 +188,22 @@ namespace RichMd::Mermaid
         std::vector<ImVec2> EdgePoints(const Graph& graph, const Edge& e, float em, std::pair<float, float> anchor)
         {
             const bool vertical = graph.vertical;
-            const Node& a = graph.nodes[e.src];
+            const Node& a = graph.nodes[e.src];  // for an end on a box: the member that stands for the box
             const Node& b = graph.nodes[e.dst];
-            ImVec2 a0 = a.pos, a1(a.pos.x + a.size.x, a.pos.y + a.size.y);
-            ImVec2 b0 = b.pos;
-            ImVec2 pa, pb;
-            if (vertical)
-            {
-                pa = ImVec2(a0.x + a.size.x * anchor.first, a1.y), pb = ImVec2(b0.x + b.size.x * anchor.second, b0.y);
-                pa.y -= SideInset(a, em, graph.reversed ? Top : Bottom, anchor.first);
-                pb.y += SideInset(b, em, graph.reversed ? Bottom : Top, anchor.second);
-            }
-            else
-            {
-                pa = ImVec2(a1.x, a0.y + a.size.y * anchor.first), pb = ImVec2(b0.x, b0.y + b.size.y * anchor.second);
-                pa.x -= SideInset(a, em, graph.reversed ? Left : Right, anchor.first);
-                pb.x += SideInset(b, em, graph.reversed ? Right : Left, anchor.second);
-            }
+            // Along the main axis: where the source ends (its node, or its box), where the target starts
+            auto mainOf = [&](ImVec2 p) { return vertical ? p.y : p.x; };
+            float srcEnd = e.srcBox >= 0 ? mainOf(graph.subgraphs[e.srcBox].boxMax) : mainOf(ImVec2(a.pos.x + a.size.x, a.pos.y + a.size.y));
+            float dstStart = e.dstBox >= 0 ? mainOf(graph.subgraphs[e.dstBox].boxMin) : mainOf(b.pos);
+            auto [c0, c1] = EndsAcross(graph, e, anchor, em);
+            float m0 = srcEnd - (e.srcBox >= 0 ? 0.f : SideInset(a, em, vertical ? (graph.reversed ? Top : Bottom) : (graph.reversed ? Left : Right), anchor.first));
+            float m1 = dstStart + (e.dstBox >= 0 ? 0.f : SideInset(b, em, vertical ? (graph.reversed ? Bottom : Top) : (graph.reversed ? Right : Left), anchor.second));
+            ImVec2 pa = vertical ? ImVec2(c0, m0) : ImVec2(m0, c0), pb = vertical ? ImVec2(c1, m1) : ImVec2(m1, c1);
             if (e.lane > 0)
             {
                 // not in the middle of the gaps, where the forward edges run; each lane on its own approach lines
                 const float halfGap = 0.7f * em, step = 0.45f * em;
-                float exit = LayerExtent(graph, a.rank).second + halfGap + (float)e.exitTrack * step;
-                float entry = LayerExtent(graph, b.rank).first - halfGap - (float)e.entryTrack * step;
+                float exit = std::max(LayerExtent(graph, a.rank).second, srcEnd) + halfGap + (float)e.exitTrack * step;
+                float entry = std::min(LayerExtent(graph, b.rank).first, dstStart) - halfGap - (float)e.entryTrack * step;
                 float lanePos = (vertical ? graph.size.x : graph.size.y) - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)e.lane;
                 if (vertical)
                     return {pa, ImVec2(pa.x, exit), ImVec2(lanePos, exit), ImVec2(lanePos, entry), ImVec2(pb.x, entry), pb};
@@ -184,12 +212,12 @@ namespace RichMd::Mermaid
             auto channel = graph.channels.find(a.rank);
             if (vertical)
             {
-                float midY = channel != graph.channels.end() ? channel->second + e.track : (a1.y + b0.y) / 2.f;
+                float midY = channel != graph.channels.end() ? channel->second + e.track : (srcEnd + dstStart) / 2.f;
                 if (std::fabs(pa.x - pb.x) < 1.f)
                     return {pa, pb};
                 return {pa, ImVec2(pa.x, midY), ImVec2(pb.x, midY), pb};
             }
-            float midX = channel != graph.channels.end() ? channel->second + e.track : (a1.x + b0.x) / 2.f;
+            float midX = channel != graph.channels.end() ? channel->second + e.track : (srcEnd + dstStart) / 2.f;
             if (std::fabs(pa.y - pb.y) < 1.f)
                 return {pa, pb};
             return {pa, ImVec2(midX, pa.y), ImVec2(midX, pb.y), pb};
@@ -201,7 +229,6 @@ namespace RichMd::Mermaid
         std::map<int, float> AssignTracks(Graph& graph, float em)
         {
             std::vector<std::pair<float, float>> anchors = Anchors(graph);
-            auto crossPos = [&](const Node& nd, float t) { return graph.vertical ? nd.pos.x + nd.size.x * t : nd.pos.y + nd.size.y * t; };
             struct Segment { int edge; float lo, hi, x0, x1; };  // x0: where it leaves its source, x1: where it enters its target
             std::map<int, std::vector<Segment>> segments;  // channel (the rank of the sources) -> its segments across
             for (size_t i = 0; i < graph.edges.size(); ++i)
@@ -210,7 +237,7 @@ namespace RichMd::Mermaid
                 e.track = 0.f;
                 if (UsesLane(graph, e))
                     continue;
-                float x0 = crossPos(graph.nodes[e.src], anchors[i].first), x1 = crossPos(graph.nodes[e.dst], anchors[i].second);
+                auto [x0, x1] = EndsAcross(graph, e, anchors[i], em);
                 if (std::fabs(x0 - x1) >= 1.f)
                     segments[graph.nodes[e.src].rank].push_back({(int)i, std::min(x0, x1), std::max(x0, x1), x0, x1});
             }
@@ -427,9 +454,11 @@ namespace RichMd::Mermaid
         void LayoutGraph(Graph& graph, float em, float gapY, const std::vector<Relation>* relations)
         {
             const int n = (int)graph.nodes.size();
+            auto boxEdge = [](const Edge& e) { return e.srcBox >= 0 || e.dstBox >= 0; };
             std::vector<std::vector<int>> succs(n);
             for (const Edge& e : graph.edges)
-                succs[e.src].push_back(e.dst);
+                if (!boxEdge(e))
+                    succs[e.src].push_back(e.dst);
 
             // Back edges: found by a depth-first visit from the nodes in source order (as dagre does), and reversed
             // for the ranking, so that a cycle keeps its natural top-down order
@@ -452,19 +481,54 @@ namespace RichMd::Mermaid
             std::vector<std::vector<int>> forwardPreds(n);
             for (const Edge& e : graph.edges)
             {
-                if (e.src == e.dst)
+                if (e.src == e.dst || boxEdge(e))
                     continue;  // a node linked to itself does not change its rank
                 if (graph.backEdges.count({e.src, e.dst}))
                     forwardPreds[e.src].push_back(e.dst);
                 else
                     forwardPreds[e.dst].push_back(e.src);
             }
+            // Links to a subgraph's box: their other end goes before the box's entry nodes (no predecessor in the box),
+            // or after its exit nodes (no successor in the box)
+            auto inBox = [&](int v, int box) {
+                for (int b = graph.nodes[v].subgraph; b >= 0; b = graph.subgraphs[b].parent)
+                    if (b == box)
+                        return true;
+                return false;
+            };
+            auto boxEnds = [&](int box, bool entry) {
+                std::vector<int> ends;
+                for (int v = 0; v < n; ++v)
+                {
+                    bool inside = false;  // linked from (entry) or to (exit) another member
+                    for (const Edge& e : graph.edges)
+                        if (!boxEdge(e) && e.src != e.dst && (entry ? e.dst == v && inBox(e.src, box) : e.src == v && inBox(e.dst, box)))
+                            inside = true;
+                    if (inBox(v, box) && !inside)
+                        ends.push_back(v);
+                }
+                return ends;
+            };
+            for (const Edge& e : graph.edges)
+            {
+                if (!boxEdge(e))
+                    continue;
+                std::vector<int> from = e.srcBox >= 0 ? boxEnds(e.srcBox, false) : std::vector<int>{e.src};
+                std::vector<int> to = e.dstBox >= 0 ? boxEnds(e.dstBox, true) : std::vector<int>{e.dst};
+                for (int u : from)
+                    for (int v : to)
+                        if (u != v && !(e.dstBox >= 0 && inBox(u, e.dstBox)) && !(e.srcBox >= 0 && inBox(v, e.srcBox)))
+                            forwardPreds[v].push_back(u);
+            }
 
             // Ranks: the longest path from a source
             std::vector<int> rank(n, -1);
             std::function<int(int)> rankOf = [&](int v) {
+                if (rank[v] == -2)
+                    return 0;  // a cycle made by links to boxes: broken here
                 if (rank[v] < 0)
                 {
+                    rank[v] = -2;
                     int r = 0;
                     for (int p : forwardPreds[v])
                         r = std::max(r, rankOf(p) + 1);
@@ -488,6 +552,21 @@ namespace RichMd::Mermaid
                 for (int w : forwardSuccs[v])
                     highest = std::min(highest, rank[w]);
                 rank[v] = std::max(rank[v], highest - 1);
+            }
+            // A link to a box: the member that stands for the box (its highest entry node, its lowest exit node)
+            for (Edge& e : graph.edges)
+            {
+                auto pick = [&](int box, bool entry) {
+                    int best = -1;
+                    for (int v : boxEnds(box, entry))
+                        if (best < 0 || (entry ? rank[v] < rank[best] : rank[v] > rank[best]))
+                            best = v;
+                    return best;
+                };
+                if (e.srcBox >= 0)
+                    e.src = pick(e.srcBox, false);
+                if (e.dstBox >= 0)
+                    e.dst = pick(e.dstBox, true);
             }
             std::map<int, std::vector<int>> layers;
             for (int v = 0; v < n; ++v)
@@ -735,6 +814,7 @@ namespace RichMd::Mermaid
                 e.exitTrack = exitCount[graph.nodes[e.src].rank]++;
                 e.entryTrack = entryCount[graph.nodes[e.dst].rank]++;
             }
+            ComputeSubgraphBoxes(graph, boxPad, titleHeight, em);  // across only (for the ends of the edges on boxes)
             std::map<int, float> trackRoom = AssignTracks(graph, em);
             const float step = 0.45f * em;
             auto extraLines = [&](std::map<int, int>& count, int r) { return (float)std::max(count[r] - 1, 0) * step; };

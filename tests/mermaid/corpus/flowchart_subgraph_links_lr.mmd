@@ -1,0 +1,10 @@
+%% A link between two subgraphs, left to right
+%% expect: nodes=4 edges=3 subgraphs=2
+flowchart LR
+    subgraph Input
+        A[Read] --> B[Parse]
+    end
+    subgraph Output
+        C[Render] --> D[Save]
+    end
+    Input --> Output

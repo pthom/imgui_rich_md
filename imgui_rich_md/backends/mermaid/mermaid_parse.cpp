@@ -452,6 +452,28 @@ namespace RichMd::Mermaid
                     return;
                 }
             }
+
+            // A link to (or from) the id of a subgraph that has nodes ends on its box: the node the id made goes away
+            for (size_t b = 0; b < graph.subgraphs.size(); ++b)
+            {
+                int phantom = FindNode(graph, graph.subgraphs[b].id);
+                bool hasMembers = false;
+                for (const Node& nd : graph.nodes)
+                    for (int s = nd.subgraph; s >= 0 && !hasMembers; s = graph.subgraphs[s].parent)
+                        hasMembers = s == (int)b;
+                if (phantom < 0 || !hasMembers)
+                    continue;
+                for (Edge& e : graph.edges)
+                {
+                    if (e.src == phantom)
+                        e.srcBox = (int)b, e.src = -1;
+                    if (e.dst == phantom)
+                        e.dstBox = (int)b, e.dst = -1;
+                    e.src -= e.src > phantom ? 1 : 0;
+                    e.dst -= e.dst > phantom ? 1 : 0;
+                }
+                graph.nodes.erase(graph.nodes.begin() + phantom);
+            }
         }
 
         // ---------------------------------------------------------------------------------------------------------
