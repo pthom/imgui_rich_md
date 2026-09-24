@@ -62,6 +62,7 @@ The [tour](https://pthom.github.io/imgui_rich_md/tour.html) shows each feature w
 | `IMGUI_RICHMD_EMBED_ASSETS` | ON | the fonts and images are embedded in the library; OFF: they are read from the assets folder (`RichMd::SetAssetsFolder`) |
 | `IMGUI_RICHMD_STB_IMAGE_IMPLEMENTATION` | ON | compiles stb_image; set it OFF if your project already does (e.g. HelloImGui) |
 | `IMGUI_RICHMD_BUILD_EXAMPLES` | top-level only | builds the examples |
+| `IMGUI_RICHMD_BUILD_TESTS` | OFF | builds the smoke test (`ctest`) |
 
 ## Examples
 

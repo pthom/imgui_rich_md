@@ -25,11 +25,9 @@ if(NOT TARGET glfw)  # no system GLFW (e.g. Windows): fetched
     FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG 3.4 GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(glfw)
 endif()
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/imgui_richmd_fetch_imgui.cmake)
+imgui_richmd_fetch_imgui()
 if(NOT TARGET imgui)
-    include(FetchContent)
-    FetchContent_Declare(imgui_stock GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.92.9 GIT_SHALLOW TRUE)
-    FetchContent_MakeAvailable(imgui_stock)
-    set(IMGUI_DIR ${imgui_stock_SOURCE_DIR})
     add_library(imgui STATIC
         ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
         ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
