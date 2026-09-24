@@ -100,7 +100,7 @@ namespace RichMd::Mermaid
         // For each edge: where it leaves its source and enters its target, as fractions of the node's side, spread
         // so that the edges of a node do not share a point (ordered by the position of their other end; the lane edges
         // last, on the side of the lanes)
-        std::vector<std::pair<float, float>> Anchors(const Graph& graph)
+        std::vector<std::pair<float, float>> Anchors(const Graph& graph, float em)
         {
             // the lane edges after the others, on the side of the lanes: those that skip layers first, the outer lanes
             // on the right; then the back edges, the outer lanes on the left (so that the lane routes do not cross)
@@ -130,6 +130,41 @@ namespace RichMd::Mermaid
                 std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(a, graph.edges[a].src) < cross(b, graph.edges[b].src); });
                 for (size_t k = 0; k < edges.size(); ++k)
                     result[edges[k]].second = (float)(k + 1) / (float)(edges.size() + 1);
+            }
+            // An edge must not enter a node where another one leaves the layer before (their lines would overlap in the
+            // gap between the layers): the entries of the node then move together along its side
+            auto sideAt = [&](int v, float t) {
+                const Node& nd = graph.nodes[v];
+                return graph.vertical ? nd.pos.x + nd.size.x * t : nd.pos.y + nd.size.y * t;
+            };
+            for (auto& [v, edges] : in)
+            {
+                std::vector<float> exits;
+                for (size_t i = 0; i < graph.edges.size(); ++i)
+                {
+                    const Edge& f = graph.edges[i];
+                    if (f.srcBox < 0 && f.dst != v && f.lane == 0 && graph.nodes[f.src].rank == graph.nodes[v].rank - 1)
+                        exits.push_back(sideAt(f.src, result[i].first));
+                }
+                const float length = graph.vertical ? graph.nodes[v].size.x : graph.nodes[v].size.y;
+                const float step = 0.45f * em;
+                for (float delta : {0.f, step, -step, 2.f * step, -2.f * step})
+                {
+                    bool clear = true;
+                    for (int i : edges)
+                    {
+                        float t = result[i].second + delta / length;
+                        clear = clear && t >= 0.1f && t <= 0.9f;
+                        for (float x : exits)
+                            clear = clear && std::fabs(sideAt(v, t) - x) >= 0.4f * em;
+                    }
+                    if (clear)
+                    {
+                        for (int i : edges)
+                            result[i].second += delta / length;
+                        break;
+                    }
+                }
             }
             return result;
         }
@@ -228,7 +263,7 @@ namespace RichMd::Mermaid
         // channel take (from the first to the last): 0.45 em between two tracks, a line of text when a label sits on one.
         std::map<int, float> AssignTracks(Graph& graph, float em)
         {
-            std::vector<std::pair<float, float>> anchors = Anchors(graph);
+            std::vector<std::pair<float, float>> anchors = Anchors(graph, em);
             struct Segment { int edge; float lo, hi, x0, x1; };  // x0: where it leaves its source, x1: where it enters its target
             std::map<int, std::vector<Segment>> segments;  // channel (the rank of the sources) -> its segments across
             for (size_t i = 0; i < graph.edges.size(); ++i)
@@ -315,26 +350,57 @@ namespace RichMd::Mermaid
             return trackRoom;
         }
 
+        bool SegmentThroughRect(ImVec2 p, ImVec2 q, ImVec2 r0, ImVec2 r1);
+
         // The polylines, and the labels on the middle segment when there is one, else at the middle of the edge
         void RouteEdges(Graph& graph, float em)
         {
-            std::vector<std::pair<float, float>> anchors = Anchors(graph);
+            std::vector<std::pair<float, float>> anchors = Anchors(graph, em);
+            for (size_t i = 0; i < graph.edges.size(); ++i)
+                graph.edges[i].points = EdgePoints(graph, graph.edges[i], em, anchors[i]);
+
+            // The labels: on the middle segment (the channel's, for a forward edge), at its middle, or slid along it to
+            // where no other edge crosses the label and no node is under it
             for (size_t i = 0; i < graph.edges.size(); ++i)
             {
                 Edge& e = graph.edges[i];
-                e.points = EdgePoints(graph, e, em, anchors[i]);
                 if (e.label.empty())
                     continue;
                 size_t k = e.points.size() > 2 ? e.points.size() / 2 - 1 : 0;
                 ImVec2 s0 = e.points[k], s1 = e.points[k + 1];
-                ImVec2 c((s0.x + s1.x) / 2.f, (s0.y + s1.y) / 2.f);
                 auto channel = graph.channels.find(graph.nodes[e.src].rank);
-                if (!UsesLane(graph, e) && channel != graph.channels.end())  // a forward edge: its label on its track
-                    (graph.vertical ? c.y : c.x) = channel->second + e.track;
+                const bool onTrack = !UsesLane(graph, e) && channel != graph.channels.end();
                 ImVec2 ts = ImGui::CalcTextSize(e.label.c_str());
-                ImVec2 mid(c.x - ts.x / 2.f, c.y - ts.y / 2.f);
-                e.labelMin = ImVec2(mid.x - 2.f, mid.y);
-                e.labelMax = ImVec2(mid.x + ts.x + 2.f, mid.y + ts.y);
+                auto boxAt = [&](float t, ImVec2* b0, ImVec2* b1) {
+                    ImVec2 c(s0.x + (s1.x - s0.x) * t, s0.y + (s1.y - s0.y) * t);
+                    if (onTrack && e.points.size() == 2 && t == 0.5f)  // a straight edge: its label in the channel
+                        (graph.vertical ? c.y : c.x) = channel->second + e.track;
+                    *b0 = ImVec2(c.x - ts.x / 2.f - 2.f, c.y - ts.y / 2.f);
+                    *b1 = ImVec2(c.x + ts.x / 2.f + 2.f, c.y + ts.y / 2.f);
+                };
+                auto clear = [&](ImVec2 b0, ImVec2 b1) {
+                    ImVec2 i0(b0.x + 1.f, b0.y + 1.f), i1(b1.x - 1.f, b1.y - 1.f);
+                    for (size_t j = 0; j < graph.edges.size(); ++j)
+                        if (j != i && graph.edges[j].style != LineStyle::Invisible)
+                            for (size_t m = 0; m + 1 < graph.edges[j].points.size(); ++m)
+                                if (SegmentThroughRect(graph.edges[j].points[m], graph.edges[j].points[m + 1], i0, i1))
+                                    return false;
+                    for (const Node& nd : graph.nodes)
+                        if (nd.pos.x < i1.x && i0.x < nd.pos.x + nd.size.x && nd.pos.y < i1.y && i0.y < nd.pos.y + nd.size.y)
+                            return false;
+                    return true;
+                };
+                boxAt(0.5f, &e.labelMin, &e.labelMax);
+                for (float t : {0.5f, 0.7f, 0.3f, 0.85f, 0.15f})
+                {
+                    ImVec2 b0, b1;
+                    boxAt(t, &b0, &b1);
+                    if (clear(b0, b1))
+                    {
+                        e.labelMin = b0, e.labelMax = b1;
+                        break;
+                    }
+                }
             }
         }
 
@@ -448,6 +514,28 @@ namespace RichMd::Mermaid
                     flipBox(e.labelMin, e.labelMax);
             }
             ComputeSubgraphBoxes(graph, boxPad, titleHeight, ImGui::GetFontSize());
+        }
+
+        // The non-decreasing sequence closest to t (least squares): isotonic regression, by pooling adjacent violators
+        std::vector<float> Isotonic(const std::vector<float>& t)
+        {
+            std::vector<float> mean;
+            std::vector<int> size;
+            for (float x : t)
+            {
+                mean.push_back(x), size.push_back(1);
+                while (mean.size() > 1 && mean[mean.size() - 2] > mean.back())
+                {
+                    size_t k = mean.size() - 2;
+                    mean[k] = (mean[k] * (float)size[k] + mean[k + 1] * (float)size[k + 1]) / (float)(size[k] + size[k + 1]);
+                    size[k] += size[k + 1];
+                    mean.pop_back(), size.pop_back();
+                }
+            }
+            std::vector<float> out;
+            for (size_t k = 0; k < mean.size(); ++k)
+                out.insert(out.end(), (size_t)size[k], mean[k]);
+            return out;
         }
 
         // gapY: the gap between two layers; relations: the markers and cardinalities of a class diagram
@@ -662,18 +750,68 @@ namespace RichMd::Mermaid
                         members.push_back(v);
                 return members;
             };
-            std::vector<float> ownWidth(freeBand + 1, 0.f);  // the column of a band's own nodes
             for (auto& [r, layer] : layers)
-            {
                 std::stable_sort(layer.begin(), layer.end(), [&](int a, int b) {
                     return std::make_pair(band(a), graph.nodes[a].order) < std::make_pair(band(b), graph.nodes[b].order);
                 });
-                for (int b = 0; b <= freeBand; ++b)
+
+            // Across, in the column of each band: a node goes to the median position of its neighbours in the layer above,
+            // then below (alternately), keeping the order and the gaps (least squares: an isotonic regression), so that
+            // the edges between neighbouring layers are as straight as the order allows. Relative to the column.
+            std::vector<float> center(n, 0.f), columnMin(freeBand + 1, 0.f);
+            std::vector<float> ownWidth(freeBand + 1, 0.f);  // the column of a band's own nodes
+            for (int b = 0; b <= freeBand; ++b)
+            {
+                std::vector<std::vector<int>> rows;  // the column's nodes, layer by layer, in their order
+                for (auto& [r, layer] : layers)
                 {
                     std::vector<int> members = bandMembers(layer, b);
                     if (!members.empty())
-                        ownWidth[b] = std::max(ownWidth[b], membersWidth(members));
+                        rows.push_back(members);
                 }
+                if (rows.empty())
+                    continue;
+                for (const std::vector<int>& row : rows)  // to start: packed, centered on 0
+                {
+                    float x = -membersWidth(row) / 2.f;
+                    for (int v : row)
+                        center[v] = x + cross(graph.nodes[v]) / 2.f, x += cross(graph.nodes[v]) + gapX;
+                }
+                for (int pass = 0; pass < 4; ++pass)
+                {
+                    const bool down = pass % 2 == 0;
+                    for (size_t k = 0; k < rows.size(); ++k)
+                    {
+                        const std::vector<int>& row = rows[down ? k : rows.size() - 1 - k];
+                        std::vector<float> target(row.size()), offset(row.size(), 0.f);
+                        for (size_t i = 0; i < row.size(); ++i)
+                        {
+                            int v = row[i];
+                            if (i > 0)  // the least distance between the centers of two neighbours
+                                offset[i] = offset[i - 1] + (cross(graph.nodes[row[i - 1]]) + cross(graph.nodes[v])) / 2.f + gapX;
+                            std::vector<float> xs;
+                            for (int w : down ? forwardPreds[v] : forwardSuccs[v])
+                                if (band(w) == b && std::abs(graph.nodes[w].rank - graph.nodes[v].rank) == 1)
+                                    xs.push_back(center[w]);
+                            float desired = center[v];
+                            if (!xs.empty())
+                            {
+                                std::sort(xs.begin(), xs.end());
+                                desired = (xs[(xs.size() - 1) / 2] + xs[xs.size() / 2]) / 2.f;  // the median
+                            }
+                            target[i] = desired - offset[i];
+                        }
+                        std::vector<float> fitted = Isotonic(target);
+                        for (size_t i = 0; i < row.size(); ++i)
+                            center[row[i]] = fitted[i] + offset[i];
+                    }
+                }
+                float lo = FLT_MAX, hi = -FLT_MAX;
+                for (const std::vector<int>& row : rows)
+                    for (int v : row)
+                        lo = std::min(lo, center[v] - cross(graph.nodes[v]) / 2.f), hi = std::max(hi, center[v] + cross(graph.nodes[v]) / 2.f);
+                columnMin[b] = lo;
+                ownWidth[b] = hi - lo;
             }
             std::vector<std::vector<int>> children(freeBand + 1);
             for (int b = 0; b < freeBand; ++b)
@@ -769,21 +907,12 @@ namespace RichMd::Mermaid
                 after[nd.rank] = std::max(after[nd.rank], roomAfter);
             }
 
-            // Positions across: the nodes of each layer centered in their band
-            for (auto& [r, layer] : layers)
-                for (int b = 0; b <= freeBand; ++b)
-                {
-                    std::vector<int> members = bandMembers(layer, b);
-                    if (members.empty())
-                        continue;
-                    float cursor = ownStart[b] + (ownWidth[b] - membersWidth(members)) / 2.f;
-                    for (int v : members)
-                    {
-                        Node& nd = graph.nodes[v];
-                        (vertical ? nd.pos.x : nd.pos.y) = cursor;
-                        cursor += cross(nd) + gapX;
-                    }
-                }
+            // Positions across: in the column of their band
+            for (int v = 0; v < n; ++v)
+            {
+                Node& nd = graph.nodes[v];
+                (vertical ? nd.pos.x : nd.pos.y) = ownStart[band(v)] + center[v] - columnMin[band(v)] - cross(nd) / 2.f;
+            }
             // Lane edges: their lanes, the ones that span fewer layers inside (nested like brackets), and their approach
             // lines after the layer of their source and before the layer of their target. So that the lane routes do not
             // cross: from the layer outward, the back edges (their lanes go the other way), the inner lanes first, then

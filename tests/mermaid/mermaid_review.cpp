@@ -183,7 +183,7 @@ int main(int argc, char** argv)
              << "<td><img src=\"" << HtmlEscape(name) << ".png\" width=\"" << width << "\"></td>\n"
              << "</tr></table>\n"
              << (checks.empty() ? std::string("<p class=\"ok\">checks: ok</p>\n") : "<ul>" + checks + "</ul>\n")
-             << "<p>crossings: " << report.crossings << "</p>\n";
+             << "<p>crossings: " << report.crossings << ", bends: " << report.bends << "</p>\n";
     }
     page << "</body></html>\n";
     std::ofstream(outDir / "index.html") << page.str();

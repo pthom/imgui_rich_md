@@ -37,6 +37,7 @@ namespace MermaidChecks
         std::vector<Issue> known;             // expected (listed in `%% known:`)
         std::vector<std::string> fixedKnown;  // listed in `%% known:`, but they pass: the marker should go
         int crossings = 0;                    // how many times two edges cross (a measure)
+        int bends = 0;                        // how many edges between neighbouring layers are not straight (a measure)
     };
 
     inline Expectation ReadExpectation(const std::string& source)
@@ -351,6 +352,18 @@ namespace MermaidChecks
         return count;
     }
 
+    // A quality measure, not a check: the edges between neighbouring layers that bend (an elbow where a straight line
+    // could do, if the nodes were aligned)
+    inline int CountBends(const Diagram& d)
+    {
+        if (d.kind == DiagramKind::Sequence || !d.error.empty())
+            return 0;
+        int count = 0;
+        for (const Edge& e : d.graph.edges)
+            count += (e.lane == 0 && e.points.size() > 2) ? 1 : 0;
+        return count;
+    }
+
     // Parses the source, lays it out with the current font, and checks it against its expectation
     inline Report Evaluate(const std::string& source)
     {
@@ -364,6 +377,7 @@ namespace MermaidChecks
             std::vector<Issue> layoutIssues = CheckLayout(d);
             issues.insert(issues.end(), layoutIssues.begin(), layoutIssues.end());
             report.crossings = CountCrossings(d);
+            report.bends = CountBends(d);
         }
         std::set<std::string> failing;
         for (const Issue& issue : issues)
