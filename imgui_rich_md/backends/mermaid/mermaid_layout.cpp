@@ -577,21 +577,24 @@ namespace RichMd::Mermaid
                     forwardPreds[e.dst].push_back(e.src);
             }
             // Links to a subgraph's box: their other end goes before the box's entry nodes (no predecessor in the box),
-            // or after its exit nodes (no successor in the box)
+            // or after its exit nodes (no successor in the box). In the order of the ranking (back edges reversed), so
+            // that a cycle inside the box has its entry and its exit.
             auto inBox = [&](int v, int box) {
                 for (int b = graph.nodes[v].subgraph; b >= 0; b = graph.subgraphs[b].parent)
                     if (b == box)
                         return true;
                 return false;
             };
+            const std::vector<std::vector<int>> edgePreds = forwardPreds;  // without the constraints of the box links
             auto boxEnds = [&](int box, bool entry) {
                 std::vector<int> ends;
                 for (int v = 0; v < n; ++v)
                 {
-                    bool inside = false;  // linked from (entry) or to (exit) another member
-                    for (const Edge& e : graph.edges)
-                        if (!boxEdge(e) && e.src != e.dst && (entry ? e.dst == v && inBox(e.src, box) : e.src == v && inBox(e.dst, box)))
-                            inside = true;
+                    bool inside = false;  // after (entry) or before (exit) another member
+                    for (int w = 0; w < n; ++w)
+                        for (int p : edgePreds[w])
+                            if (entry ? w == v && inBox(p, box) : p == v && inBox(w, box))
+                                inside = true;
                     if (inBox(v, box) && !inside)
                         ends.push_back(v);
                 }
