@@ -1,0 +1,11 @@
+%% Several links on a round or pointed shape: they end on its outline
+%% expect: nodes=7 edges=8
+flowchart TD
+    A{Decide} --> B[One]
+    A --> C[Two]
+    A --> D[Three]
+    B --> E((Join))
+    C --> E
+    D --> E
+    E --> F{{Next}}
+    E --> G([End])

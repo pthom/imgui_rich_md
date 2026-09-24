@@ -1,0 +1,10 @@
+%% Styling and interaction lines are skipped, :::class suffixes removed
+%% expect: nodes=3 edges=2
+flowchart LR
+    classDef warn fill:#f96,stroke:#333
+    A[Start]:::warn --> B[Middle]
+    B --> C[End]:::warn
+    class B warn
+    style C fill:#bbf
+    linkStyle 0 stroke:#f00
+    click A "https://github.com/pthom/imgui_rich_md" "a tooltip"

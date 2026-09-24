@@ -1,0 +1,7 @@
+%% Chaining (A --> B --> C), and several nodes at once (A & B --> C)
+%% expect: nodes=7 edges=8
+flowchart TD
+    A[Read] --> B[Parse] --> C[Render]
+    C --> D[Display] & E[Log]
+    D & E --> F[Done]
+    A -->|retry| G[Wait] --> A

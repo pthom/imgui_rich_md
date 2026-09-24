@@ -1,0 +1,13 @@
+%% Every kind of link
+%% expect: nodes=11 edges=10
+flowchart LR
+    A[Source] --- B[open]
+    A -.- C[dotted]
+    A === D[thick]
+    A --o E[circle]
+    A --x F[cross]
+    A <--> G[both ways]
+    A o--o H[circles]
+    A x--x I[crosses]
+    A ~~~ J[invisible]
+    A ----> K[longer]

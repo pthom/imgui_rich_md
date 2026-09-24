@@ -13,8 +13,13 @@
 namespace RichMd::Mermaid
 {
     // Flowcharts and class diagrams: a graph laid out in layers
-    enum class NodeShape { Rect, Rounded, Diamond, Cylinder };
-    enum class LineStyle { Solid, Dotted, Thick };
+    enum class NodeShape
+    {
+        Rect, Rounded, Stadium, Subroutine, Cylinder, Circle, DoubleCircle, Diamond, Hexagon,
+        Parallelogram, ParallelogramAlt, Trapezoid, TrapezoidAlt, Asymmetric
+    };
+    enum class LineStyle { Solid, Dotted, Thick, Invisible };
+    enum class EdgeEnd { None, Arrow, Circle, Cross };
 
     struct Node
     {
@@ -31,7 +36,7 @@ namespace RichMd::Mermaid
     {
         int src = 0, dst = 0;
         std::string label;
-        bool arrow = true;
+        EdgeEnd start = EdgeEnd::None, end = EdgeEnd::Arrow;
         LineStyle style = LineStyle::Solid;
         // filled by the layout, relative to the diagram's origin
         std::vector<ImVec2> points;   // the polyline, from the source to the target
@@ -47,7 +52,8 @@ namespace RichMd::Mermaid
 
     struct Graph
     {
-        bool vertical = true;      // TD / TB; false: LR
+        bool vertical = true;      // TD / TB / BT; false: LR / RL
+        bool reversed = false;     // BT, RL
         std::vector<Node> nodes;   // in the order of the source
         std::vector<Edge> edges;
         std::vector<Subgraph> subgraphs;
@@ -119,6 +125,8 @@ namespace RichMd::Mermaid
     void Draw(const Diagram& diagram);                      // at the cursor, then a Dummy of DiagramSize
     // Back edges and edges that skip a layer travel on a lane past the graph
     bool UsesLane(const Graph& graph, const Edge& e);
+    // The outline of a node's shape, in its local coordinates (from (0, 0) to its size); curves are approximated
+    std::vector<ImVec2> ShapeOutline(const Node& node, float em);
 
     // Parses (once per source), lays out (when the font changes) and draws
     struct RenderResult

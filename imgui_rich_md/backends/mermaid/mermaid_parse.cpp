@@ -34,6 +34,7 @@ namespace RichMd::Mermaid
             size_t i = 0;
 
             bool AtEnd() const { return i >= s.size(); }
+            char Peek(size_t offset = 0) const { return i + offset < s.size() ? s[i + offset] : '\0'; }
             void SkipSpaces() { while (i < s.size() && std::isspace((unsigned char)s[i])) ++i; }
             string_view Word()
             {
@@ -148,7 +149,65 @@ namespace RichMd::Mermaid
         // Flowcharts
         // ---------------------------------------------------------------------------------------------------------
 
-        // A node reference: an id, and optionally its shape and label: A, A[label], A(label), A{label}, A[(label)]
+        // A label as written in the source: without its quotes, with its line breaks (<br>) and entity codes (#quot;, #35;)
+        std::string CleanLabel(string_view text)
+        {
+            text = Trim(text);
+            if (text.size() >= 2 && text.front() == '"' && text.back() == '"')
+                text = text.substr(1, text.size() - 2);
+            std::string out;
+            for (size_t i = 0; i < text.size();)
+            {
+                if (text[i] == '<')  // <br>, <br/>, <br />
+                {
+                    size_t close = text.find('>', i);
+                    std::string tag;
+                    for (size_t k = i + 1; close != string_view::npos && k < close; ++k)
+                        if (!std::isspace((unsigned char)text[k]) && text[k] != '/')
+                            tag += (char)std::tolower((unsigned char)text[k]);
+                    if (tag == "br")
+                    {
+                        out += '\n';
+                        i = close + 1;
+                        continue;
+                    }
+                }
+                if (text[i] == '#')  // #quot; #35;
+                {
+                    size_t semicolon = text.find(';', i);
+                    if (semicolon != string_view::npos && semicolon - i <= 8)
+                    {
+                        string_view name = text.substr(i + 1, semicolon - i - 1);
+                        const char* named = name == "quot" ? "\"" : name == "amp" ? "&" : name == "lt" ? "<" : name == "gt" ? ">" : name == "nbsp" ? " " : nullptr;
+                        unsigned code = 0;
+                        bool numeric = !name.empty();
+                        for (char c : name)
+                            numeric = numeric && std::isdigit((unsigned char)c), code = code * 10 + (unsigned)(c - '0');
+                        if (named || (numeric && code >= 32 && code < 0x110000))
+                        {
+                            if (named)
+                                out += named;
+                            else if (code < 0x80)
+                                out += (char)code;
+                            else if (code < 0x800)
+                                out += (char)(0xC0 | (code >> 6)), out += (char)(0x80 | (code & 0x3F));
+                            else if (code < 0x10000)
+                                out += (char)(0xE0 | (code >> 12)), out += (char)(0x80 | ((code >> 6) & 0x3F)), out += (char)(0x80 | (code & 0x3F));
+                            else
+                                out += (char)(0xF0 | (code >> 18)), out += (char)(0x80 | ((code >> 12) & 0x3F)),
+                                out += (char)(0x80 | ((code >> 6) & 0x3F)), out += (char)(0x80 | (code & 0x3F));
+                            i = semicolon + 1;
+                            continue;
+                        }
+                    }
+                }
+                out += text[i++];
+            }
+            return out;
+        }
+
+        // A node reference: an id, optionally its shape and label (A[label], A(label), A{label}, ...; a label may be
+        // quoted), and a :::class suffix (ignored)
         bool ScanNodeRef(Scanner& sc, Graph& graph, int subgraph, int* nodeIndex)
         {
             sc.SkipSpaces();
@@ -156,60 +215,164 @@ namespace RichMd::Mermaid
             if (id.empty())
                 return false;
             *nodeIndex = AddNode(graph, id, subgraph);
+            const size_t afterId = sc.i;
             sc.SkipSpaces();
+            const size_t opener = sc.i;
             struct Bracket { string_view open, close; NodeShape shape; };
-            static const Bracket brackets[] = {
-                {"[(", ")]", NodeShape::Cylinder}, {"[", "]", NodeShape::Rect},
-                {"(", ")", NodeShape::Rounded}, {"{", "}", NodeShape::Diamond},
+            static const Bracket brackets[] = {  // the longest openers first
+                {"(((", ")))", NodeShape::DoubleCircle}, {"((", "))", NodeShape::Circle}, {"([", "])", NodeShape::Stadium},
+                {"[[", "]]", NodeShape::Subroutine}, {"[(", ")]", NodeShape::Cylinder}, {"{{", "}}", NodeShape::Hexagon},
+                {"[/", "/]", NodeShape::Parallelogram}, {"[/", "\\]", NodeShape::Trapezoid},
+                {"[\\", "\\]", NodeShape::ParallelogramAlt}, {"[\\", "/]", NodeShape::TrapezoidAlt},
+                {"[", "]", NodeShape::Rect}, {"(", ")", NodeShape::Rounded}, {"{", "}", NodeShape::Diamond},
+                {">", "]", NodeShape::Asymmetric},
             };
+            bool matched = false;
             for (const Bracket& b : brackets)
             {
+                sc.i = opener;
                 if (!sc.Eat(b.open))
                     continue;
-                size_t end = sc.s.find(b.close, sc.i);
-                if (end == string_view::npos)
-                    return false;
+                size_t labelStart = sc.i, labelEnd;
+                sc.SkipSpaces();
+                if (sc.Peek() == '"')  // a quoted label may contain the closing bracket
+                {
+                    size_t quote = sc.s.find('"', sc.i + 1);
+                    if (quote == string_view::npos)
+                        continue;
+                    sc.i = quote + 1;
+                    sc.SkipSpaces();
+                    if (sc.s.substr(sc.i, b.close.size()) != b.close)
+                        continue;
+                    labelEnd = sc.i;
+                }
+                else
+                {
+                    labelEnd = sc.s.find(b.close, labelStart);
+                    if (labelEnd == string_view::npos)
+                        continue;
+                }
                 Node& node = graph.nodes[*nodeIndex];
-                node.label = std::string(sc.s.substr(sc.i, end - sc.i));
+                node.label = CleanLabel(sc.s.substr(labelStart, labelEnd - labelStart));
                 node.shape = b.shape;
-                sc.i = end + b.close.size();
+                sc.i = labelEnd + b.close.size();
+                matched = true;
                 break;
             }
+            if (!matched)
+                sc.i = afterId;  // no shape (an opener without its closer is left for the caller to reject)
+            if (sc.Eat(":::"))
+                sc.Word();
             return true;
         }
 
-        // A link: -->, ---, -.->, -. label .->, ==>, then an optional |label|
+        // A group of nodes: A, or A & B & C
+        bool ScanGroup(Scanner& sc, Graph& graph, int subgraph, std::vector<int>* nodes)
+        {
+            do
+            {
+                int node;
+                if (!ScanNodeRef(sc, graph, subgraph, &node))
+                    return false;
+                nodes->push_back(node);
+                sc.SkipSpaces();
+            } while (sc.Eat("&"));
+            return true;
+        }
+
+        // The end of a link's line: >, o or x (an o or an x followed by a letter is the next node, unless `strict`)
+        bool ScanLinkEnd(Scanner& sc, Edge* edge, bool strict)
+        {
+            char c = sc.Peek();
+            if (c == '>')
+                edge->end = EdgeEnd::Arrow;
+            else if ((c == 'o' || c == 'x') && (!strict || !IsWordChar(sc.Peek(1))))
+                edge->end = c == 'o' ? EdgeEnd::Circle : EdgeEnd::Cross;
+            else
+                return false;
+            ++sc.i;
+            return true;
+        }
+
+        // A link: an optional start marker (<, o, x), a line (-- solid, == thick, -.- dotted, ~~~ invisible, of any
+        // length), an optional end marker (>, o, x). Its text goes inside (A -- text --> B) or after (A -->|text| B).
         bool ScanLink(Scanner& sc, Edge* edge)
         {
             sc.SkipSpaces();
-            if (sc.Eat("-->"))
-                edge->arrow = true;
-            else if (sc.Eat("---"))
-                edge->arrow = false;
-            else if (sc.Eat("==>"))
-                edge->style = LineStyle::Thick;
-            else if (sc.Eat("-."))
+            edge->end = EdgeEnd::None;
+            if (sc.Eat("~~~"))
             {
-                edge->style = LineStyle::Dotted;
-                if (!sc.Eat("->"))
-                {
-                    size_t end = sc.s.find(".->", sc.i);  // -. label .->
-                    if (end == string_view::npos)
-                        return false;
-                    edge->label = std::string(Trim(sc.s.substr(sc.i, end - sc.i)));
-                    sc.i = end + 3;
-                }
+                while (sc.Eat("~")) {}
+                edge->style = LineStyle::Invisible;
             }
             else
-                return false;
+            {
+                char c = sc.Peek(), next = sc.Peek(1);
+                if ((c == '<' || c == 'o' || c == 'x') && (next == '-' || next == '=' || next == '.'))
+                {
+                    edge->start = c == '<' ? EdgeEnd::Arrow : c == 'o' ? EdgeEnd::Circle : EdgeEnd::Cross;
+                    ++sc.i;
+                    c = next;
+                }
+                if (c == '-' && sc.Peek(1) == '.')  // dotted: -.-, -.->, -..->, or -. text .->
+                {
+                    ++sc.i;
+                    int dots = 0;
+                    while (sc.Eat("."))
+                        ++dots;
+                    edge->style = LineStyle::Dotted;
+                    if (sc.Eat("-"))
+                        ScanLinkEnd(sc, edge, true);
+                    else if (dots == 1 && std::isspace((unsigned char)sc.Peek()))
+                    {
+                        size_t close = sc.s.find(".-", sc.i);
+                        if (close == string_view::npos)
+                            return false;
+                        edge->label = CleanLabel(sc.s.substr(sc.i, close - sc.i));
+                        sc.i = close;
+                        while (sc.Eat(".")) {}
+                        if (!sc.Eat("-"))
+                            return false;
+                        ScanLinkEnd(sc, edge, true);
+                    }
+                    else
+                        return false;
+                }
+                else if (c == '-' || c == '=')  // solid or thick, of any length, or -- text -->
+                {
+                    int n = 0;
+                    while (sc.Peek() == c)
+                        ++sc.i, ++n;
+                    if (n < 2)
+                        return false;
+                    edge->style = c == '=' ? LineStyle::Thick : LineStyle::Solid;
+                    if (!ScanLinkEnd(sc, edge, n > 2) && n == 2)
+                    {
+                        if (!std::isspace((unsigned char)sc.Peek()))
+                            return false;
+                        size_t close = sc.s.find(std::string(2, c), sc.i);  // the closing line
+                        if (close == string_view::npos)
+                            return false;
+                        edge->label = CleanLabel(sc.s.substr(sc.i, close - sc.i));
+                        sc.i = close;
+                        n = 0;
+                        while (sc.Peek() == c)
+                            ++sc.i, ++n;
+                        if (!ScanLinkEnd(sc, edge, true) && n < 3)
+                            return false;
+                    }
+                }
+                else
+                    return false;
+            }
             sc.SkipSpaces();
             if (sc.Eat("|"))
             {
-                size_t end = sc.s.find('|', sc.i);
-                if (end == string_view::npos)
+                size_t close = sc.s.find('|', sc.i);
+                if (close == string_view::npos)
                     return false;
-                edge->label = std::string(Trim(sc.s.substr(sc.i, end - sc.i)));
-                sc.i = end + 1;
+                edge->label = CleanLabel(sc.s.substr(sc.i, close - sc.i));
+                sc.i = close + 1;
             }
             return true;
         }
@@ -225,9 +388,9 @@ namespace RichMd::Mermaid
                 {
                     string_view direction = AfterFirstWord(line.text);
                     if (direction.empty() || direction == "TD" || direction == "TB" || direction == "BT")
-                        graph.vertical = true;
+                        graph.vertical = true, graph.reversed = direction == "BT";
                     else if (direction == "LR" || direction == "RL")
-                        graph.vertical = false;
+                        graph.vertical = false, graph.reversed = direction == "RL";
                     else
                     {
                         d.error = LineError(line.number, "unknown direction `" + std::string(direction) + "`");
@@ -246,9 +409,9 @@ namespace RichMd::Mermaid
                     if (!id.empty() && sc.AtEnd())
                         title = std::string(id);
                     else if (!id.empty() && sc.Eat("[") && EndsWith(rest, "]"))
-                        title = std::string(rest.substr(sc.i, rest.size() - 1 - sc.i));
+                        title = CleanLabel(rest.substr(sc.i, rest.size() - 1 - sc.i));
                     else
-                        id = rest, title = std::string(rest);
+                        id = rest, title = CleanLabel(rest);
                     subgraph = AddSubgraph(graph, id, title);
                     continue;
                 }
@@ -259,32 +422,28 @@ namespace RichMd::Mermaid
                 }
                 if (IsStylingLine(word))
                     continue;
-                // A node, or two nodes and a link
+                // Nodes, and links between them: A --> B & C --> D (every node of a group to every node of the next)
                 Scanner sc{line.text};
-                int src = -1, dst = -1;
-                if (!ScanNodeRef(sc, graph, subgraph, &src))
+                std::vector<int> left;
+                bool ok = ScanGroup(sc, graph, subgraph, &left);
+                while (ok && !sc.AtEnd())
+                {
+                    Edge link;
+                    std::vector<int> right;
+                    ok = ScanLink(sc, &link) && ScanGroup(sc, graph, subgraph, &right);
+                    for (int a : left)
+                        for (int b : right)
+                        {
+                            Edge edge = link;
+                            edge.src = a, edge.dst = b;
+                            graph.edges.push_back(edge);
+                        }
+                    left = right;
+                }
+                if (!ok)
                 {
                     d.error = LineError(line.number, "cannot parse `" + std::string(line.text) + "`");
                     return;
-                }
-                sc.SkipSpaces();
-                if (!sc.AtEnd())
-                {
-                    Edge edge;
-                    if (!ScanLink(sc, &edge) || !ScanNodeRef(sc, graph, subgraph, &dst))
-                    {
-                        d.error = LineError(line.number, "cannot parse `" + std::string(line.text) + "`");
-                        return;
-                    }
-                    sc.SkipSpaces();
-                    if (!sc.AtEnd())
-                    {
-                        d.error = LineError(line.number, "unexpected `" + std::string(sc.Rest()) + "`");
-                        return;
-                    }
-                    edge.src = src;
-                    edge.dst = dst;
-                    graph.edges.push_back(edge);
                 }
             }
         }
@@ -533,7 +692,7 @@ namespace RichMd::Mermaid
             edge.src = AddClass(d, src, ns);
             edge.dst = AddClass(d, dst, ns);
             edge.label = label;
-            edge.arrow = false;
+            edge.end = EdgeEnd::None;
             edge.style = found->dashed ? LineStyle::Dotted : LineStyle::Solid;
             d.graph.edges.push_back(edge);
             d.relations.push_back(relation);

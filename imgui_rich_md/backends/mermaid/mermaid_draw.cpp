@@ -48,30 +48,131 @@ namespace RichMd::Mermaid
             }
         }
 
-        // The segments; with an arrow, the last segment stops at the base of the triangle
-        void Polyline(ImDrawList* dl, std::vector<ImVec2> pts, ImU32 col, bool arrow, float em, LineStyle style)
+        // The marker at the end `tip` of a line that comes from `from`; returns the point where the line stops
+        ImVec2 DrawEdgeEnd(ImDrawList* dl, EdgeEnd kind, ImVec2 tip, ImVec2 from, ImU32 col, float em)
         {
-            if (arrow)
+            float dx = tip.x - from.x, dy = tip.y - from.y;
+            float n = Length(dx, dy);
+            float ux = dx / n, uy = dy / n;
+            if (kind == EdgeEnd::Arrow)
             {
-                ImVec2 end = pts.back(), prev = pts[pts.size() - 2];
-                float dx = end.x - prev.x, dy = end.y - prev.y;
-                float n = Length(dx, dy);
-                float ux = dx / n, uy = dy / n;
                 float s = 0.55f * em;
-                ImVec2 base(end.x - s * ux, end.y - s * uy);
-                pts.back() = base;
-                dl->AddTriangleFilled(end, ImVec2(base.x + s * 0.45f * uy, base.y - s * 0.45f * ux),
+                ImVec2 base(tip.x - s * ux, tip.y - s * uy);
+                dl->AddTriangleFilled(tip, ImVec2(base.x + s * 0.45f * uy, base.y - s * 0.45f * ux),
                                       ImVec2(base.x - s * 0.45f * uy, base.y + s * 0.45f * ux), col);
+                return base;
             }
+            if (kind == EdgeEnd::Circle)
+            {
+                float r = 0.3f * em;
+                ImVec2 c(tip.x - r * ux, tip.y - r * uy);
+                dl->AddCircleFilled(c, r, col);
+                return ImVec2(c.x - r * ux, c.y - r * uy);
+            }
+            if (kind == EdgeEnd::Cross)
+            {
+                float r = 0.3f * em;
+                ImVec2 c(tip.x - 1.3f * r * ux, tip.y - 1.3f * r * uy);
+                dl->AddLine(ImVec2(c.x - r, c.y - r), ImVec2(c.x + r, c.y + r), col, 1.5f);
+                dl->AddLine(ImVec2(c.x - r, c.y + r), ImVec2(c.x + r, c.y - r), col, 1.5f);
+                return c;
+            }
+            return tip;
+        }
+
+        // The segments, and the markers at the ends
+        void Polyline(ImDrawList* dl, std::vector<ImVec2> pts, ImU32 col, EdgeEnd start, EdgeEnd end, float em, LineStyle style)
+        {
+            if (style == LineStyle::Invisible)
+                return;
+            pts.back() = DrawEdgeEnd(dl, end, pts.back(), pts[pts.size() - 2], col, em);
+            pts.front() = DrawEdgeEnd(dl, start, pts.front(), pts[1], col, em);
             for (size_t i = 0; i + 1 < pts.size(); ++i)
                 Segment(dl, pts[i], pts[i + 1], col, style, em);
+        }
+
+        // A text centered on c, line by line
+        void CenteredText(ImDrawList* dl, ImVec2 c, ImU32 col, const std::string& text)
+        {
+            float y = c.y - ImGui::CalcTextSize(text.c_str()).y / 2.f;
+            size_t start = 0;
+            while (true)
+            {
+                size_t end = text.find('\n', start);
+                const char* b = text.c_str() + start;
+                const char* e = end == std::string::npos ? text.c_str() + text.size() : text.c_str() + end;
+                dl->AddText(ImVec2(c.x - ImGui::CalcTextSize(b, e).x / 2.f, y), col, b, e);
+                if (end == std::string::npos)
+                    break;
+                y += ImGui::GetTextLineHeight();
+                start = end + 1;
+            }
         }
 
         // The label's box, then its text
         void EdgeLabel(ImDrawList* dl, const Edge& e, ImVec2 origin, ImU32 textCol, ImU32 bg)
         {
-            dl->AddRectFilled(Add(origin, e.labelMin), Add(origin, e.labelMax), bg);
-            dl->AddText(ImVec2(origin.x + e.labelMin.x + 2.f, origin.y + e.labelMin.y), textCol, e.label.c_str());
+            ImVec2 p0 = Add(origin, e.labelMin), p1 = Add(origin, e.labelMax);
+            dl->AddRectFilled(p0, p1, bg);
+            CenteredText(dl, ImVec2((p0.x + p1.x) / 2.f, (p0.y + p1.y) / 2.f), textCol, e.label);
+        }
+
+        void DrawNode(ImDrawList* dl, const Node& node, ImVec2 origin, ImU32 fill, ImU32 border, ImU32 textCol, float em)
+        {
+            ImVec2 p0 = Add(origin, node.pos), p1 = Add(p0, node.size);
+            ImVec2 c((p0.x + p1.x) / 2.f, (p0.y + p1.y) / 2.f);
+            switch (node.shape)
+            {
+            case NodeShape::Rect:
+            case NodeShape::Rounded:
+            case NodeShape::Stadium:
+            case NodeShape::Subroutine:
+            {
+                float rounding = node.shape == NodeShape::Rounded ? 0.6f * em : node.shape == NodeShape::Stadium ? node.size.y / 2.f : 0.15f * em;
+                dl->AddRectFilled(p0, p1, fill, rounding);
+                StrokeRect(dl, p0, p1, border, rounding, 1.5f);
+                if (node.shape == NodeShape::Subroutine)
+                    for (float x : {p0.x + 0.5f * em, p1.x - 0.5f * em})
+                        dl->AddLine(ImVec2(x, p0.y), ImVec2(x, p1.y), border, 1.5f);
+                break;
+            }
+            case NodeShape::Circle:
+            case NodeShape::DoubleCircle:
+            {
+                float r = node.size.x / 2.f;
+                dl->AddCircleFilled(c, r, fill);
+                dl->AddCircle(c, r, border, 0, 1.5f);
+                if (node.shape == NodeShape::DoubleCircle)
+                    dl->AddCircle(c, r - 0.35f * em, border, 0, 1.5f);
+                break;
+            }
+            case NodeShape::Cylinder:
+            {
+                float ry = 0.35f * em;
+                ImVec2 radius(node.size.x / 2.f, ry);
+                dl->AddRectFilled(ImVec2(p0.x, p0.y + ry), ImVec2(p1.x, p1.y - ry), fill);
+                dl->AddEllipseFilled(ImVec2(c.x, p1.y - ry), radius, fill);
+                dl->AddEllipseFilled(ImVec2(c.x, p0.y + ry), radius, fill);
+                dl->AddLine(ImVec2(p0.x, p0.y + ry), ImVec2(p0.x, p1.y - ry), border, 1.5f);
+                dl->AddLine(ImVec2(p1.x, p0.y + ry), ImVec2(p1.x, p1.y - ry), border, 1.5f);
+                dl->AddEllipse(ImVec2(c.x, p0.y + ry), radius, border, 0.f, 0, 1.5f);
+                dl->AddEllipse(ImVec2(c.x, p1.y - ry), radius, border, 0.f, 0, 1.5f);
+                break;
+            }
+            default:  // the polygons
+            {
+                std::vector<ImVec2> pts = ShapeOutline(node, em);
+                for (ImVec2& p : pts)
+                    p = Add(p0, p);
+                if (node.shape == NodeShape::Asymmetric)
+                    dl->AddConcavePolyFilled(pts.data(), (int)pts.size(), fill);
+                else
+                    dl->AddConvexPolyFilled(pts.data(), (int)pts.size(), fill);
+                StrokeClosedPolyline(dl, pts.data(), (int)pts.size(), border, 1.5f);
+                break;
+            }
+            }
+            CenteredText(dl, c, textCol, node.label);
         }
 
         std::vector<ImVec2> Translated(const std::vector<ImVec2>& points, ImVec2 origin)
@@ -105,41 +206,12 @@ namespace RichMd::Mermaid
             SubgraphBoxes(dl, graph, origin, em);
             for (const Edge& e : graph.edges)
             {
-                Polyline(dl, Translated(e.points, origin), border, e.arrow, em, e.style);
-                if (!e.label.empty())
+                Polyline(dl, Translated(e.points, origin), border, e.start, e.end, em, e.style);
+                if (!e.label.empty() && e.style != LineStyle::Invisible)
                     EdgeLabel(dl, e, origin, textCol, windowBg);
             }
             for (const Node& node : graph.nodes)
-            {
-                ImVec2 p0 = Add(origin, node.pos), p1 = Add(p0, node.size);
-                ImVec2 c((p0.x + p1.x) / 2.f, (p0.y + p1.y) / 2.f);
-                if (node.shape == NodeShape::Diamond)
-                {
-                    ImVec2 pts[4] = {ImVec2(c.x, p0.y), ImVec2(p1.x, c.y), ImVec2(c.x, p1.y), ImVec2(p0.x, c.y)};
-                    dl->AddConvexPolyFilled(pts, 4, fill);
-                    StrokeClosedPolyline(dl, pts, 4, border, 1.5f);
-                }
-                else if (node.shape == NodeShape::Cylinder)
-                {
-                    float ry = 0.35f * em;
-                    ImVec2 radius(node.size.x / 2.f, ry);
-                    dl->AddRectFilled(ImVec2(p0.x, p0.y + ry), ImVec2(p1.x, p1.y - ry), fill);
-                    dl->AddEllipseFilled(ImVec2(c.x, p1.y - ry), radius, fill);
-                    dl->AddEllipseFilled(ImVec2(c.x, p0.y + ry), radius, fill);
-                    dl->AddLine(ImVec2(p0.x, p0.y + ry), ImVec2(p0.x, p1.y - ry), border, 1.5f);
-                    dl->AddLine(ImVec2(p1.x, p0.y + ry), ImVec2(p1.x, p1.y - ry), border, 1.5f);
-                    dl->AddEllipse(ImVec2(c.x, p0.y + ry), radius, border, 0.f, 0, 1.5f);
-                    dl->AddEllipse(ImVec2(c.x, p1.y - ry), radius, border, 0.f, 0, 1.5f);
-                }
-                else
-                {
-                    float rounding = node.shape == NodeShape::Rounded ? 0.6f * em : 0.15f * em;
-                    dl->AddRectFilled(p0, p1, fill, rounding);
-                    StrokeRect(dl, p0, p1, border, rounding, 1.5f);
-                }
-                ImVec2 ts = ImGui::CalcTextSize(node.label.c_str());
-                dl->AddText(ImVec2(c.x - ts.x / 2.f, c.y - ts.y / 2.f), textCol, node.label.c_str());
-            }
+                DrawNode(dl, node, origin, fill, border, textCol, em);
         }
 
         // A UML marker at `tip`, pointing away from `towards` (the next point of the line); returns the point where
@@ -196,7 +268,7 @@ namespace RichMd::Mermaid
                 ImVec2 end = DrawMarker(dl, r.markerDst, pts.back(), pts[pts.size() - 2], border, windowBg, em);
                 pts.front() = start;
                 pts.back() = end;
-                Polyline(dl, pts, border, false, em, r.dashed ? LineStyle::Dotted : LineStyle::Solid);
+                Polyline(dl, pts, border, EdgeEnd::None, EdgeEnd::None, em, r.dashed ? LineStyle::Dotted : LineStyle::Solid);
                 if (!e.label.empty())
                     EdgeLabel(dl, e, origin, textCol, windowBg);
                 if (!r.cardinalitySrc.empty())

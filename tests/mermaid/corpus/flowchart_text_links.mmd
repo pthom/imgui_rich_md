@@ -1,0 +1,7 @@
+%% Text written inside the links: -- text -->, == text ==>, -. text .->, -- text ---
+%% expect: nodes=5 edges=4
+flowchart LR
+    A[Draft] -- review --> B[Reviewed]
+    B == approve ==> C[Approved]
+    C -. archive .-> D[(Archive)]
+    D -- see also --- E[Notes]

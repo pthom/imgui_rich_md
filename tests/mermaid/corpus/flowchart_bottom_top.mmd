@@ -1,0 +1,9 @@
+%% Bottom to top, with a subgraph and a link going back
+%% expect: nodes=4 edges=4 subgraphs=1
+flowchart BT
+    subgraph Core
+        A[Kernel] --> B[Drivers]
+    end
+    B --> C[Services]
+    C --> D[Apps]
+    D -.-> B

@@ -4,6 +4,7 @@
 #include "rich_md_mermaid.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
@@ -16,8 +17,85 @@ namespace RichMd::Mermaid
         return graph.backEdges.count({e.src, e.dst}) > 0 || graph.nodes[e.dst].rank - graph.nodes[e.src].rank > 1;
     }
 
+    std::vector<ImVec2> ShapeOutline(const Node& node, float em)
+    {
+        const float w = node.size.x, h = node.size.y;
+        std::vector<ImVec2> pts;
+        // An arc of the ellipse of center c, from angle a0 to a1 (radians, y down)
+        auto arc = [&](ImVec2 c, ImVec2 radius, float a0, float a1, int segments) {
+            for (int i = 0; i <= segments; ++i)
+            {
+                float a = a0 + (a1 - a0) * (float)i / (float)segments;
+                pts.push_back(ImVec2(c.x + radius.x * std::cos(a), c.y + radius.y * std::sin(a)));
+            }
+        };
+        const float pi = 3.14159265f;
+        auto roundedRect = [&](float r) {
+            r = std::min(r, std::min(w, h) / 2.f);
+            arc(ImVec2(w - r, r), ImVec2(r, r), -pi / 2.f, 0.f, 6);
+            arc(ImVec2(w - r, h - r), ImVec2(r, r), 0.f, pi / 2.f, 6);
+            arc(ImVec2(r, h - r), ImVec2(r, r), pi / 2.f, pi, 6);
+            arc(ImVec2(r, r), ImVec2(r, r), pi, 1.5f * pi, 6);
+        };
+        switch (node.shape)
+        {
+        case NodeShape::Rounded: roundedRect(0.6f * em); break;
+        case NodeShape::Stadium: roundedRect(h / 2.f); break;
+        case NodeShape::Circle:
+        case NodeShape::DoubleCircle: arc(ImVec2(w / 2.f, h / 2.f), ImVec2(w / 2.f, h / 2.f), 0.f, 2.f * pi, 48); pts.pop_back(); break;
+        case NodeShape::Cylinder:
+        {
+            float ry = 0.35f * em;  // the lids: the top half of the top ellipse, the bottom half of the bottom one
+            arc(ImVec2(w / 2.f, ry), ImVec2(w / 2.f, ry), pi, 2.f * pi, 16);
+            arc(ImVec2(w / 2.f, h - ry), ImVec2(w / 2.f, ry), 0.f, pi, 16);
+            break;
+        }
+        case NodeShape::Diamond: pts = {ImVec2(w / 2.f, 0.f), ImVec2(w, h / 2.f), ImVec2(w / 2.f, h), ImVec2(0.f, h / 2.f)}; break;
+        case NodeShape::Hexagon:
+        {
+            float s = h / 4.f;
+            pts = {ImVec2(s, 0.f), ImVec2(w - s, 0.f), ImVec2(w, h / 2.f), ImVec2(w - s, h), ImVec2(s, h), ImVec2(0.f, h / 2.f)};
+            break;
+        }
+        case NodeShape::Parallelogram: pts = {ImVec2(h / 2.f, 0.f), ImVec2(w, 0.f), ImVec2(w - h / 2.f, h), ImVec2(0.f, h)}; break;
+        case NodeShape::ParallelogramAlt: pts = {ImVec2(0.f, 0.f), ImVec2(w - h / 2.f, 0.f), ImVec2(w, h), ImVec2(h / 2.f, h)}; break;
+        case NodeShape::Trapezoid: pts = {ImVec2(h / 2.f, 0.f), ImVec2(w - h / 2.f, 0.f), ImVec2(w, h), ImVec2(0.f, h)}; break;
+        case NodeShape::TrapezoidAlt: pts = {ImVec2(0.f, 0.f), ImVec2(w, 0.f), ImVec2(w - h / 2.f, h), ImVec2(h / 2.f, h)}; break;
+        case NodeShape::Asymmetric: pts = {ImVec2(0.f, 0.f), ImVec2(w, 0.f), ImVec2(w, h), ImVec2(0.f, h), ImVec2(h / 4.f, h / 2.f)}; break;
+        default: pts = {ImVec2(0.f, 0.f), ImVec2(w, 0.f), ImVec2(w, h), ImVec2(0.f, h)}; break;
+        }
+        return pts;
+    }
+
     namespace
     {
+        enum Side { Top, Bottom, Left, Right };
+
+        // How far inside its box a node's outline is, on a side, at fraction t along that side
+        float SideInset(const Node& node, float em, Side side, float t)
+        {
+            if (node.shape == NodeShape::Rect || node.shape == NodeShape::Subroutine || !node.compartments.empty())
+                return 0.f;
+            std::vector<ImVec2> outline = ShapeOutline(node, em);
+            const bool alongX = side == Top || side == Bottom;  // top, bottom: a vertical line at x = t * width
+            const float c = t * (alongX ? node.size.x : node.size.y);
+            const bool nearest = side == Top || side == Left;
+            float best = nearest ? FLT_MAX : -FLT_MAX;
+            for (size_t i = 0; i < outline.size(); ++i)
+            {
+                ImVec2 p = outline[i], q = outline[(i + 1) % outline.size()];
+                float a = alongX ? p.x : p.y, b = alongX ? q.x : q.y;
+                if (a == b || c < std::min(a, b) || c > std::max(a, b))
+                    continue;
+                float u = (c - a) / (b - a);
+                float v = alongX ? p.y + u * (q.y - p.y) : p.x + u * (q.x - p.x);
+                best = nearest ? std::min(best, v) : std::max(best, v);
+            }
+            if (best == FLT_MAX || best == -FLT_MAX)
+                return 0.f;
+            return nearest ? best : (alongX ? node.size.y : node.size.x) - best;
+        }
+
         // For each edge: where it leaves its source and enters its target, as fractions of the node's side, spread
         // so that the edges of a node do not share a point (ordered by the position of their other end)
         std::vector<std::pair<float, float>> Anchors(const Graph& graph)
@@ -47,7 +125,9 @@ namespace RichMd::Mermaid
 
         // The elbow polyline of an edge: a forward edge crosses the middle of the gap between the layers; a lane edge
         // (back edge, edge skipping a layer) leaves its source in the flow direction, goes into the gap after its
-        // layer, along a lane past the graph, back through the gap before the target's layer, and into the target
+        // layer, along a lane past the graph, back through the gap before the target's layer, and into the target.
+        // The ends are on the outlines of the shapes. BT and RL are laid out as TD and LR, then mirrored: the sides of
+        // the shapes are those after the mirroring.
         std::vector<ImVec2> EdgePoints(const Graph& graph, const Edge& e, int lane, float em, std::pair<float, float> anchor)
         {
             const bool vertical = graph.vertical;
@@ -57,21 +137,29 @@ namespace RichMd::Mermaid
             ImVec2 b0 = b.pos;
             ImVec2 pa, pb;
             if (vertical)
+            {
                 pa = ImVec2(a0.x + a.size.x * anchor.first, a1.y), pb = ImVec2(b0.x + b.size.x * anchor.second, b0.y);
+                pa.y -= SideInset(a, em, graph.reversed ? Top : Bottom, anchor.first);
+                pb.y += SideInset(b, em, graph.reversed ? Bottom : Top, anchor.second);
+            }
             else
+            {
                 pa = ImVec2(a1.x, a0.y + a.size.y * anchor.first), pb = ImVec2(b0.x, b0.y + b.size.y * anchor.second);
+                pa.x -= SideInset(a, em, graph.reversed ? Left : Right, anchor.first);
+                pb.x += SideInset(b, em, graph.reversed ? Right : Left, anchor.second);
+            }
             if (UsesLane(graph, e))
             {
                 const float halfGap = 0.7f * em;  // not the middle of the gap, where the forward edges run
                 if (vertical)
                 {
                     float lx = graph.size.x - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)lane;
-                    return {pa, ImVec2(pa.x, pa.y + halfGap), ImVec2(lx, pa.y + halfGap),
-                            ImVec2(lx, pb.y - halfGap), ImVec2(pb.x, pb.y - halfGap), pb};
+                    return {pa, ImVec2(pa.x, a1.y + halfGap), ImVec2(lx, a1.y + halfGap),
+                            ImVec2(lx, b0.y - halfGap), ImVec2(pb.x, b0.y - halfGap), pb};
                 }
                 float ly = graph.size.y - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)lane;
-                return {pa, ImVec2(pa.x + halfGap, pa.y), ImVec2(pa.x + halfGap, ly),
-                        ImVec2(pb.x - halfGap, ly), ImVec2(pb.x - halfGap, pb.y), pb};
+                return {pa, ImVec2(a1.x + halfGap, pa.y), ImVec2(a1.x + halfGap, ly),
+                        ImVec2(b0.x - halfGap, ly), ImVec2(b0.x - halfGap, pb.y), pb};
             }
             if (vertical)
             {
@@ -125,6 +213,88 @@ namespace RichMd::Mermaid
                 r.cardinalitySrcPos = place(r.cardinalitySrc, pts[0], pts[1]);
                 r.cardinalityDstPos = place(r.cardinalityDst, pts.back(), pts[pts.size() - 2]);
             }
+        }
+
+        // A node's size, from its text and its shape
+        ImVec2 NodeSize(const Node& node, float em)
+        {
+            const float pad = 0.8f * em;
+            if (!node.compartments.empty())  // a class: its widest line, a line of text per row, a padding per compartment
+            {
+                float w = 0.f, h = 0.f;
+                for (const auto& compartment : node.compartments)
+                {
+                    for (const std::string& text : compartment)
+                        w = std::max(w, ImGui::CalcTextSize(text.c_str()).x);
+                    h += (float)compartment.size() * ImGui::GetTextLineHeight() + 0.6f * em;
+                }
+                return ImVec2(w + 2.f * pad, h);
+            }
+            ImVec2 text = ImGui::CalcTextSize(node.label.c_str());
+            const float w = text.x + 2.f * pad, h = text.y + 2.f * pad;
+            switch (node.shape)
+            {
+            case NodeShape::Diamond: return ImVec2(w + text.y, h + text.y);
+            case NodeShape::Cylinder: return ImVec2(w, h + text.y);  // room for the lids
+            case NodeShape::Subroutine: return ImVec2(w + 1.f * em, h);  // the inner lines, 0.5 em from the sides
+            case NodeShape::Circle: { float d = std::max(text.x, text.y) + 2.f * pad; return ImVec2(d, d); }
+            case NodeShape::DoubleCircle: { float d = std::max(text.x, text.y) + 2.f * pad + 0.7f * em; return ImVec2(d, d); }
+            case NodeShape::Stadium:  // the round ends
+            case NodeShape::Hexagon:
+            case NodeShape::Parallelogram:
+            case NodeShape::ParallelogramAlt:
+            case NodeShape::Trapezoid:
+            case NodeShape::TrapezoidAlt: return ImVec2(w + h / 2.f, h);  // the slanted sides
+            case NodeShape::Asymmetric: return ImVec2(w + h / 4.f, h);  // the notch
+            default: return ImVec2(w, h);
+            }
+        }
+
+        // Subgraph boxes: the bounding box of the members, padded, with room for the title above them
+        void ComputeSubgraphBoxes(Graph& graph, float boxPad, float titleHeight)
+        {
+            for (size_t b = 0; b < graph.subgraphs.size(); ++b)
+            {
+                Subgraph& sub = graph.subgraphs[b];
+                sub.hasBox = false;
+                for (const Node& nd : graph.nodes)
+                {
+                    if (nd.subgraph != (int)b)
+                        continue;
+                    ImVec2 p0(nd.pos.x - boxPad, nd.pos.y - boxPad - titleHeight);
+                    ImVec2 p1(nd.pos.x + nd.size.x + boxPad, nd.pos.y + nd.size.y + boxPad);
+                    if (!sub.hasBox)
+                        sub.boxMin = p0, sub.boxMax = p1, sub.hasBox = true;
+                    sub.boxMin = ImVec2(std::min(sub.boxMin.x, p0.x), std::min(sub.boxMin.y, p0.y));
+                    sub.boxMax = ImVec2(std::max(sub.boxMax.x, p1.x), std::max(sub.boxMax.y, p1.y));
+                }
+            }
+        }
+
+        // BT and RL: the layout of TD and LR, mirrored along the main axis (the titles of the boxes stay on top)
+        void Mirror(Graph& graph, float boxPad, float titleHeight)
+        {
+            const bool vertical = graph.vertical;
+            const float extent = vertical ? graph.size.y : graph.size.x;
+            auto flip = [&](ImVec2 p) { return vertical ? ImVec2(p.x, extent - p.y) : ImVec2(extent - p.x, p.y); };
+            auto flipBox = [&](ImVec2& p0, ImVec2& p1) {
+                ImVec2 q0 = flip(p0), q1 = flip(p1);
+                p0 = ImVec2(std::min(q0.x, q1.x), std::min(q0.y, q1.y));
+                p1 = ImVec2(std::max(q0.x, q1.x), std::max(q0.y, q1.y));
+            };
+            for (Node& nd : graph.nodes)
+            {
+                ImVec2 p1(nd.pos.x + nd.size.x, nd.pos.y + nd.size.y);
+                flipBox(nd.pos, p1);
+            }
+            for (Edge& e : graph.edges)
+            {
+                for (ImVec2& p : e.points)
+                    p = flip(p);
+                if (!e.label.empty())
+                    flipBox(e.labelMin, e.labelMax);
+            }
+            ComputeSubgraphBoxes(graph, boxPad, titleHeight);
         }
 
         void LayoutGraph(Graph& graph, float em)
@@ -205,26 +375,10 @@ namespace RichMd::Mermaid
                 }
 
             // Sizes
-            const float pad = 0.8f * em, gapX = 1.5f * em, gapY = 2.5f * em;
+            const float gapX = 1.5f * em, gapY = 2.5f * em;
             const float lineHeight = ImGui::GetTextLineHeight();
             for (Node& node : graph.nodes)
-            {
-                if (!node.compartments.empty())  // a class: its widest line, a line of text per row, a padding per compartment
-                {
-                    float w = 0.f, h = 0.f;
-                    for (const auto& compartment : node.compartments)
-                    {
-                        for (const std::string& text : compartment)
-                            w = std::max(w, ImGui::CalcTextSize(text.c_str()).x);
-                        h += (float)compartment.size() * lineHeight + 0.6f * em;
-                    }
-                    node.size = ImVec2(w + 2.f * pad, h);
-                    continue;
-                }
-                ImVec2 text = ImGui::CalcTextSize(node.label.c_str());
-                float extra = (node.shape == NodeShape::Diamond || node.shape == NodeShape::Cylinder) ? text.y : 0.f;
-                node.size = ImVec2(text.x + 2.f * pad + (node.shape == NodeShape::Diamond ? extra : 0.f), text.y + 2.f * pad + extra);
-            }
+                node.size = NodeSize(node, em);
             const bool vertical = graph.vertical;
             auto cross = [&](const Node& nd) { return vertical ? nd.size.x : nd.size.y; };
             auto main = [&](const Node& nd) { return vertical ? nd.size.y : nd.size.x; };
@@ -275,8 +429,18 @@ namespace RichMd::Mermaid
                 }
             const float totalCross = std::max(x - gapX, 0.f);
 
+            // The gap after each layer: wide enough for the labels of the edges that cross it
+            std::map<int, float> gapAfter;
+            for (const Edge& e : graph.edges)
+                if (!e.label.empty() && !UsesLane(graph, e))
+                {
+                    ImVec2 ts = ImGui::CalcTextSize(e.label.c_str());
+                    float needed = (vertical ? ts.y : ts.x + 4.f) + 1.5f * em;
+                    gapAfter[graph.nodes[e.src].rank] = std::max(gapAfter[graph.nodes[e.src].rank], needed);
+                }
+
             // Positions: the layers along the main axis, the nodes centered in their band
-            float offsetMain = 0.f;
+            float offsetMain = 0.f, lastGap = 0.f;
             for (auto& [r, layer] : layers)
             {
                 float thickness = 0.f;
@@ -300,30 +464,14 @@ namespace RichMd::Mermaid
                         cursor += cross(nd) + gapX;
                     }
                 }
-                offsetMain += thickness + gapY;
+                lastGap = std::max(gapY, gapAfter[r]);
+                offsetMain += thickness + lastGap;
             }
-
-            // Subgraph boxes: the bounding box of the members, padded, with room for the title
-            for (size_t b = 0; b < graph.subgraphs.size(); ++b)
-            {
-                Subgraph& sub = graph.subgraphs[b];
-                sub.hasBox = false;
-                for (const Node& nd : graph.nodes)
-                {
-                    if (nd.subgraph != (int)b)
-                        continue;
-                    ImVec2 p0(nd.pos.x - boxPad, nd.pos.y - boxPad - titleHeight);
-                    ImVec2 p1(nd.pos.x + nd.size.x + boxPad, nd.pos.y + nd.size.y + boxPad);
-                    if (!sub.hasBox)
-                        sub.boxMin = p0, sub.boxMax = p1, sub.hasBox = true;
-                    sub.boxMin = ImVec2(std::min(sub.boxMin.x, p0.x), std::min(sub.boxMin.y, p0.y));
-                    sub.boxMax = ImVec2(std::max(sub.boxMax.x, p1.x), std::max(sub.boxMax.y, p1.y));
-                }
-            }
+            ComputeSubgraphBoxes(graph, boxPad, titleHeight);
 
             // Everything shifted along the main axis: room for the titles of the boxes above the first layer (TD),
             // and for the back edges that come back in front of the first layer
-            float shift = (!graph.subgraphs.empty() && vertical ? titleHeight + boxPad : 0.f) + (!graph.backEdges.empty() ? 1.5f * em : 0.f);
+            float shift = (!graph.subgraphs.empty() && vertical && !graph.reversed ? titleHeight + boxPad : 0.f) + (!graph.backEdges.empty() ? 1.5f * em : 0.f);
             ImVec2 delta = vertical ? ImVec2(0.f, shift) : ImVec2(shift, 0.f);
             for (Node& nd : graph.nodes)
                 nd.pos = ImVec2(nd.pos.x + delta.x, nd.pos.y + delta.y);
@@ -337,9 +485,74 @@ namespace RichMd::Mermaid
                 if (UsesLane(graph, e))
                     ++graph.lanes;
             const float lanes = 1.2f * em * (float)graph.lanes;  // room on the right (TD) or below (LR) for the lane edges
-            const float mainTotal = offsetMain - gapY + shift;
+            const float mainTotal = offsetMain - lastGap + shift;
             graph.size = vertical ? ImVec2(totalCross + lanes, mainTotal) : ImVec2(mainTotal, totalCross + lanes);
             RouteEdges(graph, em);
+            if (graph.reversed)
+                Mirror(graph, boxPad, titleHeight);
+        }
+
+        // The bounding box of what a graph draws
+        struct Extent
+        {
+            ImVec2 min = ImVec2(FLT_MAX, FLT_MAX), max = ImVec2(-FLT_MAX, -FLT_MAX);
+            void Add(ImVec2 p0, ImVec2 p1)
+            {
+                min = ImVec2(std::min(min.x, p0.x), std::min(min.y, p0.y));
+                max = ImVec2(std::max(max.x, p1.x), std::max(max.y, p1.y));
+            }
+        };
+
+        // The translation that brings an extent inside [-em, size.x + em] x [-em / 2, size.y + em / 2] (the space
+        // Draw reserves around the diagram), and the size that holds it
+        ImVec2 FitDelta(const Extent& extent, ImVec2* size, float em)
+        {
+            if (extent.min.x > extent.max.x)
+                return ImVec2(0.f, 0.f);
+            ImVec2 delta(std::max(0.f, -em - extent.min.x), std::max(0.f, -em / 2.f - extent.min.y));
+            size->x = std::max(size->x + delta.x, extent.max.x + delta.x - em);
+            size->y = std::max(size->y + delta.y, extent.max.y + delta.y - em / 2.f);
+            return delta;
+        }
+
+        void FitGraph(Graph& graph, std::vector<Relation>& relations, float em)
+        {
+            Extent extent;
+            for (const Node& nd : graph.nodes)
+                extent.Add(nd.pos, ImVec2(nd.pos.x + nd.size.x, nd.pos.y + nd.size.y));
+            for (const Subgraph& sub : graph.subgraphs)
+                if (sub.hasBox)
+                    extent.Add(sub.boxMin, sub.boxMax);
+            for (const Edge& e : graph.edges)
+            {
+                for (ImVec2 p : e.points)
+                    extent.Add(p, p);
+                if (!e.label.empty())
+                    extent.Add(e.labelMin, e.labelMax);
+            }
+            for (const Relation& r : relations)
+                for (const auto& [card, pos] : {std::make_pair(&r.cardinalitySrc, r.cardinalitySrcPos), std::make_pair(&r.cardinalityDst, r.cardinalityDstPos)})
+                    if (!card->empty())
+                    {
+                        ImVec2 ts = ImGui::CalcTextSize(card->c_str());
+                        extent.Add(pos, ImVec2(pos.x + ts.x, pos.y + ts.y));
+                    }
+            ImVec2 d = FitDelta(extent, &graph.size, em);
+            if (d.x == 0.f && d.y == 0.f)
+                return;
+            auto move = [&](ImVec2& p) { p = ImVec2(p.x + d.x, p.y + d.y); };
+            for (Node& nd : graph.nodes)
+                move(nd.pos);
+            for (Subgraph& sub : graph.subgraphs)
+                move(sub.boxMin), move(sub.boxMax);
+            for (Edge& e : graph.edges)
+            {
+                for (ImVec2& p : e.points)
+                    move(p);
+                move(e.labelMin), move(e.labelMax);
+            }
+            for (Relation& r : relations)
+                move(r.cardinalitySrcPos), move(r.cardinalityDstPos);
         }
 
         void LayoutSequence(Sequence& seq, float em)
@@ -397,6 +610,30 @@ namespace RichMd::Mermaid
                 loop.frameMin = ImVec2(-0.5f * em, seq.boxHeight + ((float)loop.first + 0.4f) * seq.rowHeight);
                 loop.frameMax = ImVec2(seq.totalWidth + 0.5f * em, seq.boxHeight + ((float)loop.last + 1.3f) * seq.rowHeight);
             }
+
+            // What overflows (a wide note, the text of a message to itself) widens the diagram
+            Extent extent;
+            for (int i = 0; i < n; ++i)
+                extent.Add(ImVec2(seq.xCenter[i] - seq.boxWidth[i] / 2.f, 0.f), ImVec2(seq.xCenter[i] + seq.boxWidth[i] / 2.f, seq.height));
+            for (const SequenceRow& r : seq.rows)
+            {
+                extent.Add(r.textMin, r.textMax);
+                if (r.isNote)
+                    extent.Add(r.boxMin, r.boxMax);
+            }
+            for (const SequenceLoop& loop : seq.loops)
+                extent.Add(loop.frameMin, loop.frameMax);
+            ImVec2 size(seq.totalWidth, seq.height);
+            ImVec2 d = FitDelta(extent, &size, em);
+            seq.totalWidth = size.x;
+            if (d.x == 0.f)
+                return;
+            for (float& xc : seq.xCenter)
+                xc += d.x;
+            for (SequenceRow& r : seq.rows)
+                r.textMin.x += d.x, r.textMax.x += d.x, r.boxMin.x += d.x, r.boxMax.x += d.x;
+            for (SequenceLoop& loop : seq.loops)
+                loop.frameMin.x += d.x, loop.frameMax.x += d.x;
         }
     }
 
@@ -406,9 +643,12 @@ namespace RichMd::Mermaid
         if (diagram.kind == DiagramKind::Sequence)
             LayoutSequence(diagram.sequence, em);
         else
+        {
             LayoutGraph(diagram.graph, em);
-        if (diagram.kind == DiagramKind::Class)
-            PlaceCardinalities(diagram.graph, diagram.relations, em);
+            if (diagram.kind == DiagramKind::Class)
+                PlaceCardinalities(diagram.graph, diagram.relations, em);
+            FitGraph(diagram.graph, diagram.relations, em);
+        }
         diagram.layoutFont = ImGui::GetFont();
         diagram.layoutFontSize = em;
     }

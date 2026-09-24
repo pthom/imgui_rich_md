@@ -1,0 +1,6 @@
+%% Right to left, with labels
+%% expect: nodes=3 edges=3
+flowchart RL
+    A[Input] -->|parse| B[Tree]
+    B -->|render| C[Output]
+    C -.->|feedback| A

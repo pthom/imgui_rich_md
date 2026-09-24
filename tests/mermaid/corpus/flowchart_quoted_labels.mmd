@@ -1,0 +1,6 @@
+%% Quoted labels (parentheses, colons), line breaks, an entity code
+%% expect: nodes=4 edges=3
+flowchart TD
+    A["f(x): the input (raw)"] --> B("g(y), rounded")
+    B --> C{"valid?"}
+    C -->|"yes (all)"| D[Two lines:<br>first, then second<br/>and a #quot;third#quot;]
