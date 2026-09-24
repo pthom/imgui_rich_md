@@ -196,8 +196,9 @@ namespace RichMd::Mermaid
         }
 
         // Tracks: in a channel, the segments across of two edges that overlap run on their own lines, unless the two
-        // edges leave the same node or enter the same node (a fan stays a tree). Returns the tracks of each channel.
-        std::map<int, int> AssignTracks(Graph& graph, float em)
+        // edges leave the same node or enter the same node (a fan stays a tree). Returns the room the tracks of each
+        // channel take (from the first to the last): 0.45 em between two tracks, a line of text when a label sits on one.
+        std::map<int, float> AssignTracks(Graph& graph, float em)
         {
             std::vector<std::pair<float, float>> anchors = Anchors(graph);
             auto crossPos = [&](const Node& nd, float t) { return graph.vertical ? nd.pos.x + nd.size.x * t : nd.pos.y + nd.size.y * t; };
@@ -213,20 +214,39 @@ namespace RichMd::Mermaid
                 if (std::fabs(x0 - x1) >= 1.f)
                     segments[graph.nodes[e.src].rank].push_back({(int)i, std::min(x0, x1), std::max(x0, x1), x0, x1});
             }
-            std::map<int, int> trackCount;
+            std::map<int, float> trackRoom;
             for (auto& channel : segments)
             {
                 const int r = channel.first;
                 std::vector<Segment>& list = channel.second;
                 std::stable_sort(list.begin(), list.end(), [](const Segment& a, const Segment& b) { return a.lo < b.lo; });
-                // An edge that leaves its source at the x where another one enters its target runs above it: its descent
-                // ends before the other's begins. The edges are placed after those that must run above them.
-                auto above = [&](size_t a, size_t b) {
-                    const Edge& ea = graph.edges[list[a].edge];
-                    const Edge& eb = graph.edges[list[b].edge];
-                    return a != b && ea.src != eb.src && ea.dst != eb.dst && std::fabs(list[a].x0 - list[b].x1) < 0.4f * em;
+                // Two segments conflict when they overlap, unless their edges form a fan (they leave, or enter, the same
+                // node) and no label sits where they meet
+                auto onLabel = [&](const Segment& g, const Segment& other) {  // other's segment where g's label sits
+                    const std::string& label = graph.edges[g.edge].label;
+                    if (label.empty())
+                        return false;
+                    float half = ImGui::CalcTextSize(label.c_str()).x / 2.f + 0.3f * em, mid = (g.lo + g.hi) / 2.f;
+                    return mid - half < other.hi && other.lo < mid + half;
                 };
-                std::vector<std::vector<Segment>> tracks;
+                auto conflict = [&](size_t a, size_t b) {
+                    const Segment &sa = list[a], &sb = list[b];
+                    const Edge &ea = graph.edges[sa.edge], &eb = graph.edges[sb.edge];
+                    bool overlap = sa.lo < sb.hi + 0.3f * em && sb.lo < sa.hi + 0.3f * em;
+                    return a != b && overlap && ((ea.src != eb.src && ea.dst != eb.dst) || onLabel(sa, sb) || onLabel(sb, sa));
+                };
+                // Of two conflicting segments, the one that runs above: the order where fewer of their vertical parts cross
+                // the other's segment (the descent into the target of the one above, the rise from the source of the one
+                // below). The segments are placed after those that must run above them.
+                auto within = [&](float x, const Segment& g) { return x > g.lo - 0.2f * em && x < g.hi + 0.2f * em; };
+                auto above = [&](size_t a, size_t b) {
+                    if (!conflict(a, b))
+                        return false;
+                    int aAbove = (within(list[a].x1, list[b]) ? 1 : 0) + (within(list[b].x0, list[a]) ? 1 : 0);
+                    int bAbove = (within(list[b].x1, list[a]) ? 1 : 0) + (within(list[a].x0, list[b]) ? 1 : 0);
+                    return aAbove < bAbove;
+                };
+                std::vector<std::vector<size_t>> tracks;  // the segments on each track
                 std::vector<int> trackOf(list.size(), -1);
                 for (size_t placed = 0; placed < list.size(); ++placed)
                 {
@@ -244,13 +264,7 @@ namespace RichMd::Mermaid
                     for (size_t c = 0; c < list.size() && k == list.size(); ++c)  // a cycle: the first one left
                         if (trackOf[c] < 0)
                             k = c;
-                    const Segment& seg = list[k];
-                    const Edge& e = graph.edges[seg.edge];
-                    auto conflicts = [&](const Segment& other) {
-                        const Edge& f = graph.edges[other.edge];
-                        bool overlap = seg.lo < other.hi + 0.3f * em && other.lo < seg.hi + 0.3f * em;
-                        return overlap && e.src != f.src && e.dst != f.dst;
-                    };
+                    auto conflicts = [&](size_t other) { return conflict(k, other); };
                     size_t t = 0;
                     for (size_t o = 0; o < list.size(); ++o)
                         if (trackOf[o] >= 0 && above(o, k))
@@ -259,15 +273,19 @@ namespace RichMd::Mermaid
                         ++t;
                     while (t >= tracks.size())
                         tracks.emplace_back();
-                    tracks[t].push_back(seg);
+                    tracks[t].push_back(k);
                     trackOf[k] = (int)t;
                 }
                 int count = (int)tracks.size();
+                bool labels = false;
+                for (const Segment& seg : list)
+                    labels = labels || !graph.edges[seg.edge].label.empty();
+                const float spacing = labels && count > 1 ? ImGui::GetTextLineHeight() + 0.3f * em : 0.45f * em;
                 for (size_t k = 0; k < list.size(); ++k)
-                    graph.edges[list[k].edge].track = ((float)trackOf[k] - (float)(count - 1) / 2.f) * 0.45f * em;
-                trackCount[r] = count;
+                    graph.edges[list[k].edge].track = ((float)trackOf[k] - (float)(count - 1) / 2.f) * spacing;
+                trackRoom[r] = (float)(count - 1) * spacing;
             }
-            return trackCount;
+            return trackRoom;
         }
 
         // The polylines, and the labels on the middle segment when there is one, else at the middle of the edge
@@ -454,10 +472,27 @@ namespace RichMd::Mermaid
                 }
                 return rank[v];
             };
+            for (int v = 0; v < n; ++v)
+                rankOf(v);
+            std::vector<std::vector<int>> forwardSuccs(n);
+            for (int v = 0; v < n; ++v)
+                for (int p : forwardPreds[v])
+                    forwardSuccs[p].push_back(v);
+            // A node without predecessor goes just above its highest successor rather than to the first layer: a
+            // note stays next to its class, a node linked only to a deep one does not need a lane
+            for (int v = 0; v < n; ++v)
+            {
+                if (!forwardPreds[v].empty() || forwardSuccs[v].empty())
+                    continue;
+                int highest = INT_MAX;
+                for (int w : forwardSuccs[v])
+                    highest = std::min(highest, rank[w]);
+                rank[v] = std::max(rank[v], highest - 1);
+            }
             std::map<int, std::vector<int>> layers;
             for (int v = 0; v < n; ++v)
             {
-                graph.nodes[v].rank = rankOf(v);
+                graph.nodes[v].rank = rank[v];
                 layers[graph.nodes[v].rank].push_back(v);
             }
             for (auto& [r, layer] : layers)
@@ -466,10 +501,6 @@ namespace RichMd::Mermaid
 
             // Ordering: barycenter sweeps, downward (a node goes to the mean position of its predecessors) and upward
             // (of its successors), keeping the ordering with the fewest crossings between neighbouring layers
-            std::vector<std::vector<int>> forwardSuccs(n);
-            for (int v = 0; v < n; ++v)
-                for (int p : forwardPreds[v])
-                    forwardSuccs[p].push_back(v);
             auto crossings = [&]() {
                 int count = 0;
                 for (int v = 0; v < n; ++v)
@@ -704,7 +735,7 @@ namespace RichMd::Mermaid
                 e.exitTrack = exitCount[graph.nodes[e.src].rank]++;
                 e.entryTrack = entryCount[graph.nodes[e.dst].rank]++;
             }
-            std::map<int, int> trackCount = AssignTracks(graph, em);
+            std::map<int, float> trackRoom = AssignTracks(graph, em);
             const float step = 0.45f * em;
             auto extraLines = [&](std::map<int, int>& count, int r) { return (float)std::max(count[r] - 1, 0) * step; };
 
@@ -717,7 +748,7 @@ namespace RichMd::Mermaid
             {
                 if (previous >= 0)
                 {
-                    float tracks = (float)(std::max(trackCount[previous], 1) - 1) * step + 1.2f * em;
+                    float tracks = trackRoom[previous] + 1.2f * em;
                     float free = std::max({1.5f * em, gapAfter[previous], tracks});
                     float exits = extraLines(exitCount, previous), entries = extraLines(entryCount, r);  // lane approach lines
                     float gap = std::max({gapY, gapAfter[previous], tracks, after[previous] + before[r] + free}) + exits + entries;
