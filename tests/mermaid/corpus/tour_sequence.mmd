@@ -1,0 +1,8 @@
+%% The tour's sequence diagram (examples/tour)
+%% expect: participants=2 messages=3
+sequenceDiagram
+    participant App
+    participant MD as imgui_rich_md
+    App->>+MD: Render(markdown)
+    MD->>MD: parse, lay out
+    MD-->>-App: drawn

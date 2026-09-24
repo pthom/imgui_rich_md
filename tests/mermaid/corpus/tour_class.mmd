@@ -1,0 +1,17 @@
+%% The tour's class diagram (examples/tour)
+%% expect: nodes=3 edges=2
+classDiagram
+    class Diagram {
+        +kind
+        +error
+    }
+    class Graph {
+        +nodes
+        +edges
+    }
+    class Sequence {
+        +participants
+        +rows
+    }
+    Diagram *-- Graph
+    Diagram *-- Sequence

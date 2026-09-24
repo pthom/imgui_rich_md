@@ -445,6 +445,61 @@ Alice,10
 </details>
 </details>
 <details>
+<summary>Mermaid diagrams</summary>
+
+` ```mermaid ` blocks are drawn natively, with `ImDrawList` and the colors of the ImGui style (no web
+view, no JavaScript): flowcharts, sequence diagrams and class diagrams. A diagram that cannot be parsed
+shows as code, with the line of the error. `RichMd::RenderMermaid(source)` draws one outside of markdown.
+
+```mermaid
+flowchart LR
+    A[Markdown] --> B{Mermaid block?}
+    B -->|yes| C([Parse]) --> D[Layout] --> E[(ImDrawList)]
+    B -->|no| F[Code block]
+```
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant MD as imgui_rich_md
+    App->>+MD: Render(markdown)
+    MD->>MD: parse, lay out
+    MD-->>-App: drawn
+```
+
+```mermaid
+classDiagram
+    class Diagram {
+        +kind
+        +error
+    }
+    class Graph {
+        +nodes
+        +edges
+    }
+    class Sequence {
+        +participants
+        +rows
+    }
+    Diagram *-- Graph
+    Diagram *-- Sequence
+```
+
+<details>
+<summary>Show source</summary>
+
+<pre>
+```mermaid
+flowchart LR
+    A[Markdown] --> B{Mermaid block?}
+    B -->|yes| C([Parse]) --> D[Layout] --> E[(ImDrawList)]
+    B -->|no| F[Code block]
+```
+</pre>
+
+</details>
+</details>
+<details>
 <summary>Wikilinks and hard line breaks (options)</summary>
 
 Two features are enabled through `MarkdownOptions`, i.e. before the first render:

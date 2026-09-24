@@ -1,0 +1,6 @@
+%% The tour's flowchart (examples/tour)
+%% expect: nodes=6 edges=5
+flowchart LR
+    A[Markdown] --> B{Mermaid block?}
+    B -->|yes| C([Parse]) --> D[Layout] --> E[(ImDrawList)]
+    B -->|no| F[Code block]
