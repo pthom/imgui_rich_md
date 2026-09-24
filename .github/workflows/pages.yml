@@ -1,0 +1,54 @@
+# The examples on the web: built with Emscripten, deployed to GitHub Pages (https://pthom.github.io/imgui_rich_md/)
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 5.0.4
+
+      - name: Build the examples (every option: code editor, LaTeX, URL images)
+        run: |
+          emcmake cmake -S examples -B build -DCMAKE_BUILD_TYPE=Release \
+            -DIMGUI_RICHMD_WITH_CODE_EDITOR=ON -DIMGUI_RICHMD_WITH_LATEX=ON -DIMGUI_RICHMD_WITH_DOWNLOAD_IMAGES=ON
+          cmake --build build -j 4
+
+      - name: Assemble the site
+        run: |
+          mkdir site
+          cp build/*.html build/*.js build/*.wasm build/*.data site/
+          ls -la site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

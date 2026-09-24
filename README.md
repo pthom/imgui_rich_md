@@ -5,7 +5,8 @@ collapsible sections, and *sections and imports* (a source file can carry its ow
 Dear ImGui 1.92+, with optional backends for syntax-highlighted code (ImGuiColorTextEdit) and LaTeX (MicroTeX).
 
 Extracted from [Dear ImGui Bundle](https://github.com/pthom/imgui_bundle), where it powers the markdown of the demos
-and of the Python playground. The library is being set up here. The examples build against stock Dear ImGui:
+and of the Python playground. The library is being set up here. The examples build against stock Dear ImGui, and
+run in your browser: [pthom.github.io/imgui_rich_md](https://pthom.github.io/imgui_rich_md/).
 - `examples/minimal`: the smallest setup
 - `examples/tour`: every feature, with its markdown source
 - `examples/editor`: a live markdown editor

@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- The home page of the examples on GitHub Pages (see .github/workflows/pages.yml) -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>imgui_rich_md examples</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --link: #0969da; --card: #f6f8fa; --border: #d1d9e0; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --link: #4493f8; --card: #151b23; --border: #3d444d; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; line-height: 1.5; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+    h1 { margin: 0 0 4px; font-size: 28px; }
+    p { color: var(--muted); margin: 0 0 24px; }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+    li { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+    li a.demo { font-weight: 600; font-size: 17px; }
+    li span { display: block; color: var(--muted); font-size: 14px; }
+    li a.source { font-size: 13px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>imgui_rich_md</h1>
+  <p>Rich Markdown for Dear ImGui: headings, tables, code blocks, images, LaTeX, and more.
+    These examples run in your browser (WebAssembly). Source: <a href="https://github.com/pthom/imgui_rich_md">github.com/pthom/imgui_rich_md</a></p>
+  <ul>
+    <li><a class="demo" href="tour.html">Tour</a>
+      <span>Every feature of the library, each with its markdown source.</span>
+      <a class="source" href="https://github.com/pthom/imgui_rich_md/blob/main/examples/tour/main.cpp">source</a></li>
+    <li><a class="demo" href="editor.html">Editor</a>
+      <span>A markdown editor: the source on the left, rendered as you type on the right.</span>
+      <a class="source" href="https://github.com/pthom/imgui_rich_md/blob/main/examples/editor/main.cpp">source</a></li>
+    <li><a class="demo" href="minimal.html">Minimal</a>
+      <span>The smallest setup, with stock Dear ImGui: where the library's calls go in your own loop.</span>
+      <a class="source" href="https://github.com/pthom/imgui_rich_md/blob/main/examples/minimal/main.cpp">source</a></li>
+    <li><a class="demo" href="custom_host.html">Custom host</a>
+      <span>The library on an application's own textures, assets and log.</span>
+      <a class="source" href="https://github.com/pthom/imgui_rich_md/blob/main/examples/custom_host/main.cpp">source</a></li>
+    <li><a class="demo" href="fonts.html">Fonts</a>
+      <span>CJK, emoji and icon fonts merged into every markdown font (this page loads about 7 MB of fonts).</span>
+      <a class="source" href="https://github.com/pthom/imgui_rich_md/blob/main/examples/fonts/main.cpp">source</a></li>
+  </ul>
+</main>
+</body>
+</html>

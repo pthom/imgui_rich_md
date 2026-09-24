@@ -8,7 +8,10 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_rich_md/rich_md.h"
-#ifdef __APPLE__
+#if defined(__EMSCRIPTEN__)
+#include <GLES2/gl2.h>                 // WebGL, through the OpenGL ES 2 API
+#include "emscripten_mainloop_stub.h"  // from Dear ImGui's examples/libs/emscripten
+#elif defined(__APPLE__)
 #define GL_SILENCE_DEPRECATION
 #include <OpenGL/gl3.h>
 #else
@@ -68,11 +71,19 @@ int main(int, char**)
 {
     if (!glfwInit())
         return 1;
+#if defined(__EMSCRIPTEN__)
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);  // WebGL
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    const char* glslVersion = "#version 100";
+#else
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#endif
+    const char* glslVersion = "#version 150";
 #endif
     // High DPI: the window, the paddings and the fonts follow the monitor's scale (1 on macOS and the web, where
     // the framebuffer scale does it)
@@ -86,7 +97,10 @@ int main(int, char**)
     ImGui::GetStyle().ScaleAllSizes(mainScale);
     ImGui::GetStyle().FontScaleDpi = mainScale;
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 150");
+#ifdef __EMSCRIPTEN__
+    ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
+#endif
+    ImGui_ImplOpenGL3_Init(glslVersion);
 
     RichMd::MarkdownOptions options;
 #ifdef IMGUI_RICHMD_WITH_LATEX
@@ -96,7 +110,11 @@ int main(int, char**)
 
     const char* shot = std::getenv("IMGUI_RICHMD_SHOT");
     int frame = 0;
+#ifdef __EMSCRIPTEN__
+    EMSCRIPTEN_MAINLOOP_BEGIN  // the browser calls the loop's body at each frame
+#else
     while (!glfwWindowShouldClose(window))
+#endif
     {
         glfwPollEvents();
         ImGui_ImplOpenGL3_NewFrame();
@@ -124,6 +142,9 @@ int main(int, char**)
         }
         glfwSwapBuffers(window);
     }
+#ifdef __EMSCRIPTEN__
+    EMSCRIPTEN_MAINLOOP_END;
+#endif
 
     RichMd::DeInitializeMarkdown();  // frees the markdown textures while the backend is alive
     ImGui_ImplOpenGL3_Shutdown();

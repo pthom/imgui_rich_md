@@ -1,11 +1,22 @@
 # The examples: stock Dear ImGui (fetched, v1.92.9) + GLFW + OpenGL3, no other framework, the assets embedded.
 #   cmake -S examples -B build && cmake --build build   (or IMGUI_RICHMD_BUILD_EXAMPLES=ON at the root)
+#   For the web: emcmake cmake -S examples -B build_web && cmake --build build_web   (one .html page per example)
 cmake_minimum_required(VERSION 3.20)
 project(imgui_rich_md_examples CXX C)
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(OpenGL REQUIRED)
-find_package(glfw3 QUIET)
+if(EMSCRIPTEN)
+    # GLFW is Emscripten's contrib.glfw3 port, OpenGL is WebGL (no library to link)
+    add_library(glfw INTERFACE)
+    target_compile_options(glfw INTERFACE --use-port=contrib.glfw3)
+    target_link_options(glfw INTERFACE --use-port=contrib.glfw3)
+    add_library(OpenGL::GL INTERFACE IMPORTED)
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
+    configure_file(${CMAKE_CURRENT_LIST_DIR}/web/index.html ${CMAKE_CURRENT_BINARY_DIR}/index.html COPYONLY)  # the site's home
+else()
+    find_package(OpenGL REQUIRED)
+    find_package(glfw3 QUIET)
+endif()
 if(NOT TARGET glfw)  # no system GLFW (e.g. Windows): fetched
     include(FetchContent)
     set(GLFW_BUILD_DOCS OFF)
@@ -23,9 +34,19 @@ if(NOT TARGET imgui)
         ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
         ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
         ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp)  # InputText with std::string (editor)
-    target_include_directories(imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends ${IMGUI_DIR}/misc/cpp)
+    target_include_directories(imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends ${IMGUI_DIR}/misc/cpp
+        ${IMGUI_DIR}/examples/libs/emscripten)  # emscripten_mainloop_stub.h
     target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32)  # characters above U+FFFF, e.g. most emoji (fonts)
     target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
+endif()
+if(EMSCRIPTEN AND IMGUI_RICHMD_WITH_LATEX AND NOT TARGET freetype)
+    # LaTeX needs FreeType: built from its sources, since the library compiles it with its wasm exceptions
+    include(FetchContent)
+    foreach(_ft_dep ZLIB BZIP2 PNG HARFBUZZ BROTLI)
+        set(FT_DISABLE_${_ft_dep} ON CACHE BOOL "" FORCE)
+    endforeach()
+    FetchContent_Declare(freetype GIT_REPOSITORY https://github.com/freetype/freetype.git GIT_TAG VER-2-13-3 GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(freetype)
 endif()
 if(NOT TARGET imgui_rich_md)
     set(IMGUI_RICHMD_EMBED_ASSETS ON)
@@ -65,8 +86,19 @@ foreach(example ${_examples})
     target_include_directories(imgui_rich_md_${example} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
     target_compile_options(imgui_rich_md_${example} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)  # UTF-8 sources
     target_link_libraries(imgui_rich_md_${example} PRIVATE imgui_rich_md glfw OpenGL::GL)
+    if(EMSCRIPTEN)  # a page per example: <example>.html (+ .js, .wasm)
+        set_target_properties(imgui_rich_md_${example} PROPERTIES OUTPUT_NAME ${example}
+            LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/web/shell.html)
+        target_link_options(imgui_rich_md_${example} PRIVATE -sALLOW_MEMORY_GROWTH=1
+            --shell-file ${CMAKE_CURRENT_LIST_DIR}/web/shell.html)
+    endif()
 endforeach()
 if(_fonts_ok)
     target_include_directories(imgui_rich_md_fonts PRIVATE ${_fonts_dir}/include)
-    target_compile_definitions(imgui_rich_md_fonts PRIVATE FONTS_EXAMPLE_ASSETS="${_fonts_dir}")
+    if(EMSCRIPTEN)  # the fonts are packaged with the page (fonts.data), in the browser's virtual file system
+        target_link_options(imgui_rich_md_fonts PRIVATE "SHELL:--preload-file ${_fonts_dir}/fonts@/fonts_example/fonts")
+        target_compile_definitions(imgui_rich_md_fonts PRIVATE FONTS_EXAMPLE_ASSETS="/fonts_example")
+    else()
+        target_compile_definitions(imgui_rich_md_fonts PRIVATE FONTS_EXAMPLE_ASSETS="${_fonts_dir}")
+    endif()
 endif()

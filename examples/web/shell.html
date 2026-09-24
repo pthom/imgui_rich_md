@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- The page of an example on the web (Emscripten --shell-file), adapted from Dear ImGui's shell_minimal.html -->
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"/>
+    <title>imgui_rich_md</title>  <!-- replaced by the GLFW window's title -->
+    <link rel="icon" href="data:,">
+    <style>
+        body { margin: 0; background-color: #1a1a1e; overflow: hidden; font-family: system-ui, sans-serif; }
+        .emscripten { position: absolute; top: 0; left: 0; margin: 0; border: 0; width: 100%; height: 100%;
+                      overflow: hidden; display: block; }
+        #canvas:focus { outline: none; }
+        #loading { position: absolute; top: 45%; width: 100%; text-align: center; color: #aaa; font-size: 18px; }
+        #back { position: absolute; right: 12px; bottom: 8px; color: #8ab4f8; font-size: 13px; text-decoration: none;
+                opacity: 0.7; }
+        #back:hover { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+    <div id="loading">Loading…</div>
+    <a id="back" href="index.html">imgui_rich_md examples</a>
+    <script type='text/javascript'>
+      var Module = {
+        preRun: [],
+        postRun: [],
+        print: function() { console.log(Array.prototype.slice.call(arguments).join(' ')); },
+        printErr: function() { console.error(Array.prototype.slice.call(arguments).join(' ')); },
+        canvas: document.getElementById('canvas'),
+        setStatus: function(text) { if (text) console.log("status: " + text); },
+        onRuntimeInitialized: function() { document.getElementById('loading').style.display = 'none'; },
+        monitorRunDependencies: function(left) {}
+      };
+      window.onerror = function(event) { console.log("onerror: " + event); };
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>
