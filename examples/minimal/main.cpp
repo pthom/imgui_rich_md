@@ -1,6 +1,9 @@
 // Markdown with stock Dear ImGui (GLFW + OpenGL3), no HelloImGui: fonts and images come from the
 // embedded assets, textures go through Dear ImGui's ImTextureData (the default UploadRgba).
 // IMGUI_RICHMD_SHOT=<file.ppm> in the environment: writes a screenshot after 30 frames and exits.
+// The whole setup is written out on purpose (the other examples share it, in common/app_glfw_gl3.h): it shows
+// where the library's calls go in an application's own loop. InitializeMarkdown() after the backends,
+// Render() inside a window, DeInitializeMarkdown() before the backends shut down.
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
