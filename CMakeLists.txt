@@ -17,13 +17,16 @@ option(IMGUI_RICHMD_WITH_CODE_EDITOR "Code blocks with syntax highlighting (ImGu
 option(IMGUI_RICHMD_WITH_LATEX "LaTeX formulas (MicroTeX, needs FreeType)" OFF)
 option(IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES "Images from URLs (libcurl on desktop, fetch on Emscripten)" OFF)
 option(IMGUI_RICHMD_EMBED_ASSETS "Embed the fonts and images in the library (no assets folder needed)" ${_richmd_standalone})
+option(IMGUI_RICHMD_BUILD_EXAMPLES "Build the examples" ${_richmd_standalone})
 if(NOT DEFINED IMGUI_RICHMD_EMBED_EXTRA_FILES)  # a parent's normal variable must not be shadowed (CMP0126)
-    set(IMGUI_RICHMD_EMBED_EXTRA_FILES "" CACHE STRING "Extra files to embed with the assets (paths relative to assets/, semicolon separated)")
+    if(IMGUI_RICHMD_BUILD_EXAMPLES)
+        set(_richmd_extra_files images/world.png)  # the image of the examples
+    endif()
+    set(IMGUI_RICHMD_EMBED_EXTRA_FILES "${_richmd_extra_files}" CACHE STRING "Extra files to embed with the assets (paths relative to assets/, semicolon separated)")
 endif()
 option(IMGUI_RICHMD_STB_IMAGE_IMPLEMENTATION "Compile stb_image here (OFF when the parent provides it)" ${_richmd_standalone})
 option(IMGUI_RICHMD_EMSCRIPTEN_FETCH "Emscripten: link -sFETCH for URL images (not for Pyodide side modules)" ON)
 option(IMGUI_RICHMD_WASM_EXCEPTIONS "Emscripten: wasm exceptions on the LaTeX targets, so that an invalid formula does not abort the page" ON)
-option(IMGUI_RICHMD_BUILD_EXAMPLES "Build the examples" ${_richmd_standalone})
 # Where the optional dependencies are (a parent sets the variables before add_subdirectory, or the user sets
 # them on the command line); fetched from the pthom forks otherwise
 if(NOT DEFINED IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR)
@@ -183,5 +186,5 @@ if(_richmd_standalone OR IMGUI_RICHMD_INSTALL)
 endif()
 
 if(IMGUI_RICHMD_BUILD_EXAMPLES)
-    add_subdirectory(examples/minimal)
+    add_subdirectory(examples)
 endif()

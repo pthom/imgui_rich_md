@@ -31,7 +31,7 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install glfw freetype curl
 
-      - name: Configure (the minimal example builds the library)
+      - name: Configure (the examples build the library)
         shell: bash
         run: |
           if [ "${{ matrix.options }}" = "full" ]; then
@@ -39,6 +39,6 @@ jobs:
           else
             OPTS="-DIMGUI_RICHMD_WITH_CODE_EDITOR=OFF -DIMGUI_RICHMD_WITH_LATEX=OFF -DIMGUI_RICHMD_WITH_DOWNLOAD_IMAGES=OFF"
           fi
-          cmake -S examples/minimal -B build -DCMAKE_BUILD_TYPE=Release $OPTS
+          cmake -S examples -B build -DCMAKE_BUILD_TYPE=Release $OPTS
       - name: Build
         run: cmake --build build --config Release -j 4

@@ -1,7 +1,7 @@
-# Markdown with stock Dear ImGui (fetched, v1.92.9) + GLFW + OpenGL3, no HelloImGui, the assets embedded.
-#   cmake -S examples/minimal -B build && cmake --build build   (or IMGUI_RICHMD_BUILD_EXAMPLES=ON at the root)
+# The examples: stock Dear ImGui (fetched, v1.92.9) + GLFW + OpenGL3, no other framework, the assets embedded.
+#   cmake -S examples -B build && cmake --build build   (or IMGUI_RICHMD_BUILD_EXAMPLES=ON at the root)
 cmake_minimum_required(VERSION 3.20)
-project(imgui_rich_md_minimal CXX C)
+project(imgui_rich_md_examples CXX C)
 set(CMAKE_CXX_STANDARD 17)
 
 find_package(OpenGL REQUIRED)
@@ -29,8 +29,12 @@ if(NOT TARGET imgui_rich_md)
     set(IMGUI_RICHMD_EMBED_ASSETS ON)
     set(IMGUI_RICHMD_STB_IMAGE_IMPLEMENTATION ON)
     set(IMGUI_RICHMD_EMBED_EXTRA_FILES images/world.png)
-    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../.. imgui_rich_md_build)
+    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/.. imgui_rich_md_build)
 endif()
 
-add_executable(imgui_rich_md_minimal main.cpp)
-target_link_libraries(imgui_rich_md_minimal PRIVATE imgui_rich_md glfw OpenGL::GL)
+# One folder per example, with its main.cpp; common/ holds the window shared by the examples
+foreach(example minimal tour)
+    add_executable(imgui_rich_md_${example} ${CMAKE_CURRENT_LIST_DIR}/${example}/main.cpp)
+    target_include_directories(imgui_rich_md_${example} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+    target_link_libraries(imgui_rich_md_${example} PRIVATE imgui_rich_md glfw OpenGL::GL)
+endforeach()
