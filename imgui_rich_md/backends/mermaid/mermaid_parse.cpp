@@ -403,7 +403,10 @@ namespace RichMd::Mermaid
                 }
                 if (word == "loop")
                 {
-                    openLoops.push_back(SequenceLoop{std::string(AfterFirstWord(line.text)), (int)seq.rows.size()});
+                    SequenceLoop loop;
+                    loop.label = std::string(AfterFirstWord(line.text));
+                    loop.first = (int)seq.rows.size();
+                    openLoops.push_back(loop);
                     continue;
                 }
                 if (line.text == "end")
@@ -524,12 +527,12 @@ namespace RichMd::Mermaid
             relation.markerSrc = found->src;
             relation.markerDst = found->dst;
             relation.dashed = found->dashed;
-            relation.label = label;
             relation.cardinalitySrc = cardSrc;
             relation.cardinalityDst = cardDst;
             Edge edge;
             edge.src = AddClass(d, src, ns);
             edge.dst = AddClass(d, dst, ns);
+            edge.label = label;
             edge.arrow = false;
             edge.style = found->dashed ? LineStyle::Dotted : LineStyle::Solid;
             d.graph.edges.push_back(edge);

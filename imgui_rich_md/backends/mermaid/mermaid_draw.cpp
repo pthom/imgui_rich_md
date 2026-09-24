@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <map>
 
 namespace RichMd::Mermaid
 {
@@ -68,83 +67,19 @@ namespace RichMd::Mermaid
                 Segment(dl, pts[i], pts[i + 1], col, style, em);
         }
 
-        // For each edge: where it leaves its source and enters its target, as fractions of the node's side, spread
-        // so that the edges of a node do not share a point (ordered by the position of their other end)
-        std::vector<std::pair<float, float>> Anchors(const Graph& graph, bool vertical)
+        // The label's box, then its text
+        void EdgeLabel(ImDrawList* dl, const Edge& e, ImVec2 origin, ImU32 textCol, ImU32 bg)
         {
-            auto cross = [&](int v) { return vertical ? graph.nodes[v].pos.x : graph.nodes[v].pos.y; };
-            std::map<int, std::vector<int>> out, in;
-            for (size_t i = 0; i < graph.edges.size(); ++i)
-            {
-                out[graph.edges[i].src].push_back((int)i);
-                in[graph.edges[i].dst].push_back((int)i);
-            }
-            std::vector<std::pair<float, float>> result(graph.edges.size(), {0.5f, 0.5f});
-            for (auto& [v, edges] : out)
-            {
-                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(graph.edges[a].dst) < cross(graph.edges[b].dst); });
-                for (size_t k = 0; k < edges.size(); ++k)
-                    result[edges[k]].first = (float)(k + 1) / (float)(edges.size() + 1);
-            }
-            for (auto& [v, edges] : in)
-            {
-                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(graph.edges[a].src) < cross(graph.edges[b].src); });
-                for (size_t k = 0; k < edges.size(); ++k)
-                    result[edges[k]].second = (float)(k + 1) / (float)(edges.size() + 1);
-            }
+            dl->AddRectFilled(Add(origin, e.labelMin), Add(origin, e.labelMax), bg);
+            dl->AddText(ImVec2(origin.x + e.labelMin.x + 2.f, origin.y + e.labelMin.y), textCol, e.label.c_str());
+        }
+
+        std::vector<ImVec2> Translated(const std::vector<ImVec2>& points, ImVec2 origin)
+        {
+            std::vector<ImVec2> result;
+            for (ImVec2 p : points)
+                result.push_back(Add(origin, p));
             return result;
-        }
-
-        // The elbow polyline of an edge: a forward edge crosses the middle of the gap between the layers; a lane edge
-        // (back edge, edge skipping a layer) leaves its source in the flow direction, goes into the gap after its
-        // layer, along a lane past the graph, back through the gap before the target's layer, and into the target
-        std::vector<ImVec2> EdgePoints(const Graph& graph, const Edge& e, ImVec2 origin, bool vertical, int lane, float em,
-                                       std::pair<float, float> anchor)
-        {
-            const Node& a = graph.nodes[e.src];
-            const Node& b = graph.nodes[e.dst];
-            ImVec2 a0 = Add(origin, a.pos), a1 = Add(a0, a.size);
-            ImVec2 b0 = Add(origin, b.pos);
-            ImVec2 pa, pb;
-            if (vertical)
-                pa = ImVec2(a0.x + a.size.x * anchor.first, a1.y), pb = ImVec2(b0.x + b.size.x * anchor.second, b0.y);
-            else
-                pa = ImVec2(a1.x, a0.y + a.size.y * anchor.first), pb = ImVec2(b0.x, b0.y + b.size.y * anchor.second);
-            if (UsesLane(graph, e))
-            {
-                const float halfGap = 0.7f * em;  // not the middle of the gap, where the forward edges run
-                if (vertical)
-                {
-                    float lx = origin.x + graph.size.x - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)lane;
-                    return {pa, ImVec2(pa.x, pa.y + halfGap), ImVec2(lx, pa.y + halfGap),
-                            ImVec2(lx, pb.y - halfGap), ImVec2(pb.x, pb.y - halfGap), pb};
-                }
-                float ly = origin.y + graph.size.y - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)lane;
-                return {pa, ImVec2(pa.x + halfGap, pa.y), ImVec2(pa.x + halfGap, ly),
-                        ImVec2(pb.x - halfGap, ly), ImVec2(pb.x - halfGap, pb.y), pb};
-            }
-            if (vertical)
-            {
-                float midY = (a1.y + b0.y) / 2.f;
-                if (std::fabs(pa.x - pb.x) < 1.f)
-                    return {pa, pb};
-                return {pa, ImVec2(pa.x, midY), ImVec2(pb.x, midY), pb};
-            }
-            float midX = (a1.x + b0.x) / 2.f;
-            if (std::fabs(pa.y - pb.y) < 1.f)
-                return {pa, pb};
-            return {pa, ImVec2(midX, pa.y), ImVec2(midX, pb.y), pb};
-        }
-
-        // On the middle segment when there is one, else at the middle of the edge
-        void EdgeLabel(ImDrawList* dl, const std::vector<ImVec2>& pts, const std::string& label, ImU32 textCol, ImU32 bg)
-        {
-            size_t k = pts.size() > 2 ? pts.size() / 2 - 1 : 0;
-            ImVec2 s0 = pts[k], s1 = pts[k + 1];
-            ImVec2 ts = ImGui::CalcTextSize(label.c_str());
-            ImVec2 mid((s0.x + s1.x) / 2.f - ts.x / 2.f, (s0.y + s1.y) / 2.f - ts.y / 2.f);
-            dl->AddRectFilled(ImVec2(mid.x - 2.f, mid.y), ImVec2(mid.x + ts.x + 2.f, mid.y + ts.y), bg);
-            dl->AddText(mid, textCol, label.c_str());
         }
 
         void SubgraphBoxes(ImDrawList* dl, const Graph& graph, ImVec2 origin, float em)
@@ -168,17 +103,11 @@ namespace RichMd::Mermaid
             ImU32 fill = ImGui::GetColorU32(ImGuiCol_FrameBg);
             ImU32 windowBg = ImGui::GetColorU32(ImGuiCol_WindowBg);
             SubgraphBoxes(dl, graph, origin, em);
-            int lane = 0;
-            std::vector<std::pair<float, float>> anchors = Anchors(graph, graph.vertical);
-            for (size_t i = 0; i < graph.edges.size(); ++i)
+            for (const Edge& e : graph.edges)
             {
-                const Edge& e = graph.edges[i];
-                if (UsesLane(graph, e))
-                    ++lane;
-                std::vector<ImVec2> pts = EdgePoints(graph, e, origin, graph.vertical, lane, em, anchors[i]);
-                Polyline(dl, pts, border, e.arrow, em, e.style);
+                Polyline(dl, Translated(e.points, origin), border, e.arrow, em, e.style);
                 if (!e.label.empty())
-                    EdgeLabel(dl, pts, e.label, textCol, windowBg);
+                    EdgeLabel(dl, e, origin, textCol, windowBg);
             }
             for (const Node& node : graph.nodes)
             {
@@ -258,37 +187,22 @@ namespace RichMd::Mermaid
             ImU32 windowBg = ImGui::GetColorU32(ImGuiCol_WindowBg);
             const float lineHeight = ImGui::GetTextLineHeight();
             SubgraphBoxes(dl, graph, origin, em);
-            int lane = 0;
-            std::vector<std::pair<float, float>> anchors = Anchors(graph, true);
             for (size_t i = 0; i < graph.edges.size(); ++i)
             {
                 const Edge& e = graph.edges[i];
                 const Relation& r = relations[i];
-                if (UsesLane(graph, e))
-                    ++lane;
-                std::vector<ImVec2> pts = EdgePoints(graph, e, origin, true, lane, em, anchors[i]);
+                std::vector<ImVec2> pts = Translated(e.points, origin);
                 ImVec2 start = DrawMarker(dl, r.markerSrc, pts[0], pts[1], border, windowBg, em);
                 ImVec2 end = DrawMarker(dl, r.markerDst, pts.back(), pts[pts.size() - 2], border, windowBg, em);
-                std::vector<ImVec2> line = pts;
-                line.front() = start;
-                line.back() = end;
-                Polyline(dl, line, border, false, em, r.dashed ? LineStyle::Dotted : LineStyle::Solid);
-                if (!r.label.empty())
-                    EdgeLabel(dl, pts, r.label, textCol, windowBg);
-                const std::pair<const std::string*, std::pair<ImVec2, ImVec2>> cardinalities[] = {
-                    {&r.cardinalitySrc, {pts[0], pts[1]}}, {&r.cardinalityDst, {pts.back(), pts[pts.size() - 2]}}};
-                for (const auto& [card, ends] : cardinalities)
-                {
-                    if (card->empty())
-                        continue;
-                    ImVec2 p = ends.first, q = ends.second;
-                    float dx = q.x - p.x, dy = q.y - p.y;
-                    float n = Length(dx, dy);
-                    ImVec2 ts = ImGui::CalcTextSize(card->c_str());
-                    float along = 1.3f * em, side = 0.4f * em;
-                    ImVec2 pos(p.x + dx / n * along + (dy != 0.f ? side : -ts.x / 2.f), p.y + dy / n * along + (dx != 0.f ? side : -ts.y / 2.f));
-                    dl->AddText(pos, textCol, card->c_str());
-                }
+                pts.front() = start;
+                pts.back() = end;
+                Polyline(dl, pts, border, false, em, r.dashed ? LineStyle::Dotted : LineStyle::Solid);
+                if (!e.label.empty())
+                    EdgeLabel(dl, e, origin, textCol, windowBg);
+                if (!r.cardinalitySrc.empty())
+                    dl->AddText(Add(origin, r.cardinalitySrcPos), textCol, r.cardinalitySrc.c_str());
+                if (!r.cardinalityDst.empty())
+                    dl->AddText(Add(origin, r.cardinalityDstPos), textCol, r.cardinalityDst.c_str());
             }
             for (const Node& node : graph.nodes)
             {
@@ -320,7 +234,7 @@ namespace RichMd::Mermaid
             ImU32 lineCol = ImGui::GetColorU32(ImGuiCol_Text, 0.6f);
             ImU32 fill = ImGui::GetColorU32(ImGuiCol_FrameBg);
             ImU32 noteFill = ImGui::GetColorU32(ImGuiCol_FrameBgHovered);
-            const float boxH = seq.boxHeight, rowH = seq.rowHeight;
+            const float boxH = seq.boxHeight;
 
             // Lifelines, and the participant boxes above and below
             for (size_t i = 0; i < seq.participantIds.size(); ++i)
@@ -342,9 +256,7 @@ namespace RichMd::Mermaid
             // Loop frames, behind the rows
             for (const SequenceLoop& loop : seq.loops)
             {
-                float y0 = origin.y + boxH + ((float)loop.first + 0.4f) * rowH;
-                float y1 = origin.y + boxH + ((float)loop.last + 1.3f) * rowH;
-                ImVec2 p0(origin.x - 0.5f * em, y0), p1(origin.x + seq.totalWidth + 0.5f * em, y1);
+                ImVec2 p0 = Add(origin, loop.frameMin), p1 = Add(origin, loop.frameMax);
                 StrokeRect(dl, p0, p1, lineCol, 0.f, 1.f);
                 std::string label = "loop [" + loop.label + "]";
                 ImVec2 ts = ImGui::CalcTextSize(label.c_str());
@@ -355,22 +267,14 @@ namespace RichMd::Mermaid
             for (size_t k = 0; k < seq.rows.size(); ++k)
             {
                 const SequenceRow& r = seq.rows[k];
-                float y = origin.y + boxH + (float)(k + 1) * rowH;
-                ImVec2 ts = ImGui::CalcTextSize(r.text.c_str());
+                float y = origin.y + r.y;
+                ImVec2 textPos = Add(origin, r.textMin);
                 if (r.isNote)
                 {
-                    float xMin = 1e30f, xMax = -1e30f, sum = 0.f;
-                    for (int v : r.over)
-                    {
-                        float x = origin.x + seq.xCenter[v];
-                        xMin = std::min(xMin, x), xMax = std::max(xMax, x), sum += x;
-                    }
-                    float cx = sum / (float)r.over.size();
-                    float half = std::max((xMax - xMin) / 2.f + em, ts.x / 2.f + 0.5f * em);
-                    ImVec2 p0(cx - half, y - ts.y / 2.f - 0.3f * em), p1(cx + half, y + ts.y / 2.f + 0.3f * em);
+                    ImVec2 p0 = Add(origin, r.boxMin), p1 = Add(origin, r.boxMax);
                     dl->AddRectFilled(p0, p1, noteFill, 0.1f * em);
                     StrokeRect(dl, p0, p1, lineCol, 0.1f * em, 1.f);
-                    dl->AddText(ImVec2(cx - ts.x / 2.f, y - ts.y / 2.f), textCol, r.text.c_str());
+                    dl->AddText(textPos, textCol, r.text.c_str());
                     continue;
                 }
                 float xa = origin.x + seq.xCenter[r.src], xb = origin.x + seq.xCenter[r.dst];
@@ -382,7 +286,7 @@ namespace RichMd::Mermaid
                     ImVec2 pts[4] = {ImVec2(xa, y - 0.5f * em), ImVec2(xa + w, y - 0.5f * em), ImVec2(xa + w, y + 0.5f * em), ImVec2(xa, y + 0.5f * em)};
                     for (int i = 0; i < 3; ++i)
                         dl->AddLine(pts[i], pts[i + 1], lineCol, 1.5f);
-                    dl->AddText(ImVec2(xa + w + 0.4f * em, y - ts.y / 2.f), textCol, r.text.c_str());
+                    dl->AddText(textPos, textCol, r.text.c_str());
                     tip = pts[3];
                     direction = -1.f;
                 }
@@ -396,7 +300,7 @@ namespace RichMd::Mermaid
                     }
                     else
                         dl->AddLine(ImVec2(xa, y), ImVec2(xb, y), lineCol, 1.5f);
-                    dl->AddText(ImVec2((xa + xb) / 2.f - ts.x / 2.f, y - ts.y - 0.2f * em), textCol, r.text.c_str());
+                    dl->AddText(textPos, textCol, r.text.c_str());
                     tip = ImVec2(xb, y);
                     direction = xb > xa ? 1.f : -1.f;
                 }

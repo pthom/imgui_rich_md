@@ -33,6 +33,9 @@ namespace RichMd::Mermaid
         std::string label;
         bool arrow = true;
         LineStyle style = LineStyle::Solid;
+        // filled by the layout, relative to the diagram's origin
+        std::vector<ImVec2> points;   // the polyline, from the source to the target
+        ImVec2 labelMin, labelMax;    // the box behind the label (when there is one)
     };
 
     struct Subgraph
@@ -61,7 +64,8 @@ namespace RichMd::Mermaid
     {
         Marker markerSrc = Marker::None, markerDst = Marker::None;
         bool dashed = false;
-        std::string label, cardinalitySrc, cardinalityDst;
+        std::string cardinalitySrc, cardinalityDst;  // the label is the edge's
+        ImVec2 cardinalitySrcPos, cardinalityDstPos;  // filled by the layout: where their text starts
     };
 
     // Sequence diagrams
@@ -72,12 +76,17 @@ namespace RichMd::Mermaid
         bool dashed = false, arrowhead = true;
         std::vector<int> over;         // note: the participants it covers
         std::string text;
+        // filled by the layout, relative to the diagram's origin
+        float y = 0.f;                 // the row's middle
+        ImVec2 textMin, textMax;       // where the text is drawn
+        ImVec2 boxMin, boxMax;         // note: its box
     };
 
     struct SequenceLoop
     {
         std::string label;
         int first = 0, last = -1;      // the rows inside the loop
+        ImVec2 frameMin, frameMax;     // filled by the layout
     };
 
     struct Sequence

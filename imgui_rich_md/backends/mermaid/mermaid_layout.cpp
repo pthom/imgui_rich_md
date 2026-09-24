@@ -4,6 +4,7 @@
 #include "rich_md_mermaid.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <map>
@@ -17,6 +18,115 @@ namespace RichMd::Mermaid
 
     namespace
     {
+        // For each edge: where it leaves its source and enters its target, as fractions of the node's side, spread
+        // so that the edges of a node do not share a point (ordered by the position of their other end)
+        std::vector<std::pair<float, float>> Anchors(const Graph& graph)
+        {
+            auto cross = [&](int v) { return graph.vertical ? graph.nodes[v].pos.x : graph.nodes[v].pos.y; };
+            std::map<int, std::vector<int>> out, in;
+            for (size_t i = 0; i < graph.edges.size(); ++i)
+            {
+                out[graph.edges[i].src].push_back((int)i);
+                in[graph.edges[i].dst].push_back((int)i);
+            }
+            std::vector<std::pair<float, float>> result(graph.edges.size(), {0.5f, 0.5f});
+            for (auto& [v, edges] : out)
+            {
+                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(graph.edges[a].dst) < cross(graph.edges[b].dst); });
+                for (size_t k = 0; k < edges.size(); ++k)
+                    result[edges[k]].first = (float)(k + 1) / (float)(edges.size() + 1);
+            }
+            for (auto& [v, edges] : in)
+            {
+                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(graph.edges[a].src) < cross(graph.edges[b].src); });
+                for (size_t k = 0; k < edges.size(); ++k)
+                    result[edges[k]].second = (float)(k + 1) / (float)(edges.size() + 1);
+            }
+            return result;
+        }
+
+        // The elbow polyline of an edge: a forward edge crosses the middle of the gap between the layers; a lane edge
+        // (back edge, edge skipping a layer) leaves its source in the flow direction, goes into the gap after its
+        // layer, along a lane past the graph, back through the gap before the target's layer, and into the target
+        std::vector<ImVec2> EdgePoints(const Graph& graph, const Edge& e, int lane, float em, std::pair<float, float> anchor)
+        {
+            const bool vertical = graph.vertical;
+            const Node& a = graph.nodes[e.src];
+            const Node& b = graph.nodes[e.dst];
+            ImVec2 a0 = a.pos, a1(a.pos.x + a.size.x, a.pos.y + a.size.y);
+            ImVec2 b0 = b.pos;
+            ImVec2 pa, pb;
+            if (vertical)
+                pa = ImVec2(a0.x + a.size.x * anchor.first, a1.y), pb = ImVec2(b0.x + b.size.x * anchor.second, b0.y);
+            else
+                pa = ImVec2(a1.x, a0.y + a.size.y * anchor.first), pb = ImVec2(b0.x, b0.y + b.size.y * anchor.second);
+            if (UsesLane(graph, e))
+            {
+                const float halfGap = 0.7f * em;  // not the middle of the gap, where the forward edges run
+                if (vertical)
+                {
+                    float lx = graph.size.x - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)lane;
+                    return {pa, ImVec2(pa.x, pa.y + halfGap), ImVec2(lx, pa.y + halfGap),
+                            ImVec2(lx, pb.y - halfGap), ImVec2(pb.x, pb.y - halfGap), pb};
+                }
+                float ly = graph.size.y - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)lane;
+                return {pa, ImVec2(pa.x + halfGap, pa.y), ImVec2(pa.x + halfGap, ly),
+                        ImVec2(pb.x - halfGap, ly), ImVec2(pb.x - halfGap, pb.y), pb};
+            }
+            if (vertical)
+            {
+                float midY = (a1.y + b0.y) / 2.f;
+                if (std::fabs(pa.x - pb.x) < 1.f)
+                    return {pa, pb};
+                return {pa, ImVec2(pa.x, midY), ImVec2(pb.x, midY), pb};
+            }
+            float midX = (a1.x + b0.x) / 2.f;
+            if (std::fabs(pa.y - pb.y) < 1.f)
+                return {pa, pb};
+            return {pa, ImVec2(midX, pa.y), ImVec2(midX, pb.y), pb};
+        }
+
+        // The polylines, and the labels on the middle segment when there is one, else at the middle of the edge
+        void RouteEdges(Graph& graph, float em)
+        {
+            std::vector<std::pair<float, float>> anchors = Anchors(graph);
+            int lane = 0;
+            for (size_t i = 0; i < graph.edges.size(); ++i)
+            {
+                Edge& e = graph.edges[i];
+                if (UsesLane(graph, e))
+                    ++lane;
+                e.points = EdgePoints(graph, e, lane, em, anchors[i]);
+                if (e.label.empty())
+                    continue;
+                size_t k = e.points.size() > 2 ? e.points.size() / 2 - 1 : 0;
+                ImVec2 s0 = e.points[k], s1 = e.points[k + 1];
+                ImVec2 ts = ImGui::CalcTextSize(e.label.c_str());
+                ImVec2 mid((s0.x + s1.x) / 2.f - ts.x / 2.f, (s0.y + s1.y) / 2.f - ts.y / 2.f);
+                e.labelMin = ImVec2(mid.x - 2.f, mid.y);
+                e.labelMax = ImVec2(mid.x + ts.x + 2.f, mid.y + ts.y);
+            }
+        }
+
+        // Class diagrams: the cardinalities, beside the line, near its ends
+        void PlaceCardinalities(const Graph& graph, std::vector<Relation>& relations, float em)
+        {
+            for (size_t i = 0; i < relations.size(); ++i)
+            {
+                const std::vector<ImVec2>& pts = graph.edges[i].points;
+                Relation& r = relations[i];
+                auto place = [&](const std::string& card, ImVec2 p, ImVec2 q) {
+                    float dx = q.x - p.x, dy = q.y - p.y;
+                    float n = std::max(std::sqrt(dx * dx + dy * dy), 1e-3f);
+                    ImVec2 ts = ImGui::CalcTextSize(card.c_str());
+                    float along = 1.3f * em, side = 0.4f * em;
+                    return ImVec2(p.x + dx / n * along + (dy != 0.f ? side : -ts.x / 2.f), p.y + dy / n * along + (dx != 0.f ? side : -ts.y / 2.f));
+                };
+                r.cardinalitySrcPos = place(r.cardinalitySrc, pts[0], pts[1]);
+                r.cardinalityDstPos = place(r.cardinalityDst, pts.back(), pts[pts.size() - 2]);
+            }
+        }
+
         void LayoutGraph(Graph& graph, float em)
         {
             const int n = (int)graph.nodes.size();
@@ -229,6 +339,7 @@ namespace RichMd::Mermaid
             const float lanes = 1.2f * em * (float)graph.lanes;  // room on the right (TD) or below (LR) for the lane edges
             const float mainTotal = offsetMain - gapY + shift;
             graph.size = vertical ? ImVec2(totalCross + lanes, mainTotal) : ImVec2(mainTotal, totalCross + lanes);
+            RouteEdges(graph, em);
         }
 
         void LayoutSequence(Sequence& seq, float em)
@@ -253,6 +364,39 @@ namespace RichMd::Mermaid
             seq.boxHeight = ImGui::GetTextLineHeight() + em;
             seq.rowHeight = 2.2f * em;
             seq.height = seq.boxHeight + (float)(seq.rows.size() + 1) * seq.rowHeight + seq.boxHeight;
+
+            // Rows: a note centered over its participants, a message's text above its line, or on the right of the
+            // hook of a message to itself
+            for (size_t k = 0; k < seq.rows.size(); ++k)
+            {
+                SequenceRow& r = seq.rows[k];
+                r.y = seq.boxHeight + (float)(k + 1) * seq.rowHeight;
+                ImVec2 ts = ImGui::CalcTextSize(r.text.c_str());
+                if (r.isNote)
+                {
+                    float xMin = 1e30f, xMax = -1e30f, sum = 0.f;
+                    for (int v : r.over)
+                    {
+                        float xv = seq.xCenter[v];
+                        xMin = std::min(xMin, xv), xMax = std::max(xMax, xv), sum += xv;
+                    }
+                    float cx = sum / (float)r.over.size();
+                    float half = std::max((xMax - xMin) / 2.f + em, ts.x / 2.f + 0.5f * em);
+                    r.boxMin = ImVec2(cx - half, r.y - ts.y / 2.f - 0.3f * em);
+                    r.boxMax = ImVec2(cx + half, r.y + ts.y / 2.f + 0.3f * em);
+                    r.textMin = ImVec2(cx - ts.x / 2.f, r.y - ts.y / 2.f);
+                }
+                else if (r.src == r.dst)
+                    r.textMin = ImVec2(seq.xCenter[r.src] + 1.5f * em + 0.4f * em, r.y - ts.y / 2.f);
+                else
+                    r.textMin = ImVec2((seq.xCenter[r.src] + seq.xCenter[r.dst]) / 2.f - ts.x / 2.f, r.y - ts.y - 0.2f * em);
+                r.textMax = ImVec2(r.textMin.x + ts.x, r.textMin.y + ts.y);
+            }
+            for (SequenceLoop& loop : seq.loops)
+            {
+                loop.frameMin = ImVec2(-0.5f * em, seq.boxHeight + ((float)loop.first + 0.4f) * seq.rowHeight);
+                loop.frameMax = ImVec2(seq.totalWidth + 0.5f * em, seq.boxHeight + ((float)loop.last + 1.3f) * seq.rowHeight);
+            }
         }
     }
 
@@ -263,6 +407,8 @@ namespace RichMd::Mermaid
             LayoutSequence(diagram.sequence, em);
         else
             LayoutGraph(diagram.graph, em);
+        if (diagram.kind == DiagramKind::Class)
+            PlaceCardinalities(diagram.graph, diagram.relations, em);
         diagram.layoutFont = ImGui::GetFont();
         diagram.layoutFontSize = em;
     }
