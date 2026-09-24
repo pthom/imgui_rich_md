@@ -51,6 +51,24 @@ $$
 
 Formulas need the library built with `IMGUI_RICHMD_WITH_LATEX`; otherwise they show as source.
 )md"},
+    {"Mermaid diagrams", R"md(## Mermaid diagrams
+Flowcharts, sequence diagrams and class diagrams, drawn natively: edit them on the left.
+
+```mermaid
+flowchart LR
+    A[Idea] --> B{Worth it?}
+    B -->|yes| C([Build it]) --> D[Ship]
+    B -->|no| E[Forget it]
+```
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant E as Editor
+    U->>+E: types
+    E-->>-U: renders
+```
+)md"},
     {"Callouts and sections", R"md(> [!TIP]
 > Callouts start with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`.
 

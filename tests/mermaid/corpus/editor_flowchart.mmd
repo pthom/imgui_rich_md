@@ -1,0 +1,6 @@
+%% The flowchart of the editor's Mermaid sample (examples/editor)
+%% expect: nodes=5 edges=4
+flowchart LR
+    A[Idea] --> B{Worth it?}
+    B -->|yes| C([Build it]) --> D[Ship]
+    B -->|no| E[Forget it]
