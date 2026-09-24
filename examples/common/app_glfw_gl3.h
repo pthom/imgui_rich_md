@@ -49,7 +49,10 @@ inline int RunApp(const char* title, ImVec2 size, const RichMd::MarkdownOptions&
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
-    GLFWwindow* window = glfwCreateWindow((int)size.x, (int)size.y, title, nullptr, nullptr);
+    // High DPI: the window, the paddings and the fonts follow the monitor's scale (1 on macOS and the web, where
+    // the framebuffer scale does it)
+    float mainScale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+    GLFWwindow* window = glfwCreateWindow((int)(size.x * mainScale), (int)(size.y * mainScale), title, nullptr, nullptr);
     if (!window)
         return 1;
     glfwMakeContextCurrent(window);
@@ -58,6 +61,8 @@ inline int RunApp(const char* title, ImVec2 size, const RichMd::MarkdownOptions&
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
+    ImGui::GetStyle().ScaleAllSizes(mainScale);
+    ImGui::GetStyle().FontScaleDpi = mainScale;
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 150");
     RichMd::InitializeMarkdown(options);

@@ -74,12 +74,17 @@ int main(int, char**)
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
-    GLFWwindow* window = glfwCreateWindow(900, 800, "imgui_rich_md minimal example", nullptr, nullptr);
+    // High DPI: the window, the paddings and the fonts follow the monitor's scale (1 on macOS and the web, where
+    // the framebuffer scale does it)
+    float mainScale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+    GLFWwindow* window = glfwCreateWindow((int)(900 * mainScale), (int)(800 * mainScale), "imgui_rich_md minimal example", nullptr, nullptr);
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImGui::GetStyle().ScaleAllSizes(mainScale);
+    ImGui::GetStyle().FontScaleDpi = mainScale;
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 150");
 
