@@ -1,0 +1,30 @@
+# Build folders
+build*/
+cmake-build-*/
+out/
+
+# IDEs and tools
+.idea/
+.vscode/
+.vs/
+*.user
+xcuserdata/
+.cache/
+compile_commands.json
+
+# Compiled files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Settings written by Dear ImGui
+imgui.ini
