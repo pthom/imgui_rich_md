@@ -27,7 +27,7 @@ jobs:
         with:
           version: 5.0.4
 
-      - name: Build the examples (every option: code editor, LaTeX, URL images)
+      - name: Build the examples, with every option (code editor, LaTeX, URL images)
         run: |
           emcmake cmake -S examples -B build -DCMAKE_BUILD_TYPE=Release \
             -DIMGUI_RICHMD_WITH_CODE_EDITOR=ON -DIMGUI_RICHMD_WITH_LATEX=ON -DIMGUI_RICHMD_WITH_DOWNLOAD_IMAGES=ON
