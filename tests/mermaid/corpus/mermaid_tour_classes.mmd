@@ -1,0 +1,17 @@
+%% A diagram of the Mermaid tour (examples/mermaid)
+%% expect: nodes=3 edges=2
+classDiagram
+    class Animal {
+        <<abstract>>
+        +String name
+        +makeSound()* void
+        +count()$ int
+    }
+    class Dog {
+        +fetch() void
+    }
+    class Owner {
+        +List~Animal~ pets
+    }
+    Animal <|-- Dog
+    Owner "1" o-- "*" Animal : owns

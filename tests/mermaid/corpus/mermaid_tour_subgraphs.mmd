@@ -1,0 +1,14 @@
+%% A diagram of the Mermaid tour (examples/mermaid)
+%% expect: nodes=4 edges=4 subgraphs=3
+flowchart LR
+    subgraph Browser
+        UI[Web app]
+    end
+    subgraph Cloud
+        subgraph Tier[API tier]
+            Gateway --> Service
+        end
+        Service --> DB[(Database)]
+    end
+    UI --> Gateway
+    Service -.->|events| UI

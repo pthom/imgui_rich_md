@@ -1,0 +1,9 @@
+%% A diagram of the Mermaid tour (examples/mermaid)
+%% expect: nodes=7 edges=7
+flowchart TD
+    A[Source] --> B[Parse] & C[Check]
+    B -- tokens --> D[Build]
+    C -. warnings .-> D
+    D ==> E((Done))
+    A --o F[Log]
+    A --x G[Abort]

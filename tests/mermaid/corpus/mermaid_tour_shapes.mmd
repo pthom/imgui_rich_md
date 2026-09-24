@@ -1,0 +1,8 @@
+%% A diagram of the Mermaid tour (examples/mermaid)
+%% expect: nodes=5 edges=5
+flowchart TD
+    Start([Start]) --> Check{Logged in?}
+    Check -->|yes| Home[Home page]
+    Check -->|no| Login[/Login form/]
+    Login --> Users[(Users)]
+    Users --> Home

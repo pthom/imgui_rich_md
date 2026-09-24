@@ -450,6 +450,7 @@ Alice,10
 ` ```mermaid ` blocks are drawn natively, with `ImDrawList` and the colors of the ImGui style (no web
 view, no JavaScript): flowcharts, sequence diagrams and class diagrams. A diagram that cannot be parsed
 shows as code, with the line of the error. `RichMd::RenderMermaid(source)` draws one outside of markdown.
+More diagrams, to edit, in the [Mermaid tour](https://pthom.github.io/imgui_rich_md/mermaid.html).
 
 ```mermaid
 flowchart LR

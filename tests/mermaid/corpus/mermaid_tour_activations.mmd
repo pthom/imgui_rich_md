@@ -1,0 +1,11 @@
+%% A diagram of the Mermaid tour (examples/mermaid)
+%% expect: participants=3 messages=4
+sequenceDiagram
+    autonumber
+    actor User
+    participant App
+    participant API
+    User->>+App: click "Save"
+    App->>+API: POST /document
+    API-->>-App: 201 Created
+    App-->>-User: saved

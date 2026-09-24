@@ -1,0 +1,14 @@
+%% A diagram of the Mermaid tour (examples/mermaid)
+%% expect: nodes=4 edges=3 subgraphs=1
+classDiagram
+    namespace Storage {
+        class Repository~T~ {
+            +find(id) T
+            +save(item: T)
+        }
+        class Cache
+    }
+    class Service
+    Service --> Repository : uses
+    Repository ..> Cache
+    note for Cache "evicts what was not used"

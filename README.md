@@ -73,6 +73,7 @@ The [tour](https://pthom.github.io/imgui_rich_md/tour.html) shows each feature w
 | minimal | the smallest setup: where the library's calls go in your own loop | [run](https://pthom.github.io/imgui_rich_md/minimal.html), [source](examples/minimal/main.cpp) |
 | tour | every feature, with its markdown source | [run](https://pthom.github.io/imgui_rich_md/tour.html), [source](examples/tour/main.cpp) |
 | editor | the markdown source next to its live render | [run](https://pthom.github.io/imgui_rich_md/editor.html), [source](examples/editor/main.cpp) |
+| mermaid | Mermaid diagrams, each with its source to edit and a link to Mermaid's own render | [run](https://pthom.github.io/imgui_rich_md/mermaid.html), [source](examples/mermaid/main.cpp) |
 | custom_host | the library on an application's own textures, assets and log | [run](https://pthom.github.io/imgui_rich_md/custom_host.html), [source](examples/custom_host/main.cpp) |
 | fonts | CJK, emoji and icon fonts merged into every markdown font | [run](https://pthom.github.io/imgui_rich_md/fonts.html), [source](examples/fonts/main.cpp) |
 
