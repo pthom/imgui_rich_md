@@ -50,6 +50,8 @@ namespace RichMd::Mermaid
         // filled by the layout, relative to the diagram's origin
         std::vector<ImVec2> points;   // the polyline, from the source to the target
         float track = 0.f;            // where its segment across the channel runs, from the channel's middle
+        int lane = 0;                 // a lane edge: its lane (1, 2...), 0 otherwise
+        int exitTrack = 0, entryTrack = 0;  // a lane edge: its approach lines after its source's layer, before its target's
         ImVec2 labelMin, labelMax;    // the box behind the label (when there is one)
     };
 

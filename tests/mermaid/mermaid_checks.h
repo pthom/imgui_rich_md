@@ -8,6 +8,7 @@
 #include "imgui_rich_md/backends/mermaid/rich_md_mermaid.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <set>
 #include <sstream>
@@ -268,6 +269,30 @@ namespace MermaidChecks
                         issues.push_back({"label-on-edge", "label " + Describe(labels[l]) + " hides a part of edge " + edgeName});
             }
         }
+        // Two edges that share a stretch of line (not the fans: edges from the same node, or into the same node)
+        for (size_t i = 0; i < g.edges.size(); ++i)
+            for (size_t j = i + 1; j < g.edges.size(); ++j)
+            {
+                const Edge& e = g.edges[i];
+                const Edge& f = g.edges[j];
+                if (e.src == f.src || e.dst == f.dst || e.style == LineStyle::Invisible || f.style == LineStyle::Invisible)
+                    continue;
+                bool overlap = false;
+                for (size_t a = 0; a + 1 < e.points.size() && !overlap; ++a)
+                    for (size_t b = 0; b + 1 < f.points.size() && !overlap; ++b)
+                    {
+                        ImVec2 p0 = e.points[a], p1 = e.points[a + 1], q0 = f.points[b], q1 = f.points[b + 1];
+                        bool horizontal = std::fabs(p0.y - p1.y) < 0.5f && std::fabs(q0.y - q1.y) < 0.5f && std::fabs(p0.y - q0.y) < 0.5f;
+                        bool vertical = std::fabs(p0.x - p1.x) < 0.5f && std::fabs(q0.x - q1.x) < 0.5f && std::fabs(p0.x - q0.x) < 0.5f;
+                        auto shared = [](float a0, float a1, float b0, float b1) {
+                            return std::min(std::max(a0, a1), std::max(b0, b1)) - std::max(std::min(a0, a1), std::min(b0, b1));
+                        };
+                        overlap = (horizontal && shared(p0.x, p1.x, q0.x, q1.x) > 1.f) || (vertical && shared(p0.y, p1.y, q0.y, q1.y) > 1.f);
+                    }
+                if (overlap)
+                    issues.push_back({"edge-overlap", "edges " + g.nodes[e.src].id + " -> " + g.nodes[e.dst].id + " and "
+                                      + g.nodes[f.src].id + " -> " + g.nodes[f.dst].id + " share a stretch of line"});
+            }
         for (size_t l = 0; l < labels.size(); ++l)
         {
             checkBounds(labels[l]);

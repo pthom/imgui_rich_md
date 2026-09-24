@@ -1,0 +1,10 @@
+%% Several lane edges into, and out of, the same layers: each on its own approach line
+%% expect: nodes=6 edges=8
+flowchart TD
+    A --> B
+    B --> C1 & C2
+    C1 --> D1
+    C2 --> D2
+    A --> D1
+    B --> D2
+    D2 --> A
