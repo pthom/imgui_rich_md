@@ -685,6 +685,10 @@ void Renderer::render_latex_span(bool display)
 		ImGui::Image(tex.texture, ImVec2(logical_w, logical_h));
 		ImGui::NewLine();
 	} else {
+		// An inline formula that does not fit on the rest of the line starts a new one, like a word
+		const bool not_at_line_start = ImGui::GetCursorPosX() > ImGui::GetCursorStartPos().x + 1.0f;
+		if (logical_w > ImGui::GetContentRegionAvail().x && not_at_line_start)
+			ImGui::NewLine();
 		// Inline math: the formula's baseline on the text baseline. ImGui::Text() draws from
 		// cursor.y with the baseline at cursor.y + ascent, so the image top goes at
 		// cursor.y + ascent - baseline.
