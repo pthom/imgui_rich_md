@@ -490,6 +490,7 @@ namespace RichMd
                         return SizedFont{ pair.second, fontSize };
                 }
                 IM_ASSERT(false && "Could not find font for markdown style");
+                return SizedFont{ nullptr, fontSize };  // the current font, at the markdown size
             }
         private:
             // Adds a font from an asset (nullptr if the asset is missing). merge: into the last added font.
