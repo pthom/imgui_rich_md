@@ -21,8 +21,9 @@ if(NOT TARGET imgui)
     set(IMGUI_DIR ${imgui_stock_SOURCE_DIR})
     add_library(imgui STATIC
         ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp ${IMGUI_DIR}/imgui_widgets.cpp
-        ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
-    target_include_directories(imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends)
+        ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+        ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp)  # InputText with std::string (editor)
+    target_include_directories(imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends ${IMGUI_DIR}/misc/cpp)
     target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
 endif()
 if(NOT TARGET imgui_rich_md)
@@ -33,7 +34,7 @@ if(NOT TARGET imgui_rich_md)
 endif()
 
 # One folder per example, with its main.cpp; common/ holds the window shared by the examples
-foreach(example minimal tour)
+foreach(example minimal tour editor)
     add_executable(imgui_rich_md_${example} ${CMAKE_CURRENT_LIST_DIR}/${example}/main.cpp)
     target_include_directories(imgui_rich_md_${example} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
     target_link_libraries(imgui_rich_md_${example} PRIVATE imgui_rich_md glfw OpenGL::GL)
