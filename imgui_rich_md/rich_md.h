@@ -223,6 +223,11 @@ namespace RichMd
     // instead of the code block renderer. Applies to the current context.
     void RegisterFencedBlockRenderer(const std::string& language, std::function<void(const std::string& code)> renderer);
 
+    // Renders a Mermaid diagram (flowchart, sequence or class diagram), as ```mermaid blocks do. A diagram that
+    // cannot be parsed is shown as code, with the error below it; so is any diagram when the library is built
+    // without IMGUI_RICHMD_WITH_MERMAID.
+    void RenderMermaid(const std::string& source);
+
     // The colors and spacing of the current context (see Renderer::Style). C++ only.
     Renderer::Style& GetStyle();
 

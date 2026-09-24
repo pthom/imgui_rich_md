@@ -85,6 +85,52 @@ Centered
 preformatted   text
 </pre>
 
+## Mermaid
+```mermaid
+flowchart TD
+    subgraph Client
+        UI[Web app] --> Cache[(Local cache)]
+    end
+    UI -->|login| Auth{Token?}
+    Auth -. yes .-> UI
+    Auth ==> Loop(Retry)
+    Loop --> Loop
+```
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant MD as rich_md
+    App->>MD: Render(text)
+    MD->>MD: resolve @import
+    loop each formula
+        MD-->>App: bitmap
+    end
+    Note over App,MD: textures
+```
+
+```mermaid
+classDiagram
+    namespace Geometry {
+        class Shape {
+            <<interface>>
+            +area() float
+        }
+    }
+    Shape <|-- Circle : implements
+    Canvas "1" *-- "many" Shape : owns
+    Canvas o-- Renderer
+    Renderer ..> Style
+    Circle : -radius float
+```
+
+An invalid diagram:
+```mermaid
+flowchart LR
+    A --> B
+    this is not mermaid
+```
+
 A wikilink: [[Home]] and one with a label: [[Notes/todo|my notes]].
 
 An import that fails:

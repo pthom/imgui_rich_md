@@ -16,6 +16,7 @@ endif()
 option(IMGUI_RICHMD_WITH_CODE_EDITOR "Code blocks with syntax highlighting (ImGuiColorTextEdit)" OFF)
 option(IMGUI_RICHMD_WITH_LATEX "LaTeX formulas (MicroTeX, needs FreeType)" OFF)
 option(IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES "Images from URLs (libcurl on desktop, fetch on Emscripten)" OFF)
+option(IMGUI_RICHMD_WITH_MERMAID "Mermaid diagrams: flowcharts, sequence and class diagrams (no dependency)" ON)
 option(IMGUI_RICHMD_EMBED_ASSETS "Embed the fonts and images in the library (no assets folder needed)" ON)
 option(IMGUI_RICHMD_BUILD_EXAMPLES "Build the examples" ${_richmd_standalone})
 option(IMGUI_RICHMD_BUILD_TESTS "Build the smoke test (tests/)" OFF)
@@ -86,6 +87,15 @@ if(IMGUI_RICHMD_WITH_CODE_EDITOR)
         ${_richmd_dir}/backends/code_editor/snippets.cpp ${_richmd_dir}/backends/code_editor/snippets.h)
     target_link_libraries(imgui_rich_md PUBLIC imgui_color_text_edit)
     target_compile_definitions(imgui_rich_md PUBLIC IMGUI_RICHMD_WITH_CODE_EDITOR)
+endif()
+
+# --- Mermaid backend (no dependency)
+if(IMGUI_RICHMD_WITH_MERMAID)
+    target_sources(imgui_rich_md PRIVATE
+        ${_richmd_dir}/backends/mermaid/rich_md_mermaid.cpp ${_richmd_dir}/backends/mermaid/rich_md_mermaid.h
+        ${_richmd_dir}/backends/mermaid/mermaid_parse.cpp ${_richmd_dir}/backends/mermaid/mermaid_layout.cpp
+        ${_richmd_dir}/backends/mermaid/mermaid_draw.cpp)
+    target_compile_definitions(imgui_rich_md PUBLIC IMGUI_RICHMD_WITH_MERMAID)
 endif()
 
 # --- LaTeX backend (MicroTeX + FreeType)

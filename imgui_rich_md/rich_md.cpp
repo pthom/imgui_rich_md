@@ -32,6 +32,9 @@
 #ifdef IMGUI_RICHMD_WITH_LATEX
 #include "backends/latex/rich_md_latex.h"
 #endif
+#ifdef IMGUI_RICHMD_WITH_MERMAID
+#include "backends/mermaid/rich_md_mermaid.h"
+#endif
 
 #include "third_party/stb_image.h"
 
@@ -386,6 +389,15 @@ namespace RichMd
         }
         ImGui::EndChild();
         ImGui::PopStyleColor();
+    }
+
+    // A code block: through the host (the code editor), or plain
+    static void _RenderCodeBlock(const std::string& code, const std::string& language)
+    {
+        if (gHostServices.RenderCodeBlock)
+            gHostServices.RenderCodeBlock(code, language);
+        else
+            _RenderCodeBlockPlain(code);
     }
 
 
@@ -771,10 +783,8 @@ namespace RichMd
             auto it = fenced.find(_ToLower(m_code_block_language));
             if (it != fenced.end())
                 it->second(code);
-            else if (gHostServices.RenderCodeBlock)
-                gHostServices.RenderCodeBlock(code, m_code_block_language);
             else
-                _RenderCodeBlockPlain(code);
+                _RenderCodeBlock(code, m_code_block_language);
             ImGui::PopID();
         }
 
@@ -936,6 +946,9 @@ namespace RichMd
             gHostServices.Download = DesktopDownloadData;
 #endif
         }
+#ifdef IMGUI_RICHMD_WITH_MERMAID
+        context->fencedBlockRenderers["mermaid"] = RenderMermaid;
+#endif
         if (!gCurrentContext)
             gCurrentContext = context;
         return context;
@@ -952,6 +965,9 @@ namespace RichMd
         // The options' callbacks (which may hold Python objects) go with it.
         delete context;
         _SweepDestroyedTextures();
+#ifdef IMGUI_RICHMD_WITH_MERMAID
+        Mermaid::ClearCache();
+#endif
     }
 
     void SetCurrentContext(Context* context) { gCurrentContext = context; }
@@ -1043,6 +1059,27 @@ namespace RichMd
     {
         IM_ASSERT(gCurrentContext && "RichMd: call InitializeMarkdown first");
         gCurrentContext->fencedBlockRenderers[_ToLower(language)] = std::move(renderer);
+    }
+
+    void RenderMermaid(const std::string& source)
+    {
+#ifdef IMGUI_RICHMD_WITH_MERMAID
+        Mermaid::RenderResult result = Mermaid::Render(source);
+        if (result.drawn)
+            return;
+#endif
+        IM_ASSERT(_Renderer() && "RichMd: call InitializeMarkdown first");
+        ImGui::PushID(source.c_str());
+        _RenderCodeBlock(source, "mermaid");
+        ImGui::PopID();
+#ifdef IMGUI_RICHMD_WITH_MERMAID
+        ImVec4 errorColor = GetStyle().errorColor;
+        if (errorColor.w < 0.f)  // automatic
+            errorColor = _Renderer()->admonition_color(Renderer::AdmonitionKind::Caution);
+        ImGui::PushStyleColor(ImGuiCol_Text, errorColor);
+        ImGui::TextWrapped("mermaid, %s", result.error.c_str());
+        ImGui::PopStyleColor();
+#endif
     }
 
     Renderer::Style& GetStyle()

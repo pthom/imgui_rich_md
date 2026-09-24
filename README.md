@@ -59,6 +59,7 @@ The [tour](https://pthom.github.io/imgui_rich_md/tour.html) shows each feature w
 | `IMGUI_RICHMD_WITH_CODE_EDITOR` | OFF | syntax highlighting ([ImGuiColorTextEdit](https://github.com/goossens/ImGuiColorTextEdit): fetched, or `IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR`) |
 | `IMGUI_RICHMD_WITH_LATEX` | OFF | formulas ([MicroTeX](https://github.com/NanoMichael/MicroTeX): fetched, or `IMGUI_RICHMD_MICROTEX_DIR`; needs FreeType: a `freetype` target, or `find_package(Freetype)`) |
 | `IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES` | OFF | images from URLs (libcurl on desktop, the browser's fetch with Emscripten) |
+| `IMGUI_RICHMD_WITH_MERMAID` | ON | Mermaid diagrams: flowcharts, sequence and class diagrams (no dependency) |
 | `IMGUI_RICHMD_EMBED_ASSETS` | ON | the fonts and images are embedded in the library; OFF: they are read from the assets folder (`RichMd::SetAssetsFolder`) |
 | `IMGUI_RICHMD_STB_IMAGE_IMPLEMENTATION` | ON | compiles stb_image; set it OFF if your project already does (e.g. HelloImGui) |
 | `IMGUI_RICHMD_BUILD_EXAMPLES` | top-level only | builds the examples |
