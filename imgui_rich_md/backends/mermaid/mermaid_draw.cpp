@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace RichMd::Mermaid
 {
@@ -299,6 +300,63 @@ namespace RichMd::Mermaid
             }
         }
 
+        // A stick figure, its head at the top of [top, top + 2.2 em]
+        void DrawActor(ImDrawList* dl, float cx, float top, ImU32 col, float em)
+        {
+            dl->AddCircle(ImVec2(cx, top + 0.45f * em), 0.35f * em, col, 0, 1.5f);
+            dl->AddLine(ImVec2(cx, top + 0.8f * em), ImVec2(cx, top + 1.5f * em), col, 1.5f);
+            dl->AddLine(ImVec2(cx - 0.55f * em, top + 1.05f * em), ImVec2(cx + 0.55f * em, top + 1.05f * em), col, 1.5f);
+            dl->AddLine(ImVec2(cx, top + 1.5f * em), ImVec2(cx - 0.45f * em, top + 2.1f * em), col, 1.5f);
+            dl->AddLine(ImVec2(cx, top + 1.5f * em), ImVec2(cx + 0.45f * em, top + 2.1f * em), col, 1.5f);
+        }
+
+        // An arrow head at `tip`, for a line coming from the side `direction` (+1: from the left); returns where the
+        // line stops
+        float DrawSequenceArrow(ImDrawList* dl, SequenceArrow kind, ImVec2 tip, float direction, ImU32 col, float em)
+        {
+            float s = 0.55f * em;
+            float backX = tip.x - direction * s;
+            if (kind == SequenceArrow::Filled)
+            {
+                dl->AddTriangleFilled(tip, ImVec2(backX, tip.y - s * 0.45f), ImVec2(backX, tip.y + s * 0.45f), col);
+                return backX;
+            }
+            if (kind == SequenceArrow::Open)
+            {
+                dl->AddLine(tip, ImVec2(backX, tip.y - s * 0.45f), col, 1.5f);
+                dl->AddLine(tip, ImVec2(backX, tip.y + s * 0.45f), col, 1.5f);
+            }
+            else if (kind == SequenceArrow::Cross)
+            {
+                float r = 0.3f * em;
+                ImVec2 c(tip.x - direction * r, tip.y);
+                dl->AddLine(ImVec2(c.x - r, c.y - r), ImVec2(c.x + r, c.y + r), col, 1.5f);
+                dl->AddLine(ImVec2(c.x - r, c.y + r), ImVec2(c.x + r, c.y - r), col, 1.5f);
+            }
+            return tip.x;
+        }
+
+        void DashedLine(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 col, float dash, float gap, float thickness)
+        {
+            float dx = b.x - a.x, dy = b.y - a.y;
+            float length = std::sqrt(dx * dx + dy * dy);
+            if (length < 1e-3f)
+                return;
+            float ux = dx / length, uy = dy / length;
+            for (float d = 0.f; d < length; d += dash + gap)
+            {
+                float e = std::min(d + dash, length);
+                dl->AddLine(ImVec2(a.x + ux * d, a.y + uy * d), ImVec2(a.x + ux * e, a.y + uy * e), col, thickness);
+            }
+        }
+
+        // The style's fills are translucent: over a lifeline, a fill is laid on the window's background
+        void OpaqueRect(ImDrawList* dl, ImVec2 p0, ImVec2 p1, ImU32 col, float rounding)
+        {
+            dl->AddRectFilled(p0, p1, ImGui::GetColorU32(ImGuiCol_WindowBg), rounding);
+            dl->AddRectFilled(p0, p1, col, rounding);
+        }
+
         void DrawSequence(const Sequence& seq, ImVec2 origin, float em)
         {
             ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -306,88 +364,129 @@ namespace RichMd::Mermaid
             ImU32 lineCol = ImGui::GetColorU32(ImGuiCol_Text, 0.6f);
             ImU32 fill = ImGui::GetColorU32(ImGuiCol_FrameBg);
             ImU32 noteFill = ImGui::GetColorU32(ImGuiCol_FrameBgHovered);
-            const float boxH = seq.boxHeight;
+            ImU32 windowBg = ImGui::GetColorU32(ImGuiCol_WindowBg);
+            const float lineHeight = ImGui::GetTextLineHeight();
+            const float boxH = lineHeight + em;  // a participant's box (the header may be taller, for the actors)
 
-            // Lifelines, and the participant boxes above and below
+            // Highlighted regions (rect), behind everything
+            for (const SequenceFrame& f : seq.frames)
+                if (f.kind == "rect")
+                {
+                    ImVec4 c = f.color ? ImGui::ColorConvertU32ToFloat4(f.color) : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+                    c.w *= 0.25f;  // a tint: the text stays readable with a light or a dark style
+                    dl->AddRectFilled(Add(origin, f.frameMin), Add(origin, f.frameMax), ImGui::ColorConvertFloat4ToU32(c));
+                }
+
+            // Lifelines, and the participants above and below
             for (size_t i = 0; i < seq.participantIds.size(); ++i)
             {
                 float cx = origin.x + seq.xCenter[i];
                 const std::string& label = seq.participantLabels[i];
-                for (float y : {origin.y, origin.y + seq.height - boxH})
-                {
-                    ImVec2 p0(cx - seq.boxWidth[i] / 2.f, y), p1(cx + seq.boxWidth[i] / 2.f, y + boxH);
-                    dl->AddRectFilled(p0, p1, fill, 0.2f * em);
-                    StrokeRect(dl, p0, p1, lineCol, 0.2f * em, 1.5f);
-                    ImVec2 ts = ImGui::CalcTextSize(label.c_str());
-                    dl->AddText(ImVec2(cx - ts.x / 2.f, y + (boxH - ts.y) / 2.f), textCol, label.c_str());
-                }
-                float y0 = origin.y + boxH, y1 = origin.y + seq.height - boxH;
-                for (float d = 0.f; d < y1 - y0; d += em)  // dashed
-                    dl->AddLine(ImVec2(cx, y0 + d), ImVec2(cx, std::min(y0 + d + 0.5f * em, y1)), lineCol, 1.f);
-            }
-            // Loop frames, behind the rows
-            for (const SequenceLoop& loop : seq.loops)
-            {
-                ImVec2 p0 = Add(origin, loop.frameMin), p1 = Add(origin, loop.frameMax);
-                StrokeRect(dl, p0, p1, lineCol, 0.f, 1.f);
-                std::string label = "loop [" + loop.label + "]";
                 ImVec2 ts = ImGui::CalcTextSize(label.c_str());
-                dl->AddRectFilled(p0, ImVec2(p0.x + ts.x + em, p0.y + ts.y + 0.3f * em), fill);
-                dl->AddText(ImVec2(p0.x + 0.5f * em, p0.y + 0.15f * em), textCol, label.c_str());
+                for (float top : {origin.y, origin.y + seq.height - seq.boxHeight})
+                {
+                    if (seq.participantIsActor[i])
+                    {
+                        DrawActor(dl, cx, top, lineCol, em);
+                        dl->AddText(ImVec2(cx - ts.x / 2.f, top + 2.3f * em), textCol, label.c_str());
+                        continue;
+                    }
+                    bool above = top == origin.y;  // the box touches the lifeline: at the bottom of the header above, at the top below
+                    float y = above ? top + seq.boxHeight - boxH : top;
+                    ImVec2 p0(cx - seq.boxWidth[i] / 2.f, y), p1(cx + seq.boxWidth[i] / 2.f, y + boxH);
+                    OpaqueRect(dl, p0, p1, fill, 0.2f * em);
+                    StrokeRect(dl, p0, p1, lineCol, 0.2f * em, 1.5f);
+                    CenteredText(dl, ImVec2(cx, y + boxH / 2.f), textCol, label);
+                }
+                DashedLine(dl, ImVec2(cx, origin.y + seq.boxHeight), ImVec2(cx, origin.y + seq.height - seq.boxHeight), lineCol, 0.5f * em, 0.5f * em, 1.f);
             }
-            // Rows: messages and notes
-            for (size_t k = 0; k < seq.rows.size(); ++k)
+
+            // Activations
+            for (const SequenceActivation& a : seq.activations)
             {
-                const SequenceRow& r = seq.rows[k];
+                ImVec2 p0 = Add(origin, a.boxMin), p1 = Add(origin, a.boxMax);
+                OpaqueRect(dl, p0, p1, fill, 0.f);
+                StrokeRect(dl, p0, p1, lineCol, 0.f, 1.f);
+            }
+
+            // Frames: a border, the kind in a tab, the label; dashed separators between the sections
+            for (const SequenceFrame& f : seq.frames)
+            {
+                if (f.kind == "rect")
+                    continue;
+                ImVec2 p0 = Add(origin, f.frameMin), p1 = Add(origin, f.frameMax);
+                StrokeRect(dl, p0, p1, lineCol, 0.f, 1.f);
+                ImVec2 kindSize = ImGui::CalcTextSize(f.kind.c_str());
+                ImVec2 tab(p0.x + kindSize.x + 0.8f * em, p0.y + lineHeight + 0.5f * em);
+                ImVec2 tabPts[5] = {p0, ImVec2(tab.x + 0.3f * em, p0.y), ImVec2(tab.x + 0.3f * em, tab.y - 0.3f * em), ImVec2(tab.x, tab.y), ImVec2(p0.x, tab.y)};
+                dl->AddConvexPolyFilled(tabPts, 5, windowBg);
+                dl->AddConvexPolyFilled(tabPts, 5, fill);
+                StrokeClosedPolyline(dl, tabPts, 5, lineCol, 1.f);
+                dl->AddText(ImVec2(p0.x + 0.4f * em, p0.y + 0.25f * em), textCol, f.kind.c_str());
+                auto label = [&](const std::string& text, float y) {
+                    if (text.empty())
+                        return;
+                    std::string shown = "[" + text + "]";
+                    float w = ImGui::CalcTextSize(shown.c_str()).x;
+                    float x = std::max((p0.x + p1.x) / 2.f - w / 2.f, tab.x + 0.8f * em);
+                    dl->AddText(ImVec2(x, y), textCol, shown.c_str());
+                };
+                label(f.label, p0.y + 0.25f * em);
+                for (size_t k = 0; k < f.sections.size() && k < f.sectionY.size(); ++k)
+                {
+                    float y = origin.y + f.sectionY[k];
+                    DashedLine(dl, ImVec2(p0.x, y), ImVec2(p1.x, y), lineCol, 0.4f * em, 0.3f * em, 1.f);
+                    label(f.sections[k].second, y + 0.25f * em);
+                }
+            }
+
+            // Rows: messages and notes
+            for (const SequenceRow& r : seq.rows)
+            {
                 float y = origin.y + r.y;
                 ImVec2 textPos = Add(origin, r.textMin);
                 if (r.isNote)
                 {
                     ImVec2 p0 = Add(origin, r.boxMin), p1 = Add(origin, r.boxMax);
-                    dl->AddRectFilled(p0, p1, noteFill, 0.1f * em);
+                    OpaqueRect(dl, p0, p1, noteFill, 0.1f * em);
                     StrokeRect(dl, p0, p1, lineCol, 0.1f * em, 1.f);
-                    dl->AddText(textPos, textCol, r.text.c_str());
+                    CenteredText(dl, ImVec2((p0.x + p1.x) / 2.f, (p0.y + p1.y) / 2.f), textCol, r.text);
                     continue;
                 }
-                float xa = origin.x + seq.xCenter[r.src], xb = origin.x + seq.xCenter[r.dst];
-                ImVec2 tip;
-                float direction;
+                float xa = origin.x + r.xStart, xb = origin.x + r.xEnd;
+                const float thickness = 1.5f;
                 if (r.src == r.dst)  // a message to itself: a small hook on the right of the lifeline
                 {
                     float w = 1.5f * em;
                     ImVec2 pts[4] = {ImVec2(xa, y - 0.5f * em), ImVec2(xa + w, y - 0.5f * em), ImVec2(xa + w, y + 0.5f * em), ImVec2(xa, y + 0.5f * em)};
+                    float end = DrawSequenceArrow(dl, r.arrowEnd, pts[3], -1.f, lineCol, em);
+                    pts[3].x = end;
                     for (int i = 0; i < 3; ++i)
-                        dl->AddLine(pts[i], pts[i + 1], lineCol, 1.5f);
-                    dl->AddText(textPos, textCol, r.text.c_str());
-                    tip = pts[3];
-                    direction = -1.f;
-                }
-                else
-                {
-                    if (r.dashed)
                     {
-                        float length = std::fabs(xb - xa), sign = xb > xa ? 1.f : -1.f;
-                        for (float d = 0.f; d < length; d += 0.8f * em)
-                            dl->AddLine(ImVec2(xa + sign * d, y), ImVec2(xa + sign * std::min(d + 0.5f * em, length), y), lineCol, 1.5f);
+                        if (r.dashed)
+                            DashedLine(dl, pts[i], pts[i + 1], lineCol, 0.5f * em, 0.3f * em, thickness);
+                        else
+                            dl->AddLine(pts[i], pts[i + 1], lineCol, thickness);
                     }
-                    else
-                        dl->AddLine(ImVec2(xa, y), ImVec2(xb, y), lineCol, 1.5f);
-                    dl->AddText(textPos, textCol, r.text.c_str());
-                    tip = ImVec2(xb, y);
-                    direction = xb > xa ? 1.f : -1.f;
-                }
-                float s = 0.55f * em;
-                ImVec2 back(tip.x - direction * s, tip.y);
-                if (r.arrowhead)
-                {
-                    // the line stops at the base
-                    dl->AddRectFilled(ImVec2(std::min(tip.x, back.x), tip.y - 1.f), ImVec2(std::max(tip.x, back.x), tip.y + 1.f), ImGui::GetColorU32(ImGuiCol_WindowBg));
-                    dl->AddTriangleFilled(tip, ImVec2(back.x, tip.y - s * 0.45f), ImVec2(back.x, tip.y + s * 0.45f), lineCol);
                 }
                 else
                 {
-                    dl->AddLine(tip, ImVec2(back.x, tip.y - s * 0.45f), lineCol, 1.5f);
-                    dl->AddLine(tip, ImVec2(back.x, tip.y + s * 0.45f), lineCol, 1.5f);
+                    float direction = xb > xa ? 1.f : -1.f;
+                    float end = DrawSequenceArrow(dl, r.arrowEnd, ImVec2(xb, y), direction, lineCol, em);
+                    float start = DrawSequenceArrow(dl, r.arrowStart, ImVec2(xa, y), -direction, lineCol, em);
+                    if (r.dashed)
+                        DashedLine(dl, ImVec2(start, y), ImVec2(end, y), lineCol, 0.5f * em, 0.3f * em, thickness);
+                    else
+                        dl->AddLine(ImVec2(start, y), ImVec2(end, y), lineCol, thickness);
+                }
+                std::string lines = r.text;
+                CenteredText(dl, ImVec2((textPos.x + origin.x + r.textMax.x) / 2.f, (textPos.y + origin.y + r.textMax.y) / 2.f), textCol, lines);
+                if (r.number > 0)  // autonumber: in a disc at the start of the line
+                {
+                    std::string number = std::to_string(r.number);
+                    float radius = std::max(0.6f * em, ImGui::CalcTextSize(number.c_str()).x / 2.f + 0.25f * em);
+                    dl->AddCircleFilled(ImVec2(xa, y), radius, textCol);
+                    CenteredText(dl, ImVec2(xa, y), windowBg, number);
                 }
             }
         }

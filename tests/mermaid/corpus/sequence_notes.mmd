@@ -1,0 +1,10 @@
+%% Notes left of, right of, and over one or two participants
+%% expect: participants=2 messages=1 notes=4
+sequenceDiagram
+    participant A as Alice
+    participant B as Bob
+    Note left of A: left of Alice
+    Note right of A: right of Alice
+    A->>B: hello
+    Note over B: over Bob
+    Note over A,B: over both

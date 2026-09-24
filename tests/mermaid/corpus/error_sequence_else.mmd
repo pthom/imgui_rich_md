@@ -1,0 +1,8 @@
+%% `else` outside of an alt
+%% expect: error_line=6
+sequenceDiagram
+    loop forever
+        A->>B: hello
+    else not allowed here
+        A->>B: bye
+    end

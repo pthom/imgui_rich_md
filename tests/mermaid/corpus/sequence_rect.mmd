@@ -1,0 +1,12 @@
+%% Highlighted regions (rect rgb / rgba), nested
+%% expect: participants=2 messages=3 frames=2
+sequenceDiagram
+    participant A
+    participant B
+    rect rgb(80, 120, 200)
+        A->>B: inside the blue region
+        rect rgba(200, 80, 80, 0.5)
+            B->>A: inside the red one too
+        end
+    end
+    A->>B: outside

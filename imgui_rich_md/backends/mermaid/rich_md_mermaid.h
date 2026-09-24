@@ -75,34 +75,55 @@ namespace RichMd::Mermaid
     };
 
     // Sequence diagrams
+    enum class SequenceArrow { None, Filled, Open, Cross };
+
     struct SequenceRow
     {
         bool isNote = false;
         int src = 0, dst = 0;          // message
-        bool dashed = false, arrowhead = true;
+        bool dashed = false;
+        SequenceArrow arrowStart = SequenceArrow::None, arrowEnd = SequenceArrow::Filled;
+        int number = 0;                // autonumber (0: none)
         std::vector<int> over;         // note: the participants it covers
+        int notePlacement = 0;         // note: 0 over, -1 left of, 1 right of
         std::string text;
         // filled by the layout, relative to the diagram's origin
-        float y = 0.f;                 // the row's middle
+        float y = 0.f;                 // the line of a message, the middle of a note
+        float xStart = 0.f, xEnd = 0.f;  // message: the ends of its line (activations move them)
         ImVec2 textMin, textMax;       // where the text is drawn
         ImVec2 boxMin, boxMax;         // note: its box
     };
 
-    struct SequenceLoop
+    // loop, alt, opt, par, critical, break: a frame with a header; rect: a colored background
+    struct SequenceFrame
     {
-        std::string label;
-        int first = 0, last = -1;      // the rows inside the loop
-        ImVec2 frameMin, frameMax;     // filled by the layout
+        std::string kind, label;
+        int first = 0, last = -1;      // the rows inside the frame
+        std::vector<std::pair<int, std::string>> sections;  // else / and / option: the row where each starts, its label
+        ImU32 color = 0;               // rect
+        // filled by the layout
+        int depth = 0;                 // nesting
+        ImVec2 frameMin, frameMax;
+        std::vector<float> sectionY;   // the separators
+    };
+
+    struct SequenceActivation
+    {
+        int participant = 0;
+        int startRow = -1, endRow = -1;  // the rows of the messages that start and end it (-1: before the first row)
+        ImVec2 boxMin, boxMax;           // filled by the layout
     };
 
     struct Sequence
     {
         std::vector<std::string> participantIds, participantLabels;
+        std::vector<bool> participantIsActor;
         std::vector<SequenceRow> rows;
-        std::vector<SequenceLoop> loops;
+        std::vector<SequenceFrame> frames;
+        std::vector<SequenceActivation> activations;
         // filled by the layout
         std::vector<float> boxWidth, xCenter;
-        float totalWidth = 0.f, boxHeight = 0.f, rowHeight = 0.f, height = 0.f;
+        float totalWidth = 0.f, boxHeight = 0.f, height = 0.f;
     };
 
     enum class DiagramKind { Flowchart, Sequence, Class };

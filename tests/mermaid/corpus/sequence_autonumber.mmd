@@ -1,0 +1,10 @@
+%% autonumber, and line breaks in messages and notes
+%% expect: participants=2 messages=3 notes=1
+sequenceDiagram
+    autonumber
+    participant A as Alice
+    participant B as Bob
+    A->>B: a message<br/>on two lines
+    B-->>A: reply
+    Note over A,B: a note<br/>on two lines
+    A->>A: think

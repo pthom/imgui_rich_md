@@ -1,0 +1,13 @@
+%% Activations: explicit, with the +/- shorthand, nested
+%% expect: participants=2 messages=6
+sequenceDiagram
+    participant A as Alice
+    participant J as John
+    A->>+J: Hello John, how are you?
+    A->>+J: John, can you hear me?
+    J-->>-A: Hi Alice, I can hear you!
+    J-->>-A: I feel great!
+    A->>J: bye
+    activate J
+    J->>A: bye
+    deactivate J

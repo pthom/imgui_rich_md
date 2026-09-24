@@ -1,0 +1,9 @@
+%% Actors (stick figures) next to participants (boxes)
+%% expect: participants=3 messages=3
+sequenceDiagram
+    actor U as User
+    participant W as Web app
+    actor O as Operator
+    U->>W: click
+    W->>O: page
+    O-->>U: call back

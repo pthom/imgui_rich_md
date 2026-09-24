@@ -1,0 +1,32 @@
+%% The frames: alt / else, opt, par / and, critical / option, break, and a loop inside an alt
+%% expect: participants=3 messages=11 frames=6
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    participant D as Database
+    C->>S: request
+    alt cached
+        S-->>C: cached answer
+    else not cached
+        loop each page
+            S->>D: query
+            D-->>S: rows
+        end
+        S-->>C: fresh answer
+    end
+    opt metrics enabled
+        S->>S: count the request
+    end
+    par notify
+        S-)C: event
+    and log
+        S-)D: log line
+    end
+    critical write
+        S->>D: commit
+    option conflict
+        S->>D: retry
+    end
+    break database down
+        S-->>C: error
+    end

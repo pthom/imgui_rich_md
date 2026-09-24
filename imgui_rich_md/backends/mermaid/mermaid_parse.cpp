@@ -3,7 +3,10 @@
 // except the styling and interaction lines, which are skipped.
 #include "rich_md_mermaid.h"
 
+#include <algorithm>
 #include <cctype>
+#include <cstdlib>
+#include <map>
 #include <string_view>
 
 namespace RichMd::Mermaid
@@ -452,17 +455,19 @@ namespace RichMd::Mermaid
         // Sequence diagrams
         // ---------------------------------------------------------------------------------------------------------
 
-        int AddParticipant(Sequence& seq, string_view id, string_view label = {})
+        int AddParticipant(Sequence& seq, string_view id, string_view label = {}, bool actor = false)
         {
             for (size_t i = 0; i < seq.participantIds.size(); ++i)
                 if (seq.participantIds[i] == id)
                 {
                     if (!label.empty())
-                        seq.participantLabels[i] = std::string(label);
+                        seq.participantLabels[i] = CleanLabel(label);
+                    seq.participantIsActor[i] = seq.participantIsActor[i] || actor;
                     return (int)i;
                 }
             seq.participantIds.emplace_back(id);
-            seq.participantLabels.emplace_back(label.empty() ? id : label);
+            seq.participantLabels.push_back(CleanLabel(label.empty() ? id : label));
+            seq.participantIsActor.push_back(actor);
             return (int)seq.participantIds.size() - 1;
         }
 
@@ -482,19 +487,21 @@ namespace RichMd::Mermaid
             if (!EqualsNoCase(FirstWord(line), "note"))
                 return false;
             string_view rest = AfterFirstWord(line);
+            SequenceRow row;
+            row.isNote = true;
             bool found = false;
-            for (string_view where : {"over", "right of", "left of"})
+            const std::pair<string_view, int> placements[] = {{"over", 0}, {"right of", 1}, {"left of", -1}};
+            for (const auto& [where, placement] : placements)
                 if (rest.size() > where.size() && EqualsNoCase(rest.substr(0, where.size()), where) && std::isspace((unsigned char)rest[where.size()]))
                 {
                     rest = Trim(rest.substr(where.size()));
+                    row.notePlacement = placement;
                     found = true;
                     break;
                 }
             size_t colon = rest.find(':');
             if (!found || colon == string_view::npos)
                 return false;
-            SequenceRow row;
-            row.isNote = true;
             string_view names = rest.substr(0, colon);
             while (!names.empty())
             {
@@ -507,87 +514,214 @@ namespace RichMd::Mermaid
                     break;
                 names.remove_prefix(comma + 1);
             }
-            row.text = std::string(Trim(rest.substr(colon + 1)));
+            if (row.notePlacement != 0 && row.over.size() != 1)
+                return false;
+            row.text = CleanLabel(rest.substr(colon + 1));
             seq.rows.push_back(row);
             return true;
         }
 
-        // A->>B: text, with the arrows ->, -->, ->>, -->>
-        bool ScanMessage(string_view line, Sequence& seq)
+        // The state of the parser of a sequence diagram
+        struct SequenceParser
         {
+            Sequence& seq;
+            std::vector<std::pair<int, int>> openFrames;         // index in seq.frames, line of the opening
+            std::map<int, std::vector<int>> openActivations;    // participant -> indices in seq.activations
+            int nextNumber = 0, numberStep = 1;                 // autonumber (0: off)
+
+            void Activate(int participant, int row)
+            {
+                SequenceActivation a;
+                a.participant = participant;
+                a.startRow = row;
+                openActivations[participant].push_back((int)seq.activations.size());
+                seq.activations.push_back(a);
+            }
+            bool Deactivate(int participant, int row)
+            {
+                auto& open = openActivations[participant];
+                if (open.empty())
+                    return false;
+                seq.activations[open.back()].endRow = row;
+                open.pop_back();
+                return true;
+            }
+        };
+
+        // A->>B: text, A-->>+B: text (activates B), B-->>-A: text (deactivates B)
+        // The arrows: ->, --> (no head), ->>, -->> (filled), -x, --x (cross), -), --) (open), <<->>, <<-->> (both)
+        bool ScanMessage(string_view line, SequenceParser& parser, std::string* error)
+        {
+            Sequence& seq = parser.seq;
+            struct ArrowToken { string_view token; bool dashed; SequenceArrow start, end; };
+            static const ArrowToken arrows[] = {
+                {"<<-->>", true, SequenceArrow::Filled, SequenceArrow::Filled}, {"<<->>", false, SequenceArrow::Filled, SequenceArrow::Filled},
+                {"-->>", true, SequenceArrow::None, SequenceArrow::Filled}, {"->>", false, SequenceArrow::None, SequenceArrow::Filled},
+                {"--x", true, SequenceArrow::None, SequenceArrow::Cross}, {"-x", false, SequenceArrow::None, SequenceArrow::Cross},
+                {"--)", true, SequenceArrow::None, SequenceArrow::Open}, {"-)", false, SequenceArrow::None, SequenceArrow::Open},
+                {"-->", true, SequenceArrow::None, SequenceArrow::None}, {"->", false, SequenceArrow::None, SequenceArrow::None},
+            };
             Scanner sc{line};
             string_view src = sc.Word();
             sc.SkipSpaces();
-            SequenceRow row;
-            if (sc.Eat("-->>"))
-                row.dashed = true, row.arrowhead = true;
-            else if (sc.Eat("->>"))
-                row.dashed = false, row.arrowhead = true;
-            else if (sc.Eat("-->"))
-                row.dashed = true, row.arrowhead = false;
-            else if (sc.Eat("->"))
-                row.dashed = false, row.arrowhead = false;
-            else
+            const ArrowToken* found = nullptr;
+            for (const ArrowToken& a : arrows)  // the longest token that matches
+                if (sc.Rest().substr(0, a.token.size()) == a.token && (!found || a.token.size() > found->token.size()))
+                    found = &a;
+            if (src.empty() || !found)
                 return false;
+            sc.i += found->token.size();
+            sc.SkipSpaces();
+            bool activate = sc.Eat("+"), deactivate = !activate && sc.Eat("-");
             sc.SkipSpaces();
             string_view dst = sc.Word();
             sc.SkipSpaces();
-            if (src.empty() || dst.empty() || !sc.Eat(":"))
+            if (dst.empty() || !sc.Eat(":"))
                 return false;
+            SequenceRow row;
+            row.dashed = found->dashed;
+            row.arrowStart = found->start;
+            row.arrowEnd = found->end;
             row.src = AddParticipant(seq, src);
             row.dst = AddParticipant(seq, dst);
-            row.text = std::string(Trim(sc.Rest()));
+            row.text = CleanLabel(sc.Rest());
+            if (parser.nextNumber > 0)
+            {
+                row.number = parser.nextNumber;
+                parser.nextNumber += parser.numberStep;
+            }
+            int index = (int)seq.rows.size();
             seq.rows.push_back(row);
+            if (activate)
+                parser.Activate(row.dst, index);
+            if (deactivate && !parser.Deactivate(row.src, index))
+            {
+                *error = "`" + std::string(src) + "` is not active";
+                return false;
+            }
             return true;
+        }
+
+        // rgb(r, g, b) or rgba(r, g, b, a); 0 for another color (drawn with a neutral tint)
+        ImU32 ParseColor(string_view text)
+        {
+            text = Trim(text);
+            size_t open = text.find('('), close = text.rfind(')');
+            if (open == string_view::npos || close == string_view::npos || close < open)
+                return 0;
+            std::string numbers(text.substr(open + 1, close - open - 1));
+            float v[4] = {0.f, 0.f, 0.f, 1.f};
+            int count = 0;
+            const char* p = numbers.c_str();
+            while (count < 4)
+            {
+                char* end = nullptr;
+                float value = std::strtof(p, &end);
+                if (end == p)
+                    break;
+                v[count++] = value;
+                p = end;
+                while (*p == ',' || std::isspace((unsigned char)*p))
+                    ++p;
+            }
+            if (count < 3)
+                return 0;
+            return ImGui::ColorConvertFloat4ToU32(ImVec4(v[0] / 255.f, v[1] / 255.f, v[2] / 255.f, v[3]));
         }
 
         void ParseSequence(const std::vector<SourceLine>& lines, Diagram& d)
         {
             Sequence& seq = d.sequence;
-            std::vector<SequenceLoop> openLoops;
+            SequenceParser parser{seq, {}, {}};
             for (const SourceLine& line : lines)
             {
                 string_view word = FirstWord(line.text);
-                if (word == "sequenceDiagram" || word == "activate" || word == "deactivate")
+                string_view rest = AfterFirstWord(line.text);
+                if (word == "sequenceDiagram")
                     continue;
                 if (word == "participant" || word == "actor")
                 {
-                    string_view rest = AfterFirstWord(line.text);
                     size_t as = rest.find(" as ");
                     if (as == string_view::npos)
-                        AddParticipant(seq, Trim(rest));
+                        AddParticipant(seq, Trim(rest), {}, word == "actor");
                     else
-                        AddParticipant(seq, Trim(rest.substr(0, as)), Trim(rest.substr(as + 4)));
+                        AddParticipant(seq, Trim(rest.substr(0, as)), Trim(rest.substr(as + 4)), word == "actor");
                     continue;
                 }
-                if (word == "loop")
+                if (word == "autonumber")
                 {
-                    SequenceLoop loop;
-                    loop.label = std::string(AfterFirstWord(line.text));
-                    loop.first = (int)seq.rows.size();
-                    openLoops.push_back(loop);
+                    Scanner sc{rest};
+                    string_view start = sc.Word();
+                    sc.SkipSpaces();
+                    string_view step = sc.Word();
+                    parser.nextNumber = start.empty() ? 1 : std::atoi(std::string(start).c_str());
+                    parser.numberStep = step.empty() ? 1 : std::atoi(std::string(step).c_str());
+                    continue;
+                }
+                if (word == "activate" || word == "deactivate")
+                {
+                    int participant = AddParticipant(seq, Trim(rest));
+                    int row = (int)seq.rows.size() - 1;  // the message just before
+                    if (word == "activate")
+                        parser.Activate(participant, row);
+                    else if (!parser.Deactivate(participant, row))
+                    {
+                        d.error = LineError(line.number, "`" + std::string(Trim(rest)) + "` is not active");
+                        return;
+                    }
+                    continue;
+                }
+                if (word == "loop" || word == "alt" || word == "opt" || word == "par" || word == "critical" || word == "break" || word == "rect")
+                {
+                    SequenceFrame frame;
+                    frame.kind = std::string(word);
+                    if (word == "rect")
+                        frame.color = ParseColor(rest);
+                    else
+                        frame.label = CleanLabel(rest);
+                    frame.first = (int)seq.rows.size();
+                    parser.openFrames.push_back({(int)seq.frames.size(), line.number});
+                    seq.frames.push_back(frame);
+                    continue;
+                }
+                if (word == "else" || word == "and" || word == "option")
+                {
+                    const char* owner = word == "else" ? "alt" : word == "and" ? "par" : "critical";
+                    if (parser.openFrames.empty() || seq.frames[parser.openFrames.back().first].kind != owner)
+                    {
+                        d.error = LineError(line.number, "`" + std::string(word) + "` outside of " + owner);
+                        return;
+                    }
+                    seq.frames[parser.openFrames.back().first].sections.push_back({(int)seq.rows.size(), CleanLabel(rest)});
                     continue;
                 }
                 if (line.text == "end")
                 {
-                    if (openLoops.empty())
+                    if (parser.openFrames.empty())
                     {
                         d.error = LineError(line.number, "`end` without a block to close");
                         return;
                     }
-                    SequenceLoop loop = openLoops.back();
-                    openLoops.pop_back();
-                    loop.last = (int)seq.rows.size() - 1;
-                    seq.loops.push_back(loop);
+                    seq.frames[parser.openFrames.back().first].last = (int)seq.rows.size() - 1;
+                    parser.openFrames.pop_back();
                     continue;
                 }
-                if (IsStylingLine(word))
+                if (IsStylingLine(word) || word == "links")
                     continue;
-                if (ScanNote(line.text, seq) || ScanMessage(line.text, seq))
+                std::string error;
+                if (ScanNote(line.text, seq) || ScanMessage(line.text, parser, &error))
                     continue;
-                d.error = LineError(line.number, "cannot parse `" + std::string(line.text) + "`");
+                d.error = LineError(line.number, error.empty() ? "cannot parse `" + std::string(line.text) + "`" : error);
                 return;
             }
+            if (!parser.openFrames.empty())
+            {
+                d.error = LineError(parser.openFrames.back().second, "`" + seq.frames[parser.openFrames.back().first].kind + "` without its `end`");
+                return;
+            }
+            for (const auto& [participant, open] : parser.openActivations)  // still active at the end: up to the last row
+                for (int index : open)
+                    seq.activations[index].endRow = std::max((int)seq.rows.size() - 1, seq.activations[index].startRow);
         }
 
         // ---------------------------------------------------------------------------------------------------------

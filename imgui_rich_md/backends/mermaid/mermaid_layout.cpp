@@ -555,60 +555,207 @@ namespace RichMd::Mermaid
                 move(r.cardinalitySrcPos), move(r.cardinalityDstPos);
         }
 
+        // The rows go down one after the other, each as tall as its text; a frame adds a header band where it starts
+        // (and where each of its sections starts), and a margin where it ends
         void LayoutSequence(Sequence& seq, float em)
         {
             const int n = (int)seq.participantIds.size();
-            // A column per participant, wide enough for its label and for the messages to its neighbours
+            const float lineHeight = ImGui::GetTextLineHeight();
+            const float half = 0.35f * em;                    // half the width of an activation box
+            const float headerBand = lineHeight + 0.6f * em;  // the header of a frame, or of a section
+            bool anyActor = false;
+            for (bool actor : seq.participantIsActor)
+                anyActor = anyActor || actor;
+            seq.boxHeight = lineHeight + (anyActor ? 2.6f : 1.f) * em;
             seq.boxWidth.assign(n, 0.f);
             for (int i = 0; i < n; ++i)
-                seq.boxWidth[i] = ImGui::CalcTextSize(seq.participantLabels[i].c_str()).x + 2.f * em;
-            float columnGap = 3.f * em;
-            for (const SequenceRow& row : seq.rows)
-                if (!row.isNote && row.src != row.dst && std::abs(row.src - row.dst) == 1)
-                    columnGap = std::max(columnGap, ImGui::CalcTextSize(row.text.c_str()).x + 2.f * em);
-            seq.xCenter.assign(n, 0.f);
-            float x = 0.f;
-            for (int i = 0; i < n; ++i)
-            {
-                seq.xCenter[i] = x + seq.boxWidth[i] / 2.f;
-                x += seq.boxWidth[i] + columnGap;
-            }
-            seq.totalWidth = x - columnGap;
-            seq.boxHeight = ImGui::GetTextLineHeight() + em;
-            seq.rowHeight = 2.2f * em;
-            seq.height = seq.boxHeight + (float)(seq.rows.size() + 1) * seq.rowHeight + seq.boxHeight;
+                seq.boxWidth[i] = std::max(ImGui::CalcTextSize(seq.participantLabels[i].c_str()).x + 2.f * em, 3.f * em);
 
-            // Rows: a note centered over its participants, a message's text above its line, or on the right of the
-            // hook of a message to itself
-            for (size_t k = 0; k < seq.rows.size(); ++k)
+            // The distance between two neighbours: room for their boxes, for the messages between them, for the notes
+            // beside them
+            std::vector<float> distance(n > 0 ? n - 1 : 0);
+            for (int i = 0; i + 1 < n; ++i)
+                distance[i] = seq.boxWidth[i] / 2.f + 3.f * em + seq.boxWidth[i + 1] / 2.f;
+            for (const SequenceRow& r : seq.rows)
             {
+                float textWidth = ImGui::CalcTextSize(r.text.c_str()).x;
+                if (!r.isNote && std::abs(r.src - r.dst) == 1)
+                {
+                    int i = std::min(r.src, r.dst);
+                    distance[i] = std::max(distance[i], textWidth + 2.f * em + (r.number > 0 ? 1.4f * em : 0.f));
+                }
+                if (r.isNote && r.notePlacement == 1 && r.over[0] + 1 < n)
+                    distance[r.over[0]] = std::max(distance[r.over[0]], textWidth + 2.2f * em);
+                if (r.isNote && r.notePlacement == -1 && r.over[0] > 0)
+                    distance[r.over[0] - 1] = std::max(distance[r.over[0] - 1], textWidth + 2.2f * em);
+            }
+            seq.xCenter.assign(n, 0.f);
+            if (n > 0)
+                seq.xCenter[0] = seq.boxWidth[0] / 2.f;
+            for (int i = 1; i < n; ++i)
+                seq.xCenter[i] = seq.xCenter[i - 1] + distance[i - 1];
+            seq.totalWidth = n > 0 ? seq.xCenter[n - 1] + seq.boxWidth[n - 1] / 2.f : 0.f;
+
+            // Rows and frames, from top to bottom
+            const int rowCount = (int)seq.rows.size();
+            auto isEmpty = [](const SequenceFrame& f) { return f.last < f.first; };
+            float cursor = seq.boxHeight + 0.5f * em;
+            for (SequenceFrame& f : seq.frames)
+                f.sectionY.clear();
+            auto boundary = [&](int k) {  // between the rows k - 1 and k
+                for (int fi = (int)seq.frames.size() - 1; fi >= 0; --fi)  // the frames that end, the inner ones first
+                {
+                    SequenceFrame& f = seq.frames[fi];
+                    if (!isEmpty(f) && f.last == k - 1)
+                        cursor += 0.4f * em, f.frameMax.y = cursor;
+                }
+                for (SequenceFrame& f : seq.frames)  // the sections that start (before the frames opened in them)
+                    for (const auto& [row, label] : f.sections)
+                        if (row == k)
+                            f.sectionY.push_back(cursor), cursor += headerBand;
+                for (SequenceFrame& f : seq.frames)  // the frames that start, the outer ones first
+                {
+                    if (f.first != k)
+                        continue;
+                    f.frameMin.y = cursor;
+                    cursor += f.kind == "rect" ? 0.3f * em : headerBand;
+                    if (isEmpty(f))
+                        cursor += 0.4f * em, f.frameMax.y = cursor;
+                }
+            };
+            for (int k = 0; k < rowCount; ++k)
+            {
+                boundary(k);
                 SequenceRow& r = seq.rows[k];
-                r.y = seq.boxHeight + (float)(k + 1) * seq.rowHeight;
                 ImVec2 ts = ImGui::CalcTextSize(r.text.c_str());
                 if (r.isNote)
                 {
-                    float xMin = 1e30f, xMax = -1e30f, sum = 0.f;
-                    for (int v : r.over)
-                    {
-                        float xv = seq.xCenter[v];
-                        xMin = std::min(xMin, xv), xMax = std::max(xMax, xv), sum += xv;
-                    }
-                    float cx = sum / (float)r.over.size();
-                    float half = std::max((xMax - xMin) / 2.f + em, ts.x / 2.f + 0.5f * em);
-                    r.boxMin = ImVec2(cx - half, r.y - ts.y / 2.f - 0.3f * em);
-                    r.boxMax = ImVec2(cx + half, r.y + ts.y / 2.f + 0.3f * em);
-                    r.textMin = ImVec2(cx - ts.x / 2.f, r.y - ts.y / 2.f);
+                    float top = cursor + 0.2f * em, h = ts.y + 0.6f * em;
+                    r.y = top + h / 2.f;
+                    r.boxMin.y = top, r.boxMax.y = top + h;
+                    cursor = top + h + 0.5f * em;
                 }
-                else if (r.src == r.dst)
-                    r.textMin = ImVec2(seq.xCenter[r.src] + 1.5f * em + 0.4f * em, r.y - ts.y / 2.f);
+                else if (r.src == r.dst)  // a hook, with the text beside it
+                {
+                    float extent = std::max(0.5f * em, ts.y / 2.f);
+                    r.y = cursor + 0.3f * em + extent;
+                    cursor = r.y + extent + 0.7f * em;
+                }
+                else  // the text above the line
+                {
+                    r.y = cursor + 0.3f * em + ts.y + 0.2f * em;
+                    cursor = r.y + 0.7f * em;
+                }
+            }
+            boundary(rowCount);
+            seq.height = cursor + 0.5f * em + seq.boxHeight;
+
+            // Activations: a box on the lifeline, from the message that starts it to the one that ends it; the nested
+            // ones shifted to the right
+            auto rowY = [&](int row) { return row >= 0 && row < rowCount ? seq.rows[row].y : seq.boxHeight + 0.5f * em; };
+            for (size_t ai = 0; ai < seq.activations.size(); ++ai)
+            {
+                SequenceActivation& a = seq.activations[ai];
+                float y0 = rowY(a.startRow), y1 = std::max(rowY(a.endRow), y0 + 0.6f * em);
+                int depth = 0;
+                for (size_t bi = 0; bi < ai; ++bi)
+                {
+                    const SequenceActivation& b = seq.activations[bi];
+                    if (b.participant == a.participant && b.boxMin.y <= y0 && y0 < b.boxMax.y)
+                        ++depth;
+                }
+                float x0 = seq.xCenter[a.participant] - half + (float)depth * half;
+                a.boxMin = ImVec2(x0, y0);
+                a.boxMax = ImVec2(x0 + 2.f * half, y1);
+            }
+            auto activeDepth = [&](int participant, float y) {
+                int depth = 0;
+                for (const SequenceActivation& a : seq.activations)
+                    if (a.participant == participant && a.boxMin.y - 0.01f <= y && y <= a.boxMax.y + 0.01f)
+                        ++depth;
+                return depth;
+            };
+
+            // Messages and notes, across
+            for (SequenceRow& r : seq.rows)
+            {
+                ImVec2 ts = ImGui::CalcTextSize(r.text.c_str());
+                if (r.isNote)
+                {
+                    float w = ts.x + 1.f * em;
+                    float x0, x1;
+                    if (r.notePlacement == 1)
+                        x0 = seq.xCenter[r.over[0]] + 0.6f * em, x1 = x0 + w;
+                    else if (r.notePlacement == -1)
+                        x1 = seq.xCenter[r.over[0]] - 0.6f * em, x0 = x1 - w;
+                    else
+                    {
+                        float xMin = FLT_MAX, xMax = -FLT_MAX;
+                        for (int v : r.over)
+                            xMin = std::min(xMin, seq.xCenter[v]), xMax = std::max(xMax, seq.xCenter[v]);
+                        float cx = (xMin + xMax) / 2.f, halfWidth = std::max((xMax - xMin) / 2.f + em, w / 2.f);
+                        x0 = cx - halfWidth, x1 = cx + halfWidth;
+                    }
+                    r.boxMin.x = x0, r.boxMax.x = x1;
+                    r.textMin = ImVec2((x0 + x1) / 2.f - ts.x / 2.f, r.y - ts.y / 2.f);
+                }
                 else
-                    r.textMin = ImVec2((seq.xCenter[r.src] + seq.xCenter[r.dst]) / 2.f - ts.x / 2.f, r.y - ts.y - 0.2f * em);
+                {
+                    int ds = activeDepth(r.src, r.y), dd = activeDepth(r.dst, r.y);
+                    float xs = seq.xCenter[r.src], xd = seq.xCenter[r.dst];
+                    if (r.src == r.dst)
+                    {
+                        r.xStart = r.xEnd = xs + (float)ds * half;
+                        r.textMin = ImVec2(r.xStart + 1.9f * em, r.y - ts.y / 2.f);
+                    }
+                    else
+                    {
+                        bool right = xd > xs;
+                        r.xStart = right ? xs + (float)ds * half : xs - (ds > 0 ? half : 0.f);
+                        r.xEnd = right ? xd - (dd > 0 ? half : 0.f) : xd + (float)dd * half;
+                        r.textMin = ImVec2((r.xStart + r.xEnd) / 2.f - ts.x / 2.f, r.y - 0.2f * em - ts.y);
+                    }
+                }
                 r.textMax = ImVec2(r.textMin.x + ts.x, r.textMin.y + ts.y);
             }
-            for (SequenceLoop& loop : seq.loops)
+
+            // Frames, across: the participants and the texts of their rows, wider for each level of frame inside
+            std::vector<int> innerLevels(seq.frames.size(), 0);
+            auto inside = [&](const SequenceFrame& inner, const SequenceFrame& outer, size_t innerIndex, size_t outerIndex) {
+                return innerIndex > outerIndex && inner.first >= outer.first && inner.last <= outer.last;
+            };
+            for (size_t fi = seq.frames.size(); fi-- > 0;)
+                for (size_t gi = fi + 1; gi < seq.frames.size(); ++gi)
+                    if (inside(seq.frames[gi], seq.frames[fi], gi, fi))
+                        innerLevels[fi] = std::max(innerLevels[fi], innerLevels[gi] + 1);
+            for (size_t fi = 0; fi < seq.frames.size(); ++fi)
             {
-                loop.frameMin = ImVec2(-0.5f * em, seq.boxHeight + ((float)loop.first + 0.4f) * seq.rowHeight);
-                loop.frameMax = ImVec2(seq.totalWidth + 0.5f * em, seq.boxHeight + ((float)loop.last + 1.3f) * seq.rowHeight);
+                SequenceFrame& f = seq.frames[fi];
+                f.depth = 0;
+                for (size_t gi = 0; gi < fi; ++gi)
+                    if (inside(f, seq.frames[gi], fi, gi))
+                        ++f.depth;
+                float x0 = FLT_MAX, x1 = -FLT_MAX;
+                for (int k = f.first; k <= f.last && k < rowCount; ++k)
+                {
+                    const SequenceRow& r = seq.rows[k];
+                    std::vector<int> involved = r.isNote ? r.over : std::vector<int>{r.src, r.dst};
+                    for (int v : involved)
+                        x0 = std::min(x0, seq.xCenter[v] - seq.boxWidth[v] / 2.f), x1 = std::max(x1, seq.xCenter[v] + seq.boxWidth[v] / 2.f);
+                    x0 = std::min(x0, std::min(r.textMin.x, r.isNote ? r.boxMin.x : r.textMin.x) - 0.3f * em);
+                    x1 = std::max(x1, std::max(r.textMax.x, r.isNote ? r.boxMax.x : r.textMax.x) + 0.3f * em);
+                }
+                if (x0 > x1)  // no row: across the diagram
+                    x0 = 0.f, x1 = seq.totalWidth;
+                float grow = 0.5f * em + 0.4f * em * (float)innerLevels[fi];
+                f.frameMin.x = x0 - grow;
+                f.frameMax.x = x1 + grow;
+                // the header's width: the kind's tab and the label
+                if (f.kind != "rect")
+                {
+                    float header = ImGui::CalcTextSize(f.kind.c_str()).x + 2.f * em + ImGui::CalcTextSize(("[" + f.label + "]").c_str()).x;
+                    f.frameMax.x = std::max(f.frameMax.x, f.frameMin.x + header);
+                }
             }
 
             // What overflows (a wide note, the text of a message to itself) widens the diagram
@@ -620,9 +767,11 @@ namespace RichMd::Mermaid
                 extent.Add(r.textMin, r.textMax);
                 if (r.isNote)
                     extent.Add(r.boxMin, r.boxMax);
+                if (r.number > 0)
+                    extent.Add(ImVec2(r.xStart - 0.7f * em, r.y - 0.7f * em), ImVec2(r.xStart + 0.7f * em, r.y + 0.7f * em));
             }
-            for (const SequenceLoop& loop : seq.loops)
-                extent.Add(loop.frameMin, loop.frameMax);
+            for (const SequenceFrame& f : seq.frames)
+                extent.Add(f.frameMin, f.frameMax);
             ImVec2 size(seq.totalWidth, seq.height);
             ImVec2 d = FitDelta(extent, &size, em);
             seq.totalWidth = size.x;
@@ -631,9 +780,11 @@ namespace RichMd::Mermaid
             for (float& xc : seq.xCenter)
                 xc += d.x;
             for (SequenceRow& r : seq.rows)
-                r.textMin.x += d.x, r.textMax.x += d.x, r.boxMin.x += d.x, r.boxMax.x += d.x;
-            for (SequenceLoop& loop : seq.loops)
-                loop.frameMin.x += d.x, loop.frameMax.x += d.x;
+                r.textMin.x += d.x, r.textMax.x += d.x, r.boxMin.x += d.x, r.boxMax.x += d.x, r.xStart += d.x, r.xEnd += d.x;
+            for (SequenceFrame& f : seq.frames)
+                f.frameMin.x += d.x, f.frameMax.x += d.x;
+            for (SequenceActivation& a : seq.activations)
+                a.boxMin.x += d.x, a.boxMax.x += d.x;
         }
     }
 

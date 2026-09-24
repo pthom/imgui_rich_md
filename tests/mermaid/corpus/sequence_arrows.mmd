@@ -1,0 +1,15 @@
+%% Every arrow: lines without heads, filled heads, crosses, open (async) heads, both ends
+%% expect: participants=2 messages=10
+sequenceDiagram
+    participant A
+    participant B
+    A->B: solid line
+    A-->B: dotted line
+    A->>B: solid, filled head
+    A-->>B: dotted, filled head
+    A-xB: solid, cross
+    A--xB: dotted, cross
+    A-)B: solid, open head
+    A--)B: dotted, open head
+    A<<->>B: both ends
+    A<<-->>B: both ends, dotted

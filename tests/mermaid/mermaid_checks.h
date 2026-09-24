@@ -1,7 +1,7 @@
 // The checks of the Mermaid test corpus, shared by the test (mermaid_test.cpp) and the review tool.
 // A corpus file starts with comment lines:
 //   %% <what the diagram shows>
-//   %% expect: nodes=6 edges=6 subgraphs=3       (or participants=, messages=, notes=, loops=; error_line=N)
+//   %% expect: nodes=6 edges=6 subgraphs=3       (or participants=, messages=, notes=, frames=; error_line=N)
 //   %% known: label-on-node (<why>)              the checks known to fail until the layout improves
 // The layout checks need an ImGui frame, with the font the diagram is laid out with.
 #pragma once
@@ -146,7 +146,7 @@ namespace MermaidChecks
             counts["messages"] = counts["notes"] = 0;
             for (const SequenceRow& r : d.sequence.rows)
                 ++counts[r.isNote ? "notes" : "messages"];
-            counts["loops"] = (int)d.sequence.loops.size();
+            counts["frames"] = (int)d.sequence.frames.size();
         }
         else
         {
@@ -191,8 +191,10 @@ namespace MermaidChecks
                 if (r.isNote)
                     checkBounds(Rect{r.boxMin, r.boxMax, "note " + r.text});
             }
-            for (const SequenceLoop& loop : seq.loops)
-                checkBounds(Rect{loop.frameMin, loop.frameMax, "loop " + loop.label});
+            for (const SequenceFrame& f : seq.frames)
+                checkBounds(Rect{f.frameMin, f.frameMax, f.kind + " " + f.label});
+            for (const SequenceActivation& a : seq.activations)
+                checkBounds(Rect{a.boxMin, a.boxMax, "activation of " + seq.participantIds[a.participant]});
             return issues;
         }
 
