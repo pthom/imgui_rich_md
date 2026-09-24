@@ -80,6 +80,8 @@ namespace RichMd::Mermaid
         std::set<std::pair<int, int>> backEdges;  // (src, dst) of the edges that close a cycle
         int lanes = 0;             // edges routed past the graph: back edges and edges that skip a layer
         std::map<int, float> channels;  // along the main axis, where the edges from the layer r to the layer r + 1 run
+        std::map<int, float> laneExit, laneEntry;  // along the main axis: the first approach line of the lane edges
+                                                    // after the layer r (past its boxes), before it
         ImVec2 size;
     };
 

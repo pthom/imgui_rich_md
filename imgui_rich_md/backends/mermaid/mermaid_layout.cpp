@@ -207,19 +207,6 @@ namespace RichMd::Mermaid
             return {c0, c1};
         }
 
-        // The extent of a layer along the main axis
-        std::pair<float, float> LayerExtent(const Graph& graph, int rank)
-        {
-            float lo = FLT_MAX, hi = -FLT_MAX;
-            for (const Node& nd : graph.nodes)
-                if (nd.rank == rank)
-                {
-                    float p = graph.vertical ? nd.pos.y : nd.pos.x, size = graph.vertical ? nd.size.y : nd.size.x;
-                    lo = std::min(lo, p), hi = std::max(hi, p + size);
-                }
-            return {lo, hi};
-        }
-
         std::vector<ImVec2> EdgePoints(const Graph& graph, const Edge& e, float em, std::pair<float, float> anchor)
         {
             const bool vertical = graph.vertical;
@@ -235,10 +222,10 @@ namespace RichMd::Mermaid
             ImVec2 pa = vertical ? ImVec2(c0, m0) : ImVec2(m0, c0), pb = vertical ? ImVec2(c1, m1) : ImVec2(m1, c1);
             if (e.lane > 0)
             {
-                // not in the middle of the gaps, where the forward edges run; each lane on its own approach lines
-                const float halfGap = 0.7f * em, step = 0.45f * em;
-                float exit = std::max(LayerExtent(graph, a.rank).second, srcEnd) + halfGap + (float)e.exitTrack * step;
-                float entry = std::min(LayerExtent(graph, b.rank).first, dstStart) - halfGap - (float)e.entryTrack * step;
+                // each lane on its own approach lines, in the room the gaps keep for them (away from the channels)
+                const float step = 0.45f * em;
+                float exit = graph.laneExit.at(a.rank) + (float)e.exitTrack * step;
+                float entry = graph.laneEntry.at(b.rank) - (float)e.entryTrack * step;
                 float lanePos = (vertical ? graph.size.x : graph.size.y) - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)e.lane;
                 if (vertical)
                     return {pa, ImVec2(pa.x, exit), ImVec2(lanePos, exit), ImVec2(lanePos, entry), ImVec2(pb.x, entry), pb};
@@ -955,8 +942,11 @@ namespace RichMd::Mermaid
             auto extraLines = [&](std::map<int, int>& count, int r) { return (float)std::max(count[r] - 1, 0) * step; };
 
             // Positions along: the layers one after the other. Between two layers, the gap leaves the boxes' paddings
-            // and titles, and a channel in the middle of the free space, wide enough for its tracks, where the edges run
-            graph.channels.clear();
+            // and titles, the approach lines of the lane edges, and a channel in the middle of the free space, wide
+            // enough for its tracks, where the edges run
+            graph.channels.clear(), graph.laneExit.clear(), graph.laneEntry.clear();
+            const float halfGap = 0.7f * em;  // from a layer (past its boxes) to the first approach line
+            auto laneRoom = [&](std::map<int, int>& count, int r) { return count[r] > 0 ? halfGap + extraLines(count, r) : 0.f; };
             float offsetMain = layers.empty() ? 0.f : before[layers.begin()->first], previousEnd = 0.f;
             int previous = -1;
             for (auto& [r, layer] : layers)
@@ -965,8 +955,8 @@ namespace RichMd::Mermaid
                 {
                     float tracks = trackRoom[previous] + 1.2f * em;
                     float free = std::max({1.5f * em, gapAfter[previous], tracks});
-                    float exits = extraLines(exitCount, previous), entries = extraLines(entryCount, r);  // lane approach lines
-                    float gap = std::max({gapY, gapAfter[previous], tracks, after[previous] + before[r] + free}) + exits + entries;
+                    float exits = laneRoom(exitCount, previous), entries = laneRoom(entryCount, r);
+                    float gap = std::max({gapY, gapAfter[previous], tracks, after[previous] + exits + free + entries + before[r]});
                     offsetMain = previousEnd + gap;
                     graph.channels[previous] = (previousEnd + after[previous] + exits + offsetMain - before[r] - entries) / 2.f;
                 }
@@ -979,6 +969,8 @@ namespace RichMd::Mermaid
                     (vertical ? nd.pos.y : nd.pos.x) = offsetMain + (thickness - main(nd)) / 2.f;
                 }
                 previousEnd = offsetMain + thickness;
+                graph.laneEntry[r] = offsetMain - before[r] - halfGap;
+                graph.laneExit[r] = previousEnd + after[r] + halfGap;
                 previous = r;
             }
             const float mainEnd = previousEnd + (previous >= 0 ? after[previous] : 0.f);
@@ -989,8 +981,9 @@ namespace RichMd::Mermaid
             ImVec2 delta = vertical ? ImVec2(0.f, shift) : ImVec2(shift, 0.f);
             for (Node& nd : graph.nodes)
                 nd.pos = ImVec2(nd.pos.x + delta.x, nd.pos.y + delta.y);
-            for (auto& [r, channel] : graph.channels)
-                channel += shift;
+            for (std::map<int, float>* lines : {&graph.channels, &graph.laneExit, &graph.laneEntry})
+                for (auto& [r, line] : *lines)
+                    line += shift;
             for (Subgraph& sub : graph.subgraphs)
             {
                 sub.boxMin = ImVec2(sub.boxMin.x + delta.x, sub.boxMin.y + delta.y);
