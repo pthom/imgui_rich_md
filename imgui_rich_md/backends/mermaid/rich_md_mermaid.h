@@ -58,6 +58,7 @@ namespace RichMd::Mermaid
     struct Subgraph
     {
         std::string id, title;
+        int parent = -1;           // the subgraph around it (index in Graph::subgraphs), -1: none
         bool hasBox = false;       // filled by the layout (false when the subgraph has no node)
         ImVec2 boxMin, boxMax;
         float titleX = 0.f;        // where the title starts, from the left of the box (where no edge crosses it)

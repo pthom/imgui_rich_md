@@ -354,21 +354,25 @@ namespace RichMd::Mermaid
         // as wide as the title
         void ComputeSubgraphBoxes(Graph& graph, float boxPad, float titleHeight, float em)
         {
-            for (size_t b = 0; b < graph.subgraphs.size(); ++b)
+            // the children first (a subgraph comes after its parent in the source): a box encloses its nodes and the
+            // boxes of its children
+            for (size_t b = graph.subgraphs.size(); b-- > 0;)
             {
                 Subgraph& sub = graph.subgraphs[b];
                 sub.hasBox = false;
-                for (const Node& nd : graph.nodes)
-                {
-                    if (nd.subgraph != (int)b)
-                        continue;
-                    ImVec2 p0(nd.pos.x - boxPad, nd.pos.y - boxPad - titleHeight);
-                    ImVec2 p1(nd.pos.x + nd.size.x + boxPad, nd.pos.y + nd.size.y + boxPad);
+                auto enclose = [&](ImVec2 min, ImVec2 max) {
+                    ImVec2 p0(min.x - boxPad, min.y - boxPad - titleHeight), p1(max.x + boxPad, max.y + boxPad);
                     if (!sub.hasBox)
                         sub.boxMin = p0, sub.boxMax = p1, sub.hasBox = true;
                     sub.boxMin = ImVec2(std::min(sub.boxMin.x, p0.x), std::min(sub.boxMin.y, p0.y));
                     sub.boxMax = ImVec2(std::max(sub.boxMax.x, p1.x), std::max(sub.boxMax.y, p1.y));
-                }
+                };
+                for (const Node& nd : graph.nodes)
+                    if (nd.subgraph == (int)b)
+                        enclose(nd.pos, ImVec2(nd.pos.x + nd.size.x, nd.pos.y + nd.size.y));
+                for (size_t c = b + 1; c < graph.subgraphs.size(); ++c)
+                    if (graph.subgraphs[c].parent == (int)b && graph.subgraphs[c].hasBox)
+                        enclose(graph.subgraphs[c].boxMin, graph.subgraphs[c].boxMax);
                 float missing = TitleWidth(sub, em) - (sub.boxMax.x - sub.boxMin.x);
                 if (sub.hasBox && missing > 0.f)
                     sub.boxMin.x -= missing / 2.f, sub.boxMax.x += missing / 2.f;
@@ -527,9 +531,10 @@ namespace RichMd::Mermaid
             auto cross = [&](const Node& nd) { return vertical ? nd.size.x : nd.size.y; };
             auto main = [&](const Node& nd) { return vertical ? nd.size.y : nd.size.x; };
 
-            // Bands on the cross axis: one per subgraph (in source order), then one for the free nodes. A band is as
-            // wide as its widest layer, so that the subgraph boxes never overlap
-            const int freeBand = (int)graph.subgraphs.size();
+            // Bands on the cross axis, nested like the subgraphs: a subgraph's band holds the bands of its children (in
+            // source order), then a column for its own nodes; the root is the same for the top-level subgraphs and the
+            // free nodes. A column is as wide as its widest layer, so that the subgraph boxes never overlap
+            const int freeBand = (int)graph.subgraphs.size();  // the root
             auto band = [&](int v) { return graph.nodes[v].subgraph >= 0 ? graph.nodes[v].subgraph : freeBand; };
             const float boxPad = 0.8f * em;
             const float titleHeight = lineHeight + 0.4f * em;
@@ -547,6 +552,7 @@ namespace RichMd::Mermaid
                         members.push_back(v);
                 return members;
             };
+            std::vector<float> ownWidth(freeBand + 1, 0.f);  // the column of a band's own nodes
             for (auto& [r, layer] : layers)
             {
                 std::stable_sort(layer.begin(), layer.end(), [&](int a, int b) {
@@ -555,27 +561,53 @@ namespace RichMd::Mermaid
                 for (int b = 0; b <= freeBand; ++b)
                 {
                     std::vector<int> members = bandMembers(layer, b);
-                    if (members.empty())
-                        continue;
-                    float w = membersWidth(members);
-                    if (b != freeBand)  // room for the box, and for its title when the cross axis is vertical (LR)
-                        w += 2.f * boxPad + (vertical ? 0.f : titleHeight);
-                    bandWidth[b] = std::max(bandWidth[b], w);
+                    if (!members.empty())
+                        ownWidth[b] = std::max(ownWidth[b], membersWidth(members));
                 }
             }
-            if (vertical)
-                for (int b = 0; b < freeBand; ++b)
-                    if (bandWidth[b] > 0.f)
-                        bandWidth[b] = std::max(bandWidth[b], TitleWidth(graph.subgraphs[b], em));
-            std::vector<float> bandStart(freeBand + 1, 0.f);
-            float x = 0.f;
-            for (int b = 0; b <= freeBand; ++b)
-                if (bandWidth[b] > 0.f)
+            std::vector<std::vector<int>> children(freeBand + 1);
+            for (int b = 0; b < freeBand; ++b)
+                children[graph.subgraphs[b].parent >= 0 ? graph.subgraphs[b].parent : freeBand].push_back(b);
+            // widths: the children first (they come after their parent in the source)
+            auto columnsWidth = [&](int b) {
+                float w = 0.f;
+                int columns = 0;
+                for (int c : children[b])
+                    if (bandWidth[c] > 0.f)
+                        w += bandWidth[c], ++columns;
+                if (ownWidth[b] > 0.f)
+                    w += ownWidth[b], ++columns;
+                return w + gapX * (float)std::max(columns - 1, 0);
+            };
+            for (int k = freeBand - 1; k >= -1; --k)  // the children before their parents, the root last
+            {
+                const int b = k >= 0 ? k : freeBand;
+                float w = columnsWidth(b);
+                if (b != freeBand && w > 0.f)  // room for the box, and for its title when the cross axis is vertical (LR)
                 {
-                    bandStart[b] = x;
-                    x += bandWidth[b] + gapX;
+                    w += 2.f * boxPad + (vertical ? 0.f : titleHeight);
+                    if (vertical)
+                        w = std::max(w, TitleWidth(graph.subgraphs[b], em));
                 }
-            const float totalCross = std::max(x - gapX, 0.f);
+                bandWidth[b] = w;
+            }
+            // starts: the parents first; in a band, its columns centered in the room inside the box
+            std::vector<float> bandStart(freeBand + 1, 0.f), ownStart(freeBand + 1, 0.f);
+            std::function<void(int)> place = [&](int b) {
+                float inside = b == freeBand ? 0.f : boxPad + (vertical ? 0.f : titleHeight);
+                float room = bandWidth[b] - (b == freeBand ? 0.f : 2.f * boxPad + (vertical ? 0.f : titleHeight));
+                float x = bandStart[b] + inside + (room - columnsWidth(b)) / 2.f;
+                for (int c : children[b])
+                    if (bandWidth[c] > 0.f)
+                    {
+                        bandStart[c] = x;
+                        place(c);
+                        x += bandWidth[c] + gapX;
+                    }
+                ownStart[b] = x;
+            };
+            place(freeBand);
+            const float totalCross = bandWidth[freeBand];
 
             // The gap after each layer: wide enough for the label of each edge that crosses it (in its middle), and for
             // the markers and cardinalities at its ends (class diagrams)
@@ -606,18 +638,25 @@ namespace RichMd::Mermaid
 
             // Along the main axis, a subgraph's box adds its padding before its first layer and after its last one, and
             // its title before its first layer (TD), or after its last one (BT: mirrored afterwards)
+            // (nested boxes that start, or end, on the same layer: their rooms add up)
+            std::vector<int> first(freeBand, INT_MAX), last(freeBand, INT_MIN);  // the layers of each subgraph, its nested ones included
+            for (const Node& nd : graph.nodes)
+                for (int b = nd.subgraph; b >= 0; b = graph.subgraphs[b].parent)
+                    first[b] = std::min(first[b], nd.rank), last[b] = std::max(last[b], nd.rank);
             std::map<int, float> before, after;
-            for (size_t b = 0; b < graph.subgraphs.size(); ++b)
+            const float title = vertical ? titleHeight : 0.f;
+            for (const Node& nd : graph.nodes)
             {
-                int first = INT_MAX, last = INT_MIN;
-                for (const Node& nd : graph.nodes)
-                    if (nd.subgraph == (int)b)
-                        first = std::min(first, nd.rank), last = std::max(last, nd.rank);
-                if (first > last)
-                    continue;
-                float title = vertical ? titleHeight : 0.f;
-                before[first] = std::max(before[first], boxPad + (graph.reversed ? 0.f : title));
-                after[last] = std::max(after[last], boxPad + (graph.reversed ? title : 0.f));
+                float roomBefore = 0.f, roomAfter = 0.f;
+                for (int b = nd.subgraph; b >= 0; b = graph.subgraphs[b].parent)
+                {
+                    if (first[b] == nd.rank)
+                        roomBefore += boxPad + (graph.reversed ? 0.f : title);
+                    if (last[b] == nd.rank)
+                        roomAfter += boxPad + (graph.reversed ? title : 0.f);
+                }
+                before[nd.rank] = std::max(before[nd.rank], roomBefore);
+                after[nd.rank] = std::max(after[nd.rank], roomAfter);
             }
 
             // Positions across: the nodes of each layer centered in their band
@@ -627,9 +666,7 @@ namespace RichMd::Mermaid
                     std::vector<int> members = bandMembers(layer, b);
                     if (members.empty())
                         continue;
-                    float cursor = bandStart[b] + (bandWidth[b] - membersWidth(members)) / 2.f;
-                    if (b != freeBand && !vertical)
-                        cursor += titleHeight / 2.f;  // the title is above the members
+                    float cursor = ownStart[b] + (ownWidth[b] - membersWidth(members)) / 2.f;
                     for (int v : members)
                     {
                         Node& nd = graph.nodes[v];

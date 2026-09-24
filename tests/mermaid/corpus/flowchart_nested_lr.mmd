@@ -1,0 +1,12 @@
+%% Nested subgraphs, left to right
+%% expect: nodes=5 edges=4 subgraphs=2
+flowchart LR
+    subgraph Cloud
+        subgraph Region[eu-west]
+            A[Server A] --> B[Server B]
+        end
+        LB[Load balancer]
+    end
+    Client --> LB
+    LB --> A
+    B --> Store[(Storage)]

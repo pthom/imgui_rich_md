@@ -1,0 +1,14 @@
+%% Dotted namespace names make a hierarchy (Mermaid's default)
+%% expect: nodes=4 edges=3 subgraphs=3
+classDiagram
+    namespace Company.Product.Module {
+        class Service
+        class Repository
+    }
+    namespace Company.Product {
+        class Facade
+    }
+    class Client
+    Client --> Facade
+    Facade --> Service
+    Service --> Repository

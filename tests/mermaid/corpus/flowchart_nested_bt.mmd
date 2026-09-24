@@ -1,0 +1,11 @@
+%% Nested subgraphs, bottom to top
+%% expect: nodes=4 edges=3 subgraphs=2
+flowchart BT
+    subgraph System
+        subgraph Kernel
+            K[Scheduler]
+        end
+        D[Drivers] --> K
+    end
+    H[Hardware] --> D
+    K --> A[Apps]

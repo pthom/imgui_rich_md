@@ -1,0 +1,18 @@
+%% Nested subgraphs: two levels, two siblings, a node after an inner end, edges across the levels
+%% expect: nodes=7 edges=7 subgraphs=3
+flowchart TD
+    subgraph Outer[Platform]
+        subgraph Web
+            UI[Web app] --> Api[API]
+        end
+        subgraph Data
+            Db[(Database)]
+        end
+        Queue[Queue]
+    end
+    User[User] --> UI
+    Api --> Db
+    Api --> Queue
+    Queue --> Worker[Worker]
+    Worker --> Db
+    Db -.-> Report[Report]

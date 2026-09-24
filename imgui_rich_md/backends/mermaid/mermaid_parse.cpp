@@ -118,13 +118,14 @@ namespace RichMd::Mermaid
         }
 
         // A subgraph (or a namespace), created at its first mention; its title is the last one given
-        int AddSubgraph(Graph& graph, string_view id, const std::string& title)
+        int AddSubgraph(Graph& graph, string_view id, const std::string& title, int parent = -1)
         {
             int index = FindSubgraph(graph, id);
             if (index < 0)
             {
                 graph.subgraphs.emplace_back();
                 graph.subgraphs.back().id = std::string(id);
+                graph.subgraphs.back().parent = parent;
                 index = (int)graph.subgraphs.size() - 1;
             }
             graph.subgraphs[index].title = title;
@@ -383,9 +384,10 @@ namespace RichMd::Mermaid
         void ParseFlowchart(const std::vector<SourceLine>& lines, Diagram& d)
         {
             Graph& graph = d.graph;
-            int subgraph = -1;
+            std::vector<int> open;  // the open subgraphs, the innermost last
             for (const SourceLine& line : lines)
             {
+                const int subgraph = open.empty() ? -1 : open.back();
                 string_view word = FirstWord(line.text);
                 if (word == "graph" || word == "flowchart")
                 {
@@ -415,12 +417,13 @@ namespace RichMd::Mermaid
                         title = CleanLabel(rest.substr(sc.i, rest.size() - 1 - sc.i));
                     else
                         id = rest, title = CleanLabel(rest);
-                    subgraph = AddSubgraph(graph, id, title);
+                    open.push_back(AddSubgraph(graph, id, title, subgraph));
                     continue;
                 }
                 if (line.text == "end")
                 {
-                    subgraph = -1;
+                    if (!open.empty())
+                        open.pop_back();
                     continue;
                 }
                 if (IsStylingLine(word))
@@ -988,7 +991,7 @@ namespace RichMd::Mermaid
                     }
                     continue;
                 }
-                if (word == "namespace")  // namespace Name, namespace Name["Label"]; a nested one is shown as Outer.Inner
+                if (word == "namespace")  // namespace Name, namespace Name["Label"], namespace A.B.C (A contains B, B contains C)
                 {
                     string_view rest = AfterFirstWord(line.text);
                     if (EndsWith(rest, "{"))
@@ -1001,8 +1004,17 @@ namespace RichMd::Mermaid
                         name = Trim(rest.substr(0, bracket));
                         title = CleanLabel(rest.substr(bracket + 1, rest.size() - bracket - 2));
                     }
-                    std::string id = namespaces.empty() ? std::string(name) : d.graph.subgraphs[ns()].id + "." + std::string(name);
-                    namespaces.push_back({AddSubgraph(d.graph, id, title.empty() ? id : title), line.number});
+                    int parent = ns();
+                    while (!name.empty())  // each level inside the previous one, named by its own part (its id: the path)
+                    {
+                        size_t dot = name.find('.');
+                        string_view part = name.substr(0, dot);
+                        bool last = dot == string_view::npos;
+                        std::string id = parent < 0 ? std::string(part) : d.graph.subgraphs[parent].id + "." + std::string(part);
+                        parent = AddSubgraph(d.graph, id, last && !title.empty() ? title : std::string(part), parent);
+                        name = last ? string_view() : name.substr(dot + 1);
+                    }
+                    namespaces.push_back({parent, line.number});
                     continue;
                 }
                 if (line.text == "}")

@@ -238,8 +238,18 @@ namespace MermaidChecks
                 continue;
             Rect ra{g.subgraphs[a].boxMin, g.subgraphs[a].boxMax, "subgraph " + g.subgraphs[a].id};
             checkBounds(ra);
-            for (size_t b = a + 1; b < g.subgraphs.size(); ++b)
-                if (g.subgraphs[b].hasBox && Overlap(ra, Rect{g.subgraphs[b].boxMin, g.subgraphs[b].boxMax, ""}))
+            int parent = g.subgraphs[a].parent;
+            if (parent >= 0 && g.subgraphs[parent].hasBox && !Inside(ra, Rect{g.subgraphs[parent].boxMin, g.subgraphs[parent].boxMax, ""}))
+                issues.push_back({"subgraph-nesting", "subgraph `" + g.subgraphs[a].id + "` is not inside `" + g.subgraphs[parent].id + "`"});
+            auto isAncestor = [&](size_t outer, size_t inner) {
+                for (int s = g.subgraphs[inner].parent; s >= 0; s = g.subgraphs[s].parent)
+                    if (s == (int)outer)
+                        return true;
+                return false;
+            };
+            for (size_t b = a + 1; b < g.subgraphs.size(); ++b)  // boxes overlap only when one is inside the other
+                if (g.subgraphs[b].hasBox && !isAncestor(a, b) && !isAncestor(b, a)
+                    && Overlap(ra, Rect{g.subgraphs[b].boxMin, g.subgraphs[b].boxMax, ""}))
                     issues.push_back({"subgraph-overlap", "subgraphs `" + g.subgraphs[a].id + "` and `" + g.subgraphs[b].id + "` overlap"});
         }
         std::vector<Rect> titles;  // the titles of the subgraphs (the tab of a namespace)
