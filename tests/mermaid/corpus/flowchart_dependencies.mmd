@@ -1,0 +1,15 @@
+%% A dependency graph: the ordering of the layers decides the crossings
+%% expect: nodes=9 edges=12
+flowchart TD
+    app --> ui
+    app --> core
+    app --> net
+    ui --> render
+    ui --> core
+    net --> core
+    net --> tls
+    render --> gpu
+    core --> alloc
+    tls --> alloc
+    gpu --> alloc
+    tls --> crypto

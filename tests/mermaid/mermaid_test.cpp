@@ -27,7 +27,7 @@ int main(int, char**)
     ImGui_ImplNull_Init();
     RichMd::InitializeMarkdown();
 
-    int failures = 0, known = 0;
+    int failures = 0, known = 0, crossings = 0;
     for (size_t i = 0; i <= files.size(); ++i)
     {
         ImGui_ImplNull_NewFrame();
@@ -46,7 +46,8 @@ int main(int, char**)
             MermaidChecks::Report report = MermaidChecks::Evaluate(source.str());
             ImGui::PopFont();
             std::string name = file.stem().string();
-            printf("%-32s %s\n", name.c_str(), report.failures.empty() && report.fixedKnown.empty() ? "ok" : "FAILED");
+            printf("%-32s %-8s crossings: %d\n", name.c_str(), report.failures.empty() && report.fixedKnown.empty() ? "ok" : "FAILED", report.crossings);
+            crossings += report.crossings;
             for (const auto& issue : report.failures)
                 printf("    %s: %s\n", issue.check.c_str(), issue.message.c_str());
             for (const auto& check : report.fixedKnown)
@@ -64,6 +65,6 @@ int main(int, char**)
     RichMd::DeInitializeMarkdown();
     ImGui_ImplNull_Shutdown();
     ImGui::DestroyContext();
-    printf("mermaid test: %zu diagrams, %d failures, %d known issues\n", files.size(), failures, known);
+    printf("mermaid test: %zu diagrams, %d failures, %d known issues, %d crossings\n", files.size(), failures, known, crossings);
     return failures == 0 ? 0 : 1;
 }

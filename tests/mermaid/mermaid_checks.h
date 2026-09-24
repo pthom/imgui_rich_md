@@ -35,6 +35,7 @@ namespace MermaidChecks
         std::vector<Issue> failures;          // unexpected
         std::vector<Issue> known;             // expected (listed in `%% known:`)
         std::vector<std::string> fixedKnown;  // listed in `%% known:`, but they pass: the marker should go
+        int crossings = 0;                    // how many times two edges cross (a measure)
     };
 
     inline Expectation ReadExpectation(const std::string& source)
@@ -280,19 +281,54 @@ namespace MermaidChecks
         return issues;
     }
 
+    // A quality measure, not a check: how many times two edges cross
+    inline int CountCrossings(const Diagram& d)
+    {
+        if (d.kind == DiagramKind::Sequence || !d.error.empty())
+            return 0;
+        const Graph& g = d.graph;
+        auto crosses = [](ImVec2 a, ImVec2 b, ImVec2 c, ImVec2 e) {  // proper intersection of [a, b] and [c, e]
+            auto side = [](ImVec2 p, ImVec2 q, ImVec2 r) { return (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x); };
+            float d1 = side(c, e, a), d2 = side(c, e, b), d3 = side(a, b, c), d4 = side(a, b, e);
+            return ((d1 > 0.5f && d2 < -0.5f) || (d1 < -0.5f && d2 > 0.5f)) && ((d3 > 0.5f && d4 < -0.5f) || (d3 < -0.5f && d4 > 0.5f));
+        };
+        auto cross = [&](ImVec2 p) { return g.vertical ? p.x : p.y; };
+        int count = 0;
+        for (size_t i = 0; i < g.edges.size(); ++i)
+            for (size_t j = i + 1; j < g.edges.size(); ++j)
+            {
+                const Edge& e = g.edges[i];
+                const Edge& f = g.edges[j];
+                const auto& p = e.points;
+                const auto& q = f.points;
+                bool sameGap = !UsesLane(g, e) && !UsesLane(g, f) && g.nodes[e.src].rank == g.nodes[f.src].rank;
+                if (sameGap)  // two edges between the same layers (their segments may share the channel): ends in opposite orders
+                {
+                    float starts = cross(p.front()) - cross(q.front()), ends = cross(p.back()) - cross(q.back());
+                    count += (starts > 0.5f && ends < -0.5f) || (starts < -0.5f && ends > 0.5f) ? 1 : 0;
+                    continue;
+                }
+                for (size_t a = 0; a + 1 < p.size(); ++a)
+                    for (size_t b = 0; b + 1 < q.size(); ++b)
+                        count += crosses(p[a], p[a + 1], q[b], q[b + 1]) ? 1 : 0;
+            }
+        return count;
+    }
+
     // Parses the source, lays it out with the current font, and checks it against its expectation
     inline Report Evaluate(const std::string& source)
     {
         Expectation expectation = ReadExpectation(source);
         Diagram d = Parse(source);
         std::vector<Issue> issues = CheckParse(d, expectation);
+        Report report;
         if (d.error.empty())
         {
             Layout(d);
             std::vector<Issue> layoutIssues = CheckLayout(d);
             issues.insert(issues.end(), layoutIssues.begin(), layoutIssues.end());
+            report.crossings = CountCrossings(d);
         }
-        Report report;
         std::set<std::string> failing;
         for (const Issue& issue : issues)
         {
