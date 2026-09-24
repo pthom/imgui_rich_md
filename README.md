@@ -10,5 +10,6 @@ and of the Python playground. The library is being set up here. The examples bui
 - `examples/tour`: every feature, with its markdown source
 - `examples/editor`: a live markdown editor
 - `examples/custom_host`: the library on an application's own textures, assets and log
+- `examples/fonts`: CJK, emoji and icon fonts merged into every markdown font (downloaded by CMake)
 
 Until this README grows, the API is documented in the bundle's documentation.
