@@ -6,5 +6,7 @@ Dear ImGui 1.92+, with optional backends for syntax-highlighted code (ImGuiColor
 
 Extracted from [Dear ImGui Bundle](https://github.com/pthom/imgui_bundle), where it powers the markdown
 of the demos and of the Python playground. The library is being set up here: see `examples/` (`minimal`; `tour`, which shows
-every feature; `editor`, a live markdown editor) for builds against stock Dear ImGui, and the bundle's documentation for the API until this
+every feature; `editor`, a live markdown editor;
+`custom_host`, the library plugged into an application's own textures, assets and log) for builds against
+stock Dear ImGui, and the bundle's documentation for the API until this
 README grows.

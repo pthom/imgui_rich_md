@@ -34,7 +34,7 @@ if(NOT TARGET imgui_rich_md)
 endif()
 
 # One folder per example, with its main.cpp; common/ holds the window shared by the examples
-foreach(example minimal tour editor)
+foreach(example minimal tour editor custom_host)
     add_executable(imgui_rich_md_${example} ${CMAKE_CURRENT_LIST_DIR}/${example}/main.cpp)
     target_include_directories(imgui_rich_md_${example} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
     target_link_libraries(imgui_rich_md_${example} PRIVATE imgui_rich_md glfw OpenGL::GL)
