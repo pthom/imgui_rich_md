@@ -1,5 +1,5 @@
 // imgui_rich_md custom_host: plugging the library into an application's own services (RichMd::HostServices):
-// its textures, its asset storage, its log. SetHostServices() comes before InitializeMarkdown(); every service
+// its textures, its asset storage, its log. SetHostServices() comes before CreateContext(); every service
 // left empty keeps its default.
 #include "common/app_glfw_gl3.h"
 #include "imgui_rich_md/rich_md.h"
@@ -15,7 +15,7 @@
 static const char* kPage = R"md(
 # A custom host
 This page is rendered through the host services of this example (`RichMd::HostServices`), installed
-with `RichMd::SetHostServices()` before `RichMd::InitializeMarkdown()`.
+with `RichMd::SetHostServices()` before `RichMd::CreateContext()`.
 
 ## Textures: `UploadRgba`
 Every image and formula becomes a texture through `UploadRgba`. Here, plain OpenGL textures owned by the
@@ -103,7 +103,7 @@ int main(int, char**)
     services.UploadRgba = UploadRgbaWithOpenGL;
     services.ReadAsset = ReadAssetFromMemory;
     services.Log = [](const std::string& message) { gLog.push_back(message); };
-    RichMd::SetHostServices(services);  // before InitializeMarkdown (called by RunApp)
+    RichMd::SetHostServices(services);  // before CreateContext (called by RunApp)
 
     RichMd::MarkdownOptions options;
 #ifdef IMGUI_RICHMD_WITH_LATEX

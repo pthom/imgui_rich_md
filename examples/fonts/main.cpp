@@ -39,7 +39,7 @@ FontAwesome lives in Unicode's private use area: its glyphs come from the macros
 RichMd::SetAssetsFolder(folder);  // where the fonts are
 RichMd::MarkdownOptions options;
 options.fontOptions.mergeFonts = {"fonts/NotoSansJP-Regular.otf", "fonts/NotoEmoji.ttf", "fonts/fa-solid-900.ttf"};
-RichMd::InitializeMarkdown(options);
+RichMd::CreateContext(options);
 
 RichMd::Render("Launch " ICON_FA_ROCKET);
 ```

@@ -152,21 +152,21 @@ namespace RichMd
         bool hardSoftBreaks = false;
     };
 
-    // InitializeMarkdown: call it once, any time after ImGui::CreateContext() (with HelloImGui or
-    // ImmApp: before or after Run, they call it for you when markdown is enabled).
-    // The fonts are loaded at the first Render() (Dear ImGui 1.92 loads glyphs on demand).
-    // DeInitializeMarkdown: frees the textures; call it while the rendering backend is still alive.
-    void InitializeMarkdown(const MarkdownOptions& options = MarkdownOptions());
-    void DeInitializeMarkdown();
-
-    // Contexts: InitializeMarkdown creates a default context; several contexts (e.g. two font sizes,
-    // several ImGui contexts) can be created explicitly. All the other functions act on the current one.
-    // C++ only for now.
     struct Context;
+    // Contexts: CreateContext makes one, any time after ImGui::CreateContext(); it becomes the current context when
+    // there is none. The fonts load at the first Render() (Dear ImGui 1.92 loads glyphs on demand).
+    // DestroyContext destroys one (nullptr: the current one) and frees its textures: call it while the rendering
+    // backend is still alive. Several contexts (e.g. two font sizes, several ImGui contexts) can live together; all
+    // the other functions act on the current one. HelloImGui and ImmApp make one for you when markdown is enabled.
     Context* CreateContext(const MarkdownOptions& options = MarkdownOptions());
-    void DestroyContext(Context* context);
+    void DestroyContext(Context* context = nullptr);
     void SetCurrentContext(Context* context);
     Context* GetCurrentContext();
+
+    // The former names: InitializeMarkdown makes a default context and makes it current (a second call does
+    // nothing); DeInitializeMarkdown destroys it.
+    void InitializeMarkdown(const MarkdownOptions& options = MarkdownOptions());
+    void DeInitializeMarkdown();
 
     // The folder where the default host reads the assets (fonts, images) from the file system,
     // when they are not embedded in the binary. Default: the current directory.
@@ -249,7 +249,7 @@ namespace RichMd
 
     ImVec4 LinkColor();
 
-    // What this build and its host provide (available once InitializeMarkdown was called)
+    // What this build and its host provide (available once a context exists)
     bool HasLatex();         // $...$ and $$...$$ rendered as formulas (else shown as their source)
     bool HasUrlImages();     // images downloaded from http(s) urls
     bool HasCodeEditor();    // code blocks with syntax highlighting (else plain monospaced blocks)

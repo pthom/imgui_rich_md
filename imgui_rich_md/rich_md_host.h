@@ -3,7 +3,7 @@
 // Host services: what the markdown renderer needs from the application or the framework
 // that hosts it (GPU textures, asset files, logging). Every service is optional and has a
 // plain default; a host (e.g. ImGui Bundle with HelloImGui) installs richer ones with
-// SetHostServices() before InitializeMarkdown(). Only the download types are part of the Python API.
+// SetHostServices() before CreateContext(). Only the download types are part of the Python API.
 
 #include "imgui.h"
 
@@ -19,7 +19,7 @@ namespace RichMd
 {
     // A GPU texture owned by the markdown caches (images, LaTeX).
     // keepAlive owns the GPU resource: the texture is freed when the last copy is dropped
-    // (e.g. when the caches are cleared by DeInitializeMarkdown).
+    // (e.g. when the caches are cleared by DestroyContext).
     struct MarkdownTexture
     {
         ImTextureRef ref;                // a backend id, or an ImTextureData the backend creates at the next frame
@@ -115,7 +115,7 @@ namespace RichMd
         std::function<void(const std::string& message)> Log;
     };
 
-    // Sets the host services (call before InitializeMarkdown). Empty fields keep their default.
+    // Sets the host services (call before CreateContext). Empty fields keep their default.
     void SetHostServices(const HostServices& services);
     const HostServices& GetHostServices();
 }

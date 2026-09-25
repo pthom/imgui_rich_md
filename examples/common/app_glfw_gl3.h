@@ -79,7 +79,7 @@ inline int RunApp(const char* title, ImVec2 size, const RichMd::MarkdownOptions&
     ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
 #endif
     ImGui_ImplOpenGL3_Init(glslVersion);
-    RichMd::InitializeMarkdown(options);
+    RichMd::CreateContext(options);
 
     const char* shot = std::getenv("IMGUI_RICHMD_SHOT");
     int frame = 0;
@@ -119,7 +119,7 @@ inline int RunApp(const char* title, ImVec2 size, const RichMd::MarkdownOptions&
     EMSCRIPTEN_MAINLOOP_END;
 #endif
 
-    RichMd::DeInitializeMarkdown();  // frees the markdown textures while the backend is alive
+    RichMd::DestroyContext();  // frees the markdown textures while the backend is alive
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

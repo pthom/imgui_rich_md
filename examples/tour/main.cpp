@@ -521,7 +521,7 @@ A wikilink to [[Home]] and one with a label: [[Notes/todo|my todo list]].
 RichMd::MarkdownOptions options;
 options.callbacks.OnWikiLink = [](const std::string& target) { printf("go to %s\n", target.c_str()); };
 options.hardSoftBreaks = true;   // for chat-like text
-RichMd::InitializeMarkdown(options);
+RichMd::CreateContext(options);
 ```
 
 ```
@@ -564,7 +564,7 @@ it is used)... The library ships none of them.
 ```cpp
 RichMd::MarkdownOptions options;
 options.fontOptions.mergeFonts = {"fonts/fontawesome-webfont.ttf", "fonts/NotoEmoji-Regular.ttf"};
-RichMd::InitializeMarkdown(options);
+RichMd::CreateContext(options);
 
 RichMd::Render("Launch " ICON_FA_ROCKET);   // ICON_FA_ROCKET: from the icon font's header
 ```
@@ -627,7 +627,7 @@ built with and what the host provides.
 
 - `RichMd::Render(text)` removes the common indentation first, so that a markdown string
   written inside an indented function renders as expected (`RenderRaw` renders as is).
-- The markdown fonts are loaded at the first render: `InitializeMarkdown()` can be called
+- The markdown fonts are loaded at the first render: `CreateContext()` can be called
   any time after the ImGui context exists.
 - Each `Render()` call is a fragment with its own id scope: render prose between widgets,
   the same fragment twice, and nothing collides.

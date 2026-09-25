@@ -595,23 +595,7 @@ namespace RichMd
     static const int gLatexEvictionFrames = 60;
 
 
-    class MarkdownRenderer;
-    struct Context;
     static Context* gCurrentContext = nullptr;
-
-    struct Context
-    {
-        MarkdownOptions options;
-        std::unique_ptr<MarkdownRenderer> renderer;  // created on first use (it loads the fonts)
-        std::map<std::string, std::function<void(const std::string& code)>> fencedBlockRenderers;
-        std::unordered_map<std::string, std::string> resolvedImports;  // text -> text with its @import resolved
-        int fragmentFrame = -1;    // frame of the last Render call
-        int fragmentCounter = 0;   // Render calls in this frame (seeds their ImGui ids)
-#ifdef IMGUI_RICHMD_WITH_MERMAID
-        Mermaid::CachePtr mermaidCache;  // created on first use
-#endif
-        ~Context();
-    };
 
     class MarkdownRenderer : public Renderer
     {
@@ -845,6 +829,7 @@ namespace RichMd
 
     Context::~Context() = default;
     static std::unique_ptr<Context> gDefaultContext;   // the one created by InitializeMarkdown
+    static int gContextCount = 0;                      // the contexts alive
 
     // The current context's renderer, created on first use: this loads the fonts, which is possible
     // any time after ImGui::CreateContext() (nullptr when no context is current)
@@ -954,20 +939,41 @@ namespace RichMd
 #endif
         if (!gCurrentContext)
             gCurrentContext = context;
+        ++gContextCount;
         return context;
+    }
+
+    // What all the contexts share: the downloads in progress, MicroTeX. Freed with the last context.
+    static void _ReleaseGlobalResources()
+    {
+#ifdef IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES
+        ClearDesktopDownloads();
+#endif
+#ifdef IMGUI_RICHMD_WITH_LATEX
+        // Release MicroTeX resources (its own texture cache, unused here; safe if Init() was never called)
+        if (RichMd::Latex::IsInitialized())
+            RichMd::Latex::Release();
+        gLatexInitFailed = false;
+#endif
     }
 
     void DestroyContext(Context* context)
     {
         if (!context)
+            context = gCurrentContext;
+        if (!context)
             return;
         if (gCurrentContext == context)
             gCurrentContext = nullptr;
+        if (gDefaultContext.get() == context)
+            (void)gDefaultContext.release();  // deleted below
         // Deleting the renderer clears its caches: each cached MarkdownTexture owns its GPU texture
         // (keepAlive), so the textures are freed here, while the rendering backend is still alive.
         // The options' callbacks (which may hold Python objects) go with it.
         delete context;
         _SweepDestroyedTextures();
+        if (--gContextCount == 0)
+            _ReleaseGlobalResources();
     }
 
     void SetCurrentContext(Context* context) { gCurrentContext = context; }
@@ -983,16 +989,8 @@ namespace RichMd
 
     void DeInitializeMarkdown()
     {
-        DestroyContext(gDefaultContext.release());
-#ifdef IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES
-        ClearDesktopDownloads();
-#endif
-#ifdef IMGUI_RICHMD_WITH_LATEX
-        // Release MicroTeX resources (its own texture cache, unused here; safe if Init() was never called)
-        if (RichMd::Latex::IsInitialized())
-            RichMd::Latex::Release();
-        gLatexInitFailed = false;
-#endif
+        if (gDefaultContext)  // (DestroyContext(nullptr) would destroy the current context, maybe another one)
+            DestroyContext(gDefaultContext.get());
     }
 
 

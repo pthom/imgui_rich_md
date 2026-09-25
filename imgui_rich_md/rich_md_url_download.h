@@ -9,7 +9,7 @@ namespace RichMd {
     // Thread-safe: downloads run in background threads.
     MarkdownDownloadResult DesktopDownloadData(const std::string& url);
 
-    // Clear all pending/completed downloads. Call on DeInitializeMarkdown.
+    // Clear all pending/completed downloads. Called when the last context is destroyed.
     void ClearDesktopDownloads();
 }
 

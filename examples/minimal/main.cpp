@@ -2,8 +2,8 @@
 // embedded assets, textures go through Dear ImGui's ImTextureData (the default UploadRgba).
 // IMGUI_RICHMD_SHOT=<file.ppm> in the environment: writes a screenshot after 30 frames and exits.
 // The whole setup is written out on purpose (the other examples share it, in common/app_glfw_gl3.h): it shows
-// where the library's calls go in an application's own loop. InitializeMarkdown() after the backends,
-// Render() inside a window, DeInitializeMarkdown() before the backends shut down.
+// where the library's calls go in an application's own loop. CreateContext() after the backends,
+// Render() inside a window, DestroyContext() before the backends shut down.
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -49,7 +49,7 @@ An image that does not exist: ![nope](images/nope.png)
 
 ## Code
 ```cpp
-RichMd::InitializeMarkdown();
+RichMd::CreateContext();
 RichMd::Render(markdown);
 ```
 )";
@@ -106,7 +106,7 @@ int main(int, char**)
 #ifdef IMGUI_RICHMD_WITH_LATEX
     options.withLatex = true;
 #endif
-    RichMd::InitializeMarkdown(options);
+    RichMd::CreateContext(options);
 
     const char* shot = std::getenv("IMGUI_RICHMD_SHOT");
     int frame = 0;
@@ -146,7 +146,7 @@ int main(int, char**)
     EMSCRIPTEN_MAINLOOP_END;
 #endif
 
-    RichMd::DeInitializeMarkdown();  // frees the markdown textures while the backend is alive
+    RichMd::DestroyContext();  // frees the markdown textures while the backend is alive
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

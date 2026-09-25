@@ -25,7 +25,7 @@ int main(int, char**)
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplNull_Init();
-    RichMd::InitializeMarkdown();
+    RichMd::CreateContext();
 
     int failures = 0, known = 0, crossings = 0, bends = 0;
     for (size_t i = 0; i <= files.size(); ++i)
@@ -63,7 +63,7 @@ int main(int, char**)
         ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
     }
 
-    RichMd::DeInitializeMarkdown();
+    RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();
     ImGui::DestroyContext();
     printf("mermaid test: %zu diagrams, %d failures, %d known issues, %d crossings, %d bends\n", files.size(), failures, known, crossings, bends);

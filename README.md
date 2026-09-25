@@ -24,13 +24,13 @@ C++:
 ```cpp
 #include "imgui_rich_md/rich_md.h"
 
-RichMd::InitializeMarkdown();          // once, after the ImGui backends are initialized
+RichMd::CreateContext();               // once, after the ImGui backends are initialized
 
 ImGui::Begin("Doc");                   // each frame, anywhere in your UI
 RichMd::Render("# Hello\nSome *markdown*, a [link](https://github.com/pthom/imgui_rich_md) and `code`.");
 ImGui::End();
 
-RichMd::DeInitializeMarkdown();        // before the backends shut down
+RichMd::DestroyContext();              // before the backends shut down
 ```
 
 [examples/minimal](examples/minimal/main.cpp) is a complete program (GLFW + OpenGL3).

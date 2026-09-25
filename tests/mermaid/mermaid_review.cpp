@@ -99,7 +99,7 @@ int main(int argc, char** argv)
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 150");
-    RichMd::InitializeMarkdown();
+    RichMd::CreateContext();
 
     std::ostringstream page;
     page << R"(<!doctype html>
@@ -184,7 +184,7 @@ int main(int argc, char** argv)
     std::ofstream(outDir / "index.html") << page.str();
     printf("review page: %s\n", fs::absolute(outDir / "index.html").string().c_str());
 
-    RichMd::DeInitializeMarkdown();
+    RichMd::DestroyContext();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

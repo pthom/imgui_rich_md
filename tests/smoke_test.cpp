@@ -1,6 +1,6 @@
 // Smoke test: a document using every feature (and the error paths), rendered for a few frames with Dear ImGui's
 // null backend (no window, no GPU: its renderer only marks the textures created and destroyed). The whole cycle,
-// from InitializeMarkdown to DeInitializeMarkdown, runs twice. It fails on a crash, on an assertion (build it in
+// from CreateContext to DestroyContext, runs twice. It fails on a crash, on an assertion (build it in
 // Debug), or when nothing was drawn.
 #include "imgui.h"
 #include "imgui_impl_null.h"
@@ -139,18 +139,39 @@ An import that fails:
 ---
 )md";
 
+// Contexts: the first one becomes current, DestroyContext() destroys the current one, and the former names
+// (InitializeMarkdown, DeInitializeMarkdown) leave a context made with CreateContext alone
+static bool CheckContexts()
+{
+    RichMd::Context* mine = RichMd::CreateContext();
+    bool ok = RichMd::GetCurrentContext() == mine;
+    RichMd::InitializeMarkdown();  // the default context, made current
+    ok = ok && RichMd::GetCurrentContext() != mine;
+    RichMd::DeInitializeMarkdown();  // destroys the default context
+    RichMd::SetCurrentContext(mine);
+    RichMd::DeInitializeMarkdown();  // no default context left: nothing to do
+    ok = ok && RichMd::GetCurrentContext() == mine;
+    RichMd::DestroyContext();  // the current one
+    ok = ok && RichMd::GetCurrentContext() == nullptr;
+    if (!ok)
+        printf("smoke test failed: contexts\n");
+    return ok;
+}
+
 static int RunOneCycle()
 {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplNull_Init();
+    if (!CheckContexts())
+        return 0;
 
     RichMd::MarkdownOptions options;
 #ifdef IMGUI_RICHMD_WITH_LATEX
     options.withLatex = true;
 #endif
     options.callbacks.OnWikiLink = [](const std::string&) {};
-    RichMd::InitializeMarkdown(options);
+    RichMd::CreateContext(options);
     RichMd::RegisterFencedBlockRenderer("csv", [](const std::string& code) { ImGui::TextUnformatted(code.c_str()); });
 
     int vertexCount = 0;
@@ -167,7 +188,7 @@ static int RunOneCycle()
         vertexCount = ImGui::GetDrawData()->TotalVtxCount;
     }
 
-    RichMd::DeInitializeMarkdown();
+    RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();
     ImGui::DestroyContext();
     return vertexCount;
