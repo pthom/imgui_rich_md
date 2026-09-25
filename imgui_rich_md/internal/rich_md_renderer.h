@@ -317,7 +317,7 @@ private:
 		float fontSize = 0.0f;
 		size_t begin = 0, end = 0;    // the bytes of the fragment's text it shows
 		int block = 0;                // a newline separates the runs of two blocks, in a copy
-		bool isLink = false;
+		std::string href;             // the target of a link
 		std::string replacement;      // what it shows instead of its bytes, when not empty (a soft break, a formula)
 	};
 	std::vector<TextRun> m_runs;
@@ -331,13 +331,20 @@ private:
 	ImGuiID m_selection_fragment = 0;
 	ImGuiID m_selection_text_hash = 0;           // the text of the fragment when the selection was made
 	size_t m_selection_anchor = 0, m_selection_focus = 0;
+	bool m_selection_by_unit = false;            // made by a double or triple click: a drag must pass the threshold
+	std::string m_menu_link;                     // the link under the right click that opened the menu
 	ImDrawListSplitter m_selection_splitter;     // channel 0: the highlight, behind the text of channel 1
 
 	void record_run(const char* str, const char* str_end, const std::string& replacement = "");
 	void shift_runs(size_t first, float dx);
 	size_t offset_at(ImVec2 pos) const;
+	const TextRun* run_at(size_t offset) const;
+	void select_at(ImGuiID fragmentId, size_t offset, int clicks);
+	void select_all(ImGuiID fragmentId);
 	std::string selected_text() const;
+	std::string selected_markdown() const;
 	void update_selection(ImGuiID fragmentId);
+	void show_selection_menu(ImGuiID fragmentId);
 	void draw_selection() const;
 
 	MD_PARSER m_md;

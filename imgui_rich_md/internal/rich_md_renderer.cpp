@@ -32,6 +32,7 @@
 #include "imgui_internal.h"
 
 #include <cassert>
+#include <cctype>
 #include <cmath>
 
 namespace RichMd
@@ -1843,7 +1844,7 @@ void Renderer::record_run(const char* str, const char* str_end, const std::strin
 	run.font = ImGui::GetFont();
 	run.fontSize = ImGui::GetFontSize();
 	run.block = m_block_number;
-	run.isLink = !m_href.empty();
+	run.href = m_href;
 	run.replacement = replacement;
 	if (str != nullptr && str >= m_fragment_begin && str < str_end && str_end <= m_fragment_end) {
 		run.begin = (size_t)(str - m_fragment_begin);
@@ -1911,6 +1912,72 @@ size_t Renderer::offset_at(ImVec2 pos) const
 	return m_runs.back().end;
 }
 
+// The run showing the byte at an offset (or ending there)
+const Renderer::TextRun* Renderer::run_at(size_t offset) const
+{
+	const TextRun* ending = nullptr;
+	for (const TextRun& run : m_runs) {
+		if (offset >= run.begin && offset < run.end)
+			return &run;
+		if (offset == run.end)
+			ending = &run;
+	}
+	return ending;
+}
+
+// A click at an offset: one click places the selection there, two select the word, three the block
+void Renderer::select_at(ImGuiID fragmentId, size_t offset, int clicks)
+{
+	m_selection_fragment = fragmentId;
+	m_selection_text_hash = ImHashStr(m_fragment_begin, (size_t)(m_fragment_end - m_fragment_begin));
+	m_selection_anchor = m_selection_focus = offset;
+	m_selection_by_unit = clicks >= 2;
+	const TextRun* run = run_at(offset);
+	if (clicks < 2 || run == nullptr)
+		return;
+	size_t b = run->begin, e = run->end;
+	if (clicks >= 3) {
+		for (const TextRun& other : m_runs)
+			if (other.block == run->block) {
+				b = ImMin(b, other.begin);
+				e = ImMax(e, other.end);
+			}
+	} else if (run->replacement.empty()) {  // a word, within the run (a formula is selected whole)
+		auto inWord = [](char c) { return (unsigned char)c >= 0x80 || isalnum((unsigned char)c) || c == '_'; };
+		b = e = offset;
+		while (b > run->begin && inWord(m_fragment_begin[b - 1]))
+			--b;
+		while (e < run->end && inWord(m_fragment_begin[e]))
+			++e;
+	}
+	m_selection_anchor = b;
+	m_selection_focus = e;
+}
+
+void Renderer::select_all(ImGuiID fragmentId)
+{
+	m_selection_fragment = fragmentId;
+	m_selection_text_hash = ImHashStr(m_fragment_begin, (size_t)(m_fragment_end - m_fragment_begin));
+	m_selection_anchor = 0;
+	m_selection_focus = (size_t)(m_fragment_end - m_fragment_begin);
+}
+
+// The markdown of the selection, extended to whole lines: list, heading and quote markers come along, and the markup
+// of a line (bold, links, formulas) stays balanced
+std::string Renderer::selected_markdown() const
+{
+	size_t b = ImMin(m_selection_anchor, m_selection_focus);
+	size_t e = ImMax(m_selection_anchor, m_selection_focus);
+	size_t size = (size_t)(m_fragment_end - m_fragment_begin);
+	e = ImMin(e, size);
+	while (b > 0 && m_fragment_begin[b - 1] != '\n')
+		--b;
+	if (e > b && m_fragment_begin[e - 1] != '\n')
+		while (e < size && m_fragment_begin[e] != '\n')
+			++e;
+	return std::string(m_fragment_begin + b, m_fragment_begin + e);
+}
+
 // The selected parts of the runs; between two runs of a block, a space where the text between them is blank (a
 // wrapped line) and nothing where it is markup (**, ](url)); a newline between two blocks
 std::string Renderer::selected_text() const
@@ -1944,7 +2011,8 @@ std::string Renderer::selected_text() const
 }
 
 // A click on a line of text starts a selection (and takes the active id, so that the window does not move), a drag
-// extends it, a click away from the text clears it, Ctrl+C (Cmd+C on macOS) copies it
+// extends it, a double click selects a word and a triple click a block, a click away from the text clears it. Ctrl+C
+// (Cmd+C on macOS) copies it, Ctrl+A selects the whole fragment, a right click opens a menu.
 void Renderer::update_selection(ImGuiID fragmentId)
 {
 	ImGuiContext& g = *GImGui;
@@ -1960,30 +2028,62 @@ void Renderer::update_selection(ImGuiID fragmentId)
 			}
 		}
 	bool mouseFree = ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && g.ActiveId == 0;
-	if (hovered && mouseFree && !hovered->isLink)
+	if (hovered && mouseFree && hovered->href.empty())
 		ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
 	if (mouseFree && ImGui::IsMouseClicked(0)) {
 		if (onTextLine) {
 			ImGui::SetActiveID(fragmentId, g.CurrentWindow);
 			ImGui::FocusWindow(g.CurrentWindow);
-			m_selection_fragment = fragmentId;
-			m_selection_text_hash = ImHashStr(m_fragment_begin, (size_t)(m_fragment_end - m_fragment_begin));
-			m_selection_anchor = m_selection_focus = offset_at(mouse);
+			select_at(fragmentId, offset_at(mouse), ImGui::GetMouseClickedCount(0));
 		} else if (m_selection_fragment == fragmentId) {
 			m_selection_fragment = 0;
 		}
 	}
 	if (g.ActiveId == fragmentId) {
 		ImGui::KeepAliveID(fragmentId);
-		if (ImGui::IsMouseDown(0))
-			m_selection_focus = offset_at(mouse);
-		else
+		if (!ImGui::IsMouseDown(0))
 			ImGui::ClearActiveID();
+		else if (!m_selection_by_unit || ImGui::IsMouseDragPastThreshold(0))  // a word or block waits for a drag
+			m_selection_focus = offset_at(mouse);
 	}
+	// The menu acts on the fragment it opens on (the selection of another fragment is dropped)
+	if (mouseFree && onTextLine && ImGui::IsMouseReleased(1)) {
+		m_menu_link = hovered ? hovered->href : "";
+		if (m_selection_fragment != fragmentId)
+			select_at(fragmentId, offset_at(mouse), 1);
+		ImGui::OpenPopup("##rich_md_selection_menu");
+	}
+	if (m_selection_fragment == fragmentId && ImGui::IsWindowFocused() && !g.IO.WantTextInput) {
+		if (m_selection_anchor != m_selection_focus
+			&& ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_None))
+			ImGui::SetClipboardText(selected_text().c_str());
+		if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_A, ImGuiInputFlags_None))
+			select_all(fragmentId);
+	}
+	show_selection_menu(fragmentId);
+}
+
+// The menu of a right click: Copy, Copy as Markdown, Select All, and Copy Link over a link
+void Renderer::show_selection_menu(ImGuiID fragmentId)
+{
+	if (!ImGui::BeginPopup("##rich_md_selection_menu"))
+		return;
+	// ImGui's names of shortcuts always say Ctrl: on macOS the key is Cmd
+	const std::string modifier = ImGui::GetIO().ConfigMacOSXBehaviors ? "Cmd+" : "Ctrl+";
 	bool hasSelection = m_selection_fragment == fragmentId && m_selection_anchor != m_selection_focus;
-	if (hasSelection && ImGui::IsWindowFocused() && !g.IO.WantTextInput
-		&& ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_None))
+	if (!m_menu_link.empty()) {
+		if (ImGui::MenuItem("Copy Link"))
+			ImGui::SetClipboardText(m_menu_link.c_str());
+		ImGui::Separator();
+	}
+	if (ImGui::MenuItem("Copy", (modifier + "C").c_str(), false, hasSelection))
 		ImGui::SetClipboardText(selected_text().c_str());
+	if (ImGui::MenuItem("Copy as Markdown", nullptr, false, hasSelection))
+		ImGui::SetClipboardText(selected_markdown().c_str());
+	ImGui::Separator();
+	if (ImGui::MenuItem("Select All", (modifier + "A").c_str()))
+		select_all(fragmentId);
+	ImGui::EndPopup();
 }
 
 // The highlight of the selected parts of the runs

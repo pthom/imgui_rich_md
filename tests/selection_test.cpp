@@ -46,11 +46,28 @@ static Frame DrawFrame(const char* markdown, float width, bool movable = false)
 }
 
 static void MouseTo(ImVec2 pos) { ImGui::GetIO().AddMousePosEvent(pos.x, pos.y); }
-static void MouseButton(bool down) { ImGui::GetIO().AddMouseButtonEvent(0, down); }
+static void MouseButton(bool down, int button = 0) { ImGui::GetIO().AddMouseButtonEvent(button, down); }
 static void CtrlC(bool down)
 {
     ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, down);
     ImGui::GetIO().AddKeyEvent(ImGuiKey_C, down);
+}
+
+// Clicks (a double or triple click when several) with a button, then Ctrl+C
+static void ClickAndCopy(const char* markdown, float width, ImVec2 pos, int clicks, int button = 0)
+{
+    MouseTo(pos);
+    DrawFrame(markdown, width);
+    for (int i = 0; i < clicks; ++i) {
+        MouseButton(true, button);
+        DrawFrame(markdown, width);
+        MouseButton(false, button);
+        DrawFrame(markdown, width);
+    }
+    CtrlC(true);
+    DrawFrame(markdown, width);
+    CtrlC(false);
+    DrawFrame(markdown, width);
 }
 
 // A drag from one position to another (one input change per frame), then Ctrl+C
@@ -276,6 +293,80 @@ static bool CheckUnbalancedPush()
     return ok;
 }
 
+// A double click selects a word, a triple click the block; Ctrl+A selects the whole fragment
+static bool CheckClicksAndSelectAll()
+{
+    const char* md = "Hello **bold** world\n\nSecond paragraph\n";
+    Frame f = DrawFrame(md, 600.f);
+    ImVec2 inWorld(f.textOrigin.x + TextWidth("Hello ") + TextWidth("bold", true) + TextWidth(" wo"),
+                   f.textOrigin.y + LineHeight() * 0.5f);
+    gClipboard.clear();
+    ClickAndCopy(md, 600.f, inWorld, 2);
+    bool ok = Expect("a double click", gClipboard, "world");
+    gClipboard.clear();
+    ClickAndCopy(md, 600.f, inWorld, 3);
+    ok = Expect("a triple click", gClipboard, "Hello bold world") && ok;
+    gClipboard.clear();
+    ClickAndCopy(md, 600.f, inWorld, 1);  // a click places the selection in the fragment, then Ctrl+A
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_A, true);
+    DrawFrame(md, 600.f);
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_A, false);
+    DrawFrame(md, 600.f);
+    CtrlC(true);
+    DrawFrame(md, 600.f);
+    CtrlC(false);
+    DrawFrame(md, 600.f);
+    return Expect("Ctrl+A", gClipboard, "Hello bold world\nSecond paragraph") && ok;
+}
+
+// Clicks the item of the open menu: the index of the item, and the separators above it
+static void ClickMenuItem(const char* markdown, float width, int index, int separators)
+{
+    ImGuiWindow* menu = GImGui->OpenPopupStack.Size > 0 ? GImGui->OpenPopupStack.back().Window : nullptr;
+    if (menu == nullptr) {
+        printf("selection test failed: no menu open\n");
+        return;
+    }
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float fontSize = ImGui::GetStyle().FontSizeBase;
+    float y = menu->DC.CursorStartPos.y + (float)index * (fontSize + style.ItemSpacing.y)
+              + (float)separators * (1.f + style.ItemSpacing.y) + fontSize * 0.5f;
+    MouseTo(ImVec2(menu->DC.CursorStartPos.x + 10.f, y));
+    DrawFrame(markdown, width);
+    MouseButton(true);
+    DrawFrame(markdown, width);
+    MouseButton(false);
+    DrawFrame(markdown, width);
+}
+
+// The right click menu: Copy as Markdown copies whole lines, Copy Link the target of the link under the right click
+static bool CheckMenu()
+{
+    const char* md = "- item **one**\n- item two\n\nA [link](https://example.com)\n";
+    Frame f = DrawFrame(md, 600.f);
+    float lineY = f.textOrigin.y + LineHeight() * 0.5f;
+    ImVec2 inOne(f.textOrigin.x + 100.f, lineY);  // on the first line (a drag from the middle of its text)
+    ImVec2 inTwo(f.textOrigin.x + 60.f, lineY + LineHeight() + ImGui::GetStyle().ItemSpacing.y);
+    gClipboard.clear();
+    DragAndCopy(md, 600.f, inOne, inTwo);
+    bool ok = !gClipboard.empty() && gClipboard.find("item **") == std::string::npos;
+    if (!ok)
+        printf("selection test failed: the text copy of the list (\"%s\")\n", gClipboard.c_str());
+    gClipboard.clear();
+    ClickAndCopy(md, 600.f, inTwo, 1, 1);  // a right click opens the menu (and Ctrl+C is ignored while it is open)
+    ClickMenuItem(md, 600.f, 1, 0);        // Copy, Copy as Markdown, ---, Select All
+    ok = Expect("Copy as Markdown", gClipboard, "- item **one**\n- item two") && ok;
+
+    ImVec2 onLink(f.textOrigin.x + TextWidth("A ") + TextWidth("link") * 0.5f,
+                  f.textEndY - ImGui::GetStyle().ItemSpacing.y - LineHeight() * 0.5f);
+    gClipboard.clear();
+    ClickAndCopy(md, 600.f, onLink, 1, 1);
+    ClickMenuItem(md, 600.f, 0, 0);  // Copy Link, ---, Copy, ...
+    return Expect("Copy Link", gClipboard, "https://example.com") && ok;
+}
+
 int main(int, char**)
 {
     ImGui::CreateContext();
@@ -296,6 +387,8 @@ int main(int, char**)
     ok = CheckLinks() && ok;
     ok = CheckSelectableSwitch(mainContext) && ok;
     ok = CheckUnbalancedPush() && ok;
+    ok = CheckClicksAndSelectAll() && ok;
+    ok = CheckMenu() && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

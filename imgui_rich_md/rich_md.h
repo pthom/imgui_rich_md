@@ -21,7 +21,9 @@ namespace RichMd
     // =================================================================================================================
     /*::md Rendering
     `Render()` draws a markdown string where it is called, every frame: rich_md is immediate mode, like Dear ImGui.
-    It needs a context (see Contexts). Its text can be selected with the mouse and copied with Ctrl+C (Cmd+C on macOS).
+    It needs a context (see Contexts). Its text can be selected with the mouse (a double click selects a word, a triple
+    click a paragraph) and copied with Ctrl+C (Cmd+C on macOS); a right click opens a menu: Copy, Copy as Markdown,
+    Select All, and Copy Link over a link.
     ::code
     */
 
