@@ -64,7 +64,7 @@ namespace Snippets
         // If the number of lines in the code exceeds MaxHeightInLines, the editor will scroll. Set to 0 to disable.
         int MaxHeightInLines = 40;
 
-        bool ReadOnly = false;               // Snippets are read-only by default
+        bool ReadOnly = true;               // Snippets are read-only by default
 
         bool Border = false;                // Draw a border around the editor
 
