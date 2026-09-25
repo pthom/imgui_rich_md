@@ -181,6 +181,7 @@ protected:
 	virtual bool check_html(const char* str, const char* str_end);
 	// An HTML comment (<!-- ... -->) is not shown: true for its raw HTML chunks
 	bool skip_html_comment(const char* str, const char* str_end, bool afterComment);
+	bool separate_block();
 
 	//called when '\n' in source text where it is not semantically meaningful
 	virtual void soft_break();
@@ -225,6 +226,7 @@ protected:
 	bool m_details_suppress_next_raw_html = false;
 	bool m_in_html_comment = false;       // inside a comment that spans several chunks (lines)
 	bool m_html_comment_closed = false;   // the previous chunk closed a comment
+	bool m_html_gap_pending = false;      // an HTML block whose gap waits for its first chunk that is not a comment
 	int m_details_id_counter = 0;  // reset in print(); incremented per <summary> for unique PushID
 
 	// <pre>…</pre> state. Between the tags, raw HTML text is buffered

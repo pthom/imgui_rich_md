@@ -45,6 +45,17 @@ static void add_block_gap(float gap_em)
 	ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * gap_em));
 }
 
+// The gap above a top-level block, except above the first one: true when added
+bool Renderer::separate_block()
+{
+	if (m_skip_next_block_gap) {
+		m_skip_next_block_gap = false;
+		return false;
+	}
+	add_block_gap(style.blockGap);
+	return true;
+}
+
 // A color of the style, or its automatic value
 static ImVec4 resolve_color(const ImVec4& color, const ImVec4& automatic)
 {
@@ -1441,6 +1452,10 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 	case MD_TEXT_HTML:
 		if (skip_html_comment(str, str_end, afterComment))
 			break;
+		if (m_html_gap_pending) {  // the gap of an HTML block comes before its first chunk that is not a comment
+			m_html_gap_pending = false;
+			separate_block();
+		}
 		if (!check_html(str, str_end)) {
 			// Drop stray raw-HTML chunks (typically "\n") that
 			// md4c emits between recognized tags inside/around a
@@ -1473,6 +1488,9 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 
 int Renderer::block(MD_BLOCKTYPE type, void* d, bool e)
 {
+	// Any block callback ends the HTML block whose gap is pending (an HTML block holds no other block)
+	m_html_gap_pending = false;
+
 	// Suppress block rendering while inside a collapsed <details>.
 	// BLOCK_HTML pairs still arrive (the tags themselves land as
 	// MD_TEXT_HTML in text(), which is allowed through), so we just
@@ -1503,18 +1521,15 @@ int Renderer::block(MD_BLOCKTYPE type, void* d, bool e)
 			break;
 		}
 		if (is_separator_eligible) {
-			if (m_skip_next_block_gap)
-				m_skip_next_block_gap = false;
-			else {
-				add_block_gap(style.blockGap);
+			if (type == MD_BLOCK_HTML)
+				m_html_gap_pending = true;  // see text(): a block holding only a comment takes no space
+			else if (separate_block() && type == MD_BLOCK_H) {
 				// Extra breathing room above headers, decaying with depth:
 				// H1 gets the most, H6 none. Light scheme: 0.15 em per step.
-				if (type == MD_BLOCK_H) {
-					int level = ((MD_BLOCK_H_DETAIL*)d)->level;
-					int steps = 7 - level;
-					if (steps > 0)
-						ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.headerGapStep * (float)steps));
-				}
+				int level = ((MD_BLOCK_H_DETAIL*)d)->level;
+				int steps = 7 - level;
+				if (steps > 0)
+					ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.headerGapStep * (float)steps));
 			}
 		}
 	}
@@ -1637,6 +1652,7 @@ int Renderer::print(const char* str, const char* str_end)
     m_skip_next_block_gap = true;
     m_in_html_comment = false;
     m_html_comment_closed = false;
+    m_html_gap_pending = false;
     m_table_id_counter = 0;
     m_details_id_counter = 0;
     m_in_pre = false;

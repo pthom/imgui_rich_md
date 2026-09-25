@@ -199,12 +199,14 @@ static bool CheckLiveStory()
     return ok;
 }
 
-// An HTML comment is not shown: a document with comments draws as many vertices as the same document without them
+// An HTML comment is not shown and takes no space: a document with comments draws as many vertices, and is as high,
+// as the same document without them
 static bool CheckHtmlComments()
 {
     RichMd::CreateContext();
-    auto vertexCount = [](const char* markdown) {
-        int count = 0;
+    struct Drawn { int vertices; float height; };
+    auto draw = [](const char* markdown) {
+        Drawn drawn{};
         for (int i = 0; i < 2; ++i)  // the first frame loads the fonts
         {
             ImGui_ImplNull_NewFrame();
@@ -212,19 +214,22 @@ static bool CheckHtmlComments()
             ImGui::SetNextWindowSize(ImVec2(600.f, 400.f));
             ImGui::Begin("Comments");
             RichMd::Render(markdown);
+            drawn.height = ImGui::GetCursorPosY();
             ImGui::End();
             ImGui::Render();
             ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
-            count = ImGui::GetDrawData()->TotalVtxCount;
+            drawn.vertices = ImGui::GetDrawData()->TotalVtxCount;
         }
-        return count;
+        return drawn;
     };
-    int withComments = vertexCount("Before\n\n<!-- a comment,\non two lines -->\n\nAfter <!-- inline --> the end.\n");
-    int withoutComments = vertexCount("Before\n\nAfter  the end.\n");
+    Drawn withComments = draw(
+        "<!-- before the title -->\n# Title\nBefore\n\n<!-- a comment,\non two lines -->\n\nAfter <!-- inline --> the end.\n");
+    Drawn withoutComments = draw("# Title\nBefore\n\nAfter  the end.\n");
     RichMd::DestroyContext();
-    bool ok = withComments == withoutComments;
+    bool ok = withComments.vertices == withoutComments.vertices && withComments.height == withoutComments.height;
     if (!ok)
-        printf("smoke test failed: HTML comments are shown (%d vertices, %d without them)\n", withComments, withoutComments);
+        printf("smoke test failed: HTML comments are shown (%d vertices, %.1f high; without them: %d, %.1f)\n",
+               withComments.vertices, withComments.height, withoutComments.vertices, withoutComments.height);
     return ok;
 }
 
