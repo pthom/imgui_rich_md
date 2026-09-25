@@ -340,7 +340,7 @@ A transclusion without a target includes the whole file:
 ![[fractals.py]]        a source file, as code
 ```
 
-A source file included whole is rendered as code, with the lines that hold only an annotation directive removed.
+A source file included whole is rendered as code, as it is: its annotations are shown, and its lines keep their numbers.
 
 ### 11.5 Headings of Markdown documents
 

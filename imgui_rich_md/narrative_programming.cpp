@@ -703,12 +703,9 @@ namespace
             ParsedFile parsed = Parse(file, std::move(lines), kind.syntax);
             if (!parsed.error.empty())
                 return error(parsed.error);
-            if (steps.empty())  // the whole file, without its directive lines
+            if (steps.empty())  // the whole file, as it is (with its annotations)
             {
-                std::vector<std::string> code;
-                for (size_t i = 0; i < parsed.lines.size(); ++i)
-                    if (!parsed.directiveOnly[i])
-                        code.push_back(parsed.lines[i]);
+                std::vector<std::string> code = parsed.lines;
                 TrimBlankLines(code);
                 return CodeBlock(code, kind.language);
             }
