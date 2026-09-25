@@ -288,18 +288,13 @@ namespace RichMd
     // (one editor per distinct code)
     static void _RenderCodeBlockWithEditor(const std::string& code, const std::string& language)
     {
-        static std::map<std::string, Snippets::SnippetData> snippets;
-        auto it = snippets.find(code);
-        if (it == snippets.end())
-        {
-            Snippets::SnippetData snippet;
-            snippet.Code = code;
-            snippet.Language = _SnippetLanguage(language);
-            snippet.ShowCursorPosition = false;
-            snippet.ReadOnly = true;
-            it = snippets.emplace(code, snippet).first;
-        }
-        Snippets::ShowCodeSnippet(it->second);
+        // Nothing to keep between frames: the snippet's editor (keyed by the code) holds its state
+        Snippets::SnippetData snippet;
+        snippet.Code = code;
+        snippet.Language = _SnippetLanguage(language);
+        snippet.ShowCursorPosition = false;
+        snippet.ReadOnly = true;
+        Snippets::ShowCodeSnippet(snippet);
     }
 #endif
 

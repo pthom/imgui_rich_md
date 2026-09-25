@@ -118,6 +118,35 @@ namespace Snippets
         }
     }
 
+    // An editor per snippet id. The id of a markdown code block is its code: a block whose code changes (a narrative
+    // edited while its program runs) gets a new editor, so the editors not shown for a while are dropped.
+    struct SnippetEditor
+    {
+        TextEditor editor;
+        std::string submittedCode;          // the code last given to the editor (SetText resets it: only when it changed)
+        bool changed = false;               // set by the editor's change callback
+        double timeClickCopyButton = -1e9;  // ImGui::GetTime()
+        double lastShown = 0.0;             // ImGui::GetTime()
+    };
+    static std::map<ImGuiID, SnippetEditor> gSnippetEditors;
+
+    // Drops the editors not shown for 10 seconds (at most once per frame)
+    static void _DropUnusedEditors()
+    {
+        static int lastFrame = -1;
+        if (ImGui::GetFrameCount() == lastFrame)
+            return;
+        lastFrame = ImGui::GetFrameCount();
+        double now = ImGui::GetTime();
+        for (auto it = gSnippetEditors.begin(); it != gSnippetEditors.end();)
+        {
+            if (now - it->second.lastShown > 10.0)
+                it = gSnippetEditors.erase(it);
+            else
+                ++it;
+        }
+    }
+
     bool ShowEditableCodeSnippet(const std::string& label_id, SnippetData* snippetDataPtr, float width, int overrideHeightInLines)
     {
         SnippetData& snippetData = *snippetDataPtr;
@@ -127,21 +156,17 @@ namespace Snippets
 
         auto id = ImGui::GetID(label_id.c_str());
         ImGui::PushID(label_id.c_str());
-        static std::map<ImGuiID, TextEditor> gEditors;
-        static std::map<ImGuiID, double> timeClickCopyButton;
-        static std::map<ImGuiID, bool> gEditorChanged;
-        static std::map<ImGuiID, std::string> gSubmittedCode;  // the code last given to each editor
-
-        if (gEditors.find(id) == gEditors.end())
+        _DropUnusedEditors();
+        auto [it, inserted] = gSnippetEditors.try_emplace(id);
+        SnippetEditor& state = it->second;
+        if (inserted)
         {
-            gEditors.insert({id, TextEditor()});
-            gEditorChanged[id] = false;
-            auto& editor = gEditors.at(id);
-            _SetLanguage(editor, snippetData.Language);
-            editor.SetChangeCallback([id]() { gEditorChanged[id] = true; });
+            _SetLanguage(state.editor, snippetData.Language);
+            state.editor.SetChangeCallback([&state]() { state.changed = true; });
         }
+        state.lastShown = ImGui::GetTime();
 
-        auto& editor = gEditors.at(id);
+        auto& editor = state.editor;
         editor.SetReadOnlyEnabled(snippetData.ReadOnly);
         editor.SetCaretsVisible(!snippetData.ReadOnly);
         editor.SetShowWhitespacesEnabled(false);
@@ -154,7 +179,7 @@ namespace Snippets
 
             // SetText resets the editor (its scroll, its selection): only when the code changed. Not compared with
             // GetText(), which the editor normalizes (a final newline): the code would be set again every frame.
-            std::string& submitted = gSubmittedCode[id];
+            std::string& submitted = state.submittedCode;
             if (submitted != displayedCode)
             {
                 editor.SetText(displayedCode);
@@ -250,12 +275,10 @@ namespace Snippets
             {
                 if (CopyButton(lineHeight))
                 {
-                    timeClickCopyButton[id] = ImGui::GetTime();
+                    state.timeClickCopyButton = ImGui::GetTime();
                     ImGui::SetClipboardText(snippetData.Code.c_str());
                 }
-                bool wasCopiedRecently = false;
-                if (timeClickCopyButton.find(id) != timeClickCopyButton.end())
-                    wasCopiedRecently = (ImGui::GetTime() - timeClickCopyButton.at(id)) < 0.7;
+                bool wasCopiedRecently = (ImGui::GetTime() - state.timeClickCopyButton) < 0.7;
                 if (wasCopiedRecently)
                     ImGui::SetTooltip("Copied!");
                 else if (ImGui::IsItemHovered())
@@ -265,8 +288,8 @@ namespace Snippets
             ImGui::SetCursorPos(parentCursor);
         }
 
-        bool changed = gEditorChanged[id];
-        gEditorChanged[id] = false;
+        bool changed = state.changed;
+        state.changed = false;
         if (changed && !snippetData.ReadOnly)
             snippetData.Code = editor.GetText();
 
