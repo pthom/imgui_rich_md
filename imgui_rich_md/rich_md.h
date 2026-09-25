@@ -157,7 +157,7 @@ namespace RichMd
     // there is none. The fonts load at the first Render() (Dear ImGui 1.92 loads glyphs on demand).
     // DestroyContext destroys one (nullptr: the current one) and frees its textures: call it while the rendering
     // backend is still alive. Several contexts (e.g. two font sizes, several ImGui contexts) can live together; all
-    // the other functions act on the current one. HelloImGui and ImmApp make one for you when markdown is enabled.
+    // the other functions act on the current one. In ImGui Bundle, ImmApp makes one for you when markdown is enabled.
     Context* CreateContext(const MarkdownOptions& options = MarkdownOptions());
     void DestroyContext(Context* context = nullptr);
     void SetCurrentContext(Context* context);
