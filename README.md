@@ -47,7 +47,7 @@ RichMd::DestroyContext();              // before the backends shut down
 | Mermaid | flowcharts, sequence and class diagrams in ` ```mermaid ` blocks, drawn natively with `ImDrawList` (no web view); [what is supported](docs/mermaid.md) |
 | Structure | GitHub admonitions (`> [!NOTE]`), task lists, collapsible sections (`<details>`), `<center>` |
 | Callbacks | links, wikilinks (`[[target]]`), headings (tables of contents), your own renderer for a fenced block language |
-| Sections and imports | a source file carries markdown blocks (`@@md#Name` ... `@@/md`) that a document imports with `@import`: a program can be its own narrative |
+| Narrative programming | a source file carries markdown sections and code regions (`::md Name`, `::code`) that a document transcludes (`![[file.py#Name]]`): a program can be its own narrative ([specification](docs/narrative_programming/narrative_programming_spec.md)) |
 | Fonts | Roboto and Inconsolata included; CJK, emoji or icon fonts merged into every markdown font |
 | Hosts | textures, assets, downloads and logging go through replaceable services (`RichMd::HostServices`) |
 

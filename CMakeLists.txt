@@ -48,7 +48,7 @@ add_library(imgui_rich_md STATIC
     ${_md4c_dir}/md4c.c ${_md4c_dir}/md4c.h
     ${_richmd_dir}/rich_md_renderer.cpp ${_richmd_dir}/rich_md_renderer.h
     ${_richmd_dir}/rich_md.cpp ${_richmd_dir}/rich_md.h
-    ${_richmd_dir}/rich_md_imports.cpp
+    ${_richmd_dir}/rich_md_narrative.cpp
     ${_richmd_dir}/rich_md_host.h ${_richmd_dir}/rich_md_internal.h
 )
 add_library(RichMd::RichMd ALIAS imgui_rich_md)

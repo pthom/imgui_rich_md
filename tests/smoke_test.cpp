@@ -102,7 +102,7 @@ sequenceDiagram
     participant App
     participant MD as rich_md
     App->>MD: Render(text)
-    MD->>MD: resolve @import
+    MD->>MD: resolve transclusions
     loop each formula
         MD-->>App: bitmap
     end
@@ -133,8 +133,8 @@ flowchart LR
 
 A wikilink: [[Home]] and one with a label: [[Notes/todo|my notes]].
 
-An import that fails:
-@import {md_id=NoSuchSection}
+A transclusion that fails:
+![[#NoSuchSection]]
 
 ---
 )md";

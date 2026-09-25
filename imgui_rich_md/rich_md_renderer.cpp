@@ -1014,7 +1014,7 @@ bool Renderer::check_html(const char* str, const char* str_end)
 	if (strncmp(str, "</kbd>",  sz) == 0) { m_is_kbd  = false; return true; }
 	if (strncmp(str, "<mark>",  sz) == 0) { m_is_mark = true;  return true; }
 	if (strncmp(str, "</mark>", sz) == 0) { m_is_mark = false; return true; }
-	// <md-error title="reason">: text in the error color, the reason as a tooltip (failed @import)
+	// <md-error title="reason">: text in the error color, the reason as a tooltip (a failed transclusion)
 	if (sz > 9 && strncmp(str, "<md-error", 9) == 0) {
 		m_is_error = true;
 		m_error_title.clear();

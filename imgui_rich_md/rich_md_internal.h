@@ -23,7 +23,7 @@ namespace RichMd
         MarkdownOptions options;
         std::unique_ptr<MarkdownRenderer> renderer;  // created on first use (it loads the fonts)
         std::map<std::string, std::function<void(const std::string& code)>> fencedBlockRenderers;
-        std::unordered_map<std::string, std::string> resolvedImports;  // text -> text with its @import resolved
+        std::unordered_map<std::string, std::string> resolvedTransclusions;  // text -> text with its transclusions resolved
         int fragmentFrame = -1;    // frame of the last Render call
         int fragmentCounter = 0;   // Render calls in this frame (seeds their ImGui ids)
 #ifdef IMGUI_RICHMD_WITH_MERMAID

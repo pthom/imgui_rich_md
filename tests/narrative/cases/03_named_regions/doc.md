@@ -1,0 +1,6 @@
+![[prog.py#Outer]]
+![[prog.py#Inner]]
+![[prog.py#Iteration]]
+![[prog.c#Tabs]]
+![[prog.c#Tabs and spaces]]
+![[prog.glsl#Lighting]]

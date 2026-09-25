@@ -1030,27 +1030,26 @@ namespace RichMd
         return std::string(bytes->begin(), bytes->end());
     }
 
-    // The resolved imports of a text (cached per text: the files are read once)
-    static const std::string& _ResolveImportsCached(const std::string& text)
+    // A text with its transclusions resolved (cached per text: the files are read once)
+    static const std::string& _ResolveTransclusionsCached(const std::string& text)
     {
-        if (text.find("@import") == std::string::npos)
+        if (text.find("![[") == std::string::npos)
             return text;
-        auto& cache = gCurrentContext->resolvedImports;
+        auto& cache = gCurrentContext->resolvedTransclusions;
         auto it = cache.find(text);
         if (it != cache.end())
             return it->second;
-        return cache[text] = ResolveImports(text, _ReadTextAssetOrFile);
+        return cache[text] = ResolveTransclusions(text, _ReadTextAssetOrFile);
     }
 
     void Render(const std::string& markdownString)
     {
-        RenderRaw(_ResolveImportsCached(_Unindent(markdownString, false)));
+        RenderRaw(_ResolveTransclusionsCached(_Unindent(markdownString, false)));
     }
 
-    void RenderFile(const std::string& path, const std::string& mdId, const std::string& part)
+    void RenderFile(const std::string& path, const std::string& target)
     {
-        std::string directive = "@import \"" + path + "\" {" + (mdId.empty() ? "" : "md_id=" + mdId + ", ") + "part=" + part + "}";
-        RenderRaw(_ResolveImportsCached(directive));
+        RenderRaw(_ResolveTransclusionsCached("![[" + path + (target.empty() ? "" : "#" + target) + "]]"));
     }
 
     void RegisterFencedBlockRenderer(const std::string& language, std::function<void(const std::string& code)> renderer)
