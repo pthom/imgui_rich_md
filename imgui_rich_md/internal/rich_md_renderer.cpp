@@ -1,4 +1,8 @@
 // Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
+// Forked from imgui_md by Dmitry Mekhontsev (https://github.com/mekhontsev/imgui_md, its MIT license below), and
+// heavily modified since: LaTeX formulas, admonitions, collapsible sections, wikilinks, task lists, images with a
+// loading spinner, HTML tags (<sub>, <sup>, <kbd>, <mark>, <u>, <center>, <md-error>), and a Style that follows the
+// ImGui theme. Internal: the public API is in rich_md.h.
 /*
  * imgui_md: Markdown for Dear ImGui using MD4C
  * (https://github.com/mekhontsev/imgui_md)

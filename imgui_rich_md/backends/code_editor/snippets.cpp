@@ -3,7 +3,7 @@
 #include "ImGuiColorTextEdit/TextEditor.h"
 #include "imgui.h"
 #include "../../rich_md.h"
-#include "../../rich_md_internal.h"
+#include "../../internal/rich_md_internal.h"
 
 #include <algorithm>
 #include <cstdio>

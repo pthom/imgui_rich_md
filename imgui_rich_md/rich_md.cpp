@@ -1,18 +1,18 @@
 // Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 #include "rich_md.h"
 #include "rich_md_host.h"
-#include "rich_md_internal.h"
+#include "internal/rich_md_internal.h"
 #ifdef IMGUI_RICHMD_WITH_CODE_EDITOR
 #include "backends/code_editor/snippets.h"
 #endif
 #ifdef IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES
-#include "rich_md_url_download.h"
+#include "internal/rich_md_url_download.h"
 #endif
 
 
 #include "imgui.h"
 #include "imgui_internal.h"  // RegisterUserTexture
-#include "rich_md_renderer.h"
+#include "internal/rich_md_renderer.h"
 
 // Platform includes for OpenUrlInBrowser
 #if defined(__EMSCRIPTEN__)
@@ -1083,7 +1083,7 @@ namespace RichMd
 #endif
     }
 
-    Renderer::Style& GetStyle()
+    Style& GetStyle()
     {
         IM_ASSERT(_Renderer() && "RichMd: call InitializeMarkdown first");
         return _Renderer()->style;
@@ -1232,9 +1232,9 @@ namespace RichMd
     // Same look and behaviour as the links inside markdown
     void RenderTextAsLink(const char* text, const char* url)
     {
-        static const Renderer::Style defaultStyle;
+        static const Style defaultStyle;
         MarkdownRenderer* renderer = _Renderer();
-        const Renderer::Style& style = renderer ? renderer->style : defaultStyle;
+        const Style& style = renderer ? renderer->style : defaultStyle;
         ImGui::PushStyleColor(ImGuiCol_Text, LinkColor());
         ImGui::TextUnformatted(text);
         ImGui::PopStyleColor();

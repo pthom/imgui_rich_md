@@ -46,17 +46,18 @@ endif()
 
 add_library(imgui_rich_md STATIC
     ${_md4c_dir}/md4c.c ${_md4c_dir}/md4c.h
-    ${_richmd_dir}/rich_md_renderer.cpp ${_richmd_dir}/rich_md_renderer.h
     ${_richmd_dir}/rich_md.cpp ${_richmd_dir}/rich_md.h
     ${_richmd_dir}/rich_md_narrative.cpp
-    ${_richmd_dir}/rich_md_host.h ${_richmd_dir}/rich_md_internal.h
+    ${_richmd_dir}/rich_md_host.h
+    ${_richmd_dir}/internal/rich_md_renderer.cpp ${_richmd_dir}/internal/rich_md_renderer.h
+    ${_richmd_dir}/internal/rich_md_internal.h
 )
 add_library(RichMd::RichMd ALIAS imgui_rich_md)
 target_compile_features(imgui_rich_md PUBLIC cxx_std_17)
 target_include_directories(imgui_rich_md PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
-    $<BUILD_INTERFACE:${_md4c_dir}>
     $<INSTALL_INTERFACE:include>)
+target_include_directories(imgui_rich_md PRIVATE ${_md4c_dir})  # md4c is internal (internal/rich_md_renderer.h)
 target_link_libraries(imgui_rich_md PUBLIC imgui)
 if(APPLE)
     # limits.h and md4c both define OFF_MAX
@@ -156,7 +157,7 @@ if(IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES)
     else()
         find_package(CURL)
         if(CURL_FOUND)
-            target_sources(imgui_rich_md PRIVATE ${_richmd_dir}/rich_md_url_download.cpp ${_richmd_dir}/rich_md_url_download.h)
+            target_sources(imgui_rich_md PRIVATE ${_richmd_dir}/internal/rich_md_url_download.cpp ${_richmd_dir}/internal/rich_md_url_download.h)
             target_link_libraries(imgui_rich_md PRIVATE CURL::libcurl)
             target_compile_definitions(imgui_rich_md PUBLIC IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES)
             set(IMGUI_RICHMD_LINKS_CURL ON CACHE INTERNAL "" FORCE)
@@ -186,9 +187,7 @@ endif()
 
 # --- install (headers under include/imgui_rich_md, targets exported by the parent or here)
 if(_richmd_standalone OR IMGUI_RICHMD_INSTALL)
-    install(FILES ${_richmd_dir}/rich_md.h ${_richmd_dir}/rich_md_host.h ${_richmd_dir}/rich_md_renderer.h
-            DESTINATION include/imgui_rich_md)
-    install(FILES ${_md4c_dir}/md4c.h DESTINATION include)
+    install(FILES ${_richmd_dir}/rich_md.h ${_richmd_dir}/rich_md_host.h DESTINATION include/imgui_rich_md)
     if(IMGUI_RICHMD_WITH_CODE_EDITOR)
         install(FILES ${_richmd_dir}/backends/code_editor/snippets.h DESTINATION include/imgui_rich_md/backends/code_editor)
     endif()
