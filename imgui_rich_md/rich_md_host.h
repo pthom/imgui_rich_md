@@ -1,9 +1,10 @@
 // Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 #pragma once
-// Host services: what the markdown renderer needs from the application or the framework
-// that hosts it (GPU textures, asset files, logging). Every service is optional and has a
-// plain default; a host (e.g. ImGui Bundle with HelloImGui) installs richer ones with
-// SetHostServices() before CreateContext(). Only the download types are part of the Python API.
+/*::md Host services
+What the markdown renderer needs from the application or the framework that hosts it (GPU textures, asset files,
+logging). Every service is optional and has a plain default; a host (e.g. ImGui Bundle with HelloImGui) installs
+richer ones with `SetHostServices()` before `CreateContext()`. Only the download types are part of the Python API.
+*/
 
 #include "imgui.h"
 
@@ -17,6 +18,15 @@
 
 namespace RichMd
 {
+    // =================================================================================================================
+    //                                      Types and defaults (C++ only)
+    // =================================================================================================================
+    /*::md Types and defaults
+    The types the services exchange (textures, formula bitmaps, asset files), and the default services, which a
+    host may call from its own.
+    ::code
+    */
+
     // A GPU texture owned by the markdown caches (images, LaTeX).
     // keepAlive owns the GPU resource: the texture is freed when the last copy is dropped
     // (e.g. when the caches are cleared by DestroyContext).
@@ -35,7 +45,8 @@ namespace RichMd
         std::vector<uint8_t> rgba;   // width * height * 4 bytes
         int width = 0, height = 0;
         int baselineY = 0;           // from the top of the bitmap to the text baseline, in pixels
-        std::string error;           // set (with no pixels) when the formula is invalid: the source is shown with this message
+        // set (with no pixels) when the formula is invalid: the source is shown with this message
+        std::string error;
     };
 
     // The default UploadRgba: an ImTextureData registered with Dear ImGui, created by the rendering backend at
@@ -57,6 +68,15 @@ namespace RichMd
 
     // The default ReadAsset: the embedded assets, then the file system under the assets folder
     AssetBytes ReadAssetDefault(const std::string& assetPath);
+    // ::endcode
+
+    // =================================================================================================================
+    //                                      Downloads
+    // =================================================================================================================
+    /*::md Downloads
+    The download of URL images: its result, and the function that makes it (`HostServices::Download`).
+    ::code
+    */
 
     // Status of a download (see HostServices::Download)
     enum class MarkdownDownloadStatus {
@@ -79,6 +99,15 @@ namespace RichMd
     };
 
     using MarkdownDownloadFunction = std::function<MarkdownDownloadResult(const std::string& url)>;
+    // ::endcode
+
+    // =================================================================================================================
+    //                                      The services (C++ only)
+    // =================================================================================================================
+    /*::md The services
+    Every field is optional: an empty one keeps its default. Set them before `CreateContext()`.
+    ::code
+    */
 
     struct HostServices
     {
@@ -102,7 +131,8 @@ namespace RichMd
         // pixels; displayStyle is true for $$...$$. Return std::nullopt when LaTeX is not available, or a
         // bitmap with only `error` set when the formula is invalid: the formula's source is shown instead.
         // Default: MicroTeX when built with IMGUI_RICHMD_WITH_LATEX, else none.
-        std::function<std::optional<LatexBitmap>(const std::string& latex, float fontSizePx, ImU32 color, bool displayStyle)> RenderLatex;
+        std::function<std::optional<LatexBitmap>(const std::string& latex, float fontSizePx, ImU32 color,
+                                                 bool displayStyle)> RenderLatex;
 
         // Downloads the data of a URL image (http:// or https://). Called every frame for a URL until it returns
         // Ready or Failed; the result is then cached. A synchronous download returns Ready or Failed at once, an
@@ -118,4 +148,5 @@ namespace RichMd
     // Sets the host services (call before CreateContext). Empty fields keep their default.
     void SetHostServices(const HostServices& services);
     const HostServices& GetHostServices();
+    // ::endcode
 }
