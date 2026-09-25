@@ -226,6 +226,9 @@ namespace RichMd
     // Renders a Mermaid diagram (flowchart, sequence or class diagram), as ```mermaid blocks do. A diagram that
     // cannot be parsed is shown as code, with the error below it; so is any diagram when the library is built
     // without IMGUI_RICHMD_WITH_MERMAID.
+    // Limitations: a subset of Mermaid, for small and medium diagrams, with its own layout (not a copy of
+    // mermaid.js) and the colors of the ImGui style. The other diagram types, styles (classDef, style), click,
+    // themes, front matter and markdown in labels are not supported. Details: docs/mermaid.md in imgui_rich_md.
     void RenderMermaid(const std::string& source);
 
     // The colors and spacing of the current context (see Renderer::Style). C++ only.
