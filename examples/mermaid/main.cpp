@@ -25,7 +25,8 @@ the Mermaid Live Editor, to compare with Mermaid's own render.
 > - **Not supported**: the other diagram types (state, ER, gantt, pie, git graphs, mind maps...). Styles (`classDef`,
 >   `style`) and `click` are ignored.
 >
-> A diagram that cannot be read is shown as code, with the line of the error.
+> A diagram that cannot be read is shown as code, with the line of the error. The details, and how the layout
+> differs from Mermaid's: [what is supported](https://github.com/pthom/imgui_rich_md/blob/main/docs/mermaid.md).
 )md";
 
 struct Diagram

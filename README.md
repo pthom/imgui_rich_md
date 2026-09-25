@@ -44,7 +44,7 @@ RichMd::DeInitializeMarkdown();        // before the backends shut down
 | Code | inline code; code blocks with a copy button, and syntax highlighting with the code editor option |
 | Images | from files or assets, from URLs with the download option, sized with `<img width=...>`, a spinner while loading |
 | LaTeX | inline `$...$` and display `$$...$$`, with the LaTeX option |
-| Mermaid | flowcharts, sequence and class diagrams in ` ```mermaid ` blocks, drawn natively with `ImDrawList` (no web view) |
+| Mermaid | flowcharts, sequence and class diagrams in ` ```mermaid ` blocks, drawn natively with `ImDrawList` (no web view); [what is supported](docs/mermaid.md) |
 | Structure | GitHub admonitions (`> [!NOTE]`), task lists, collapsible sections (`<details>`), `<center>` |
 | Callbacks | links, wikilinks (`[[target]]`), headings (tables of contents), your own renderer for a fenced block language |
 | Sections and imports | a source file carries markdown blocks (`@@md#Name` ... `@@/md`) that a document imports with `@import`: a program can be its own narrative |
