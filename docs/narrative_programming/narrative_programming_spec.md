@@ -40,6 +40,10 @@ A directive is the first token of its line, once the line's comment token (for l
 
 For example, `r"""::md Intro` opens a section on the first line of a string, and `# ::code` opens a code region in a line comment. A comment that starts with a C++ global-scope name (`// ::GetTickCount() ...`) is not a directive: `::GetTickCount()` is not a directive keyword.
 
+The opening delimiter starts its line, after indentation: `r"""::md Intro` opens a section, `doc = """::md Intro` does not.
+
+The language of a file is given by its extension: `.py`, `.pyi` (Python); `.c`, `.h`, `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh` (C, C++); `.glsl`, `.vert`, `.frag` (GLSL); `.js`, `.ts` (JavaScript, TypeScript); `.md` (Markdown documents, see [section 11.5](#115-headings-of-markdown-documents)). A file of another kind has no annotations: it can only be transcluded whole.
+
 ## 3. Names
 
 A name is the trimmed remainder of the annotation line following the directive:
@@ -95,6 +99,10 @@ For line-comment Markdown without associated code, where there is no enclosing m
 # ::endmd Intro
 ```
 
+Blank lines may separate the comment lines of such a section. A line of source code inside it is an error (a missing `::endmd` or `::code`).
+
+Inside the prose of a section, the only directive is the unnamed `::code` that opens its associated code.
+
 ## 5. Associated code
 
 An unnamed `::code` within an open Markdown section opens the code region associated with that section:
@@ -121,6 +129,7 @@ A Markdown section may have at most one associated anonymous code region.
 An `::endmd` immediately following that `::endcode` is allowed and has no further effect (a redundant close, for authors who prefer symmetric markers). When it carries a name, the name must match the section.
 
 `::code` written inside the section's container (the string or block comment) marks the crossing: the section continues into the source that follows the container.
+The associated code starts on the line after the closing delimiter.
 
 ## 6. Named code regions
 
@@ -261,6 +270,8 @@ If no language can be inferred, the region is rendered as untyped source code.
 
 This requirement is semantic; an implementation need not literally construct Markdown backtick fences.
 
+An implementation that does produce a fenced block makes its fence longer than any run of backticks starting a line of the code (a Python string holding Markdown fences, for example).
+
 ## 11. Transclusion
 
 Markdown may transclude named objects using Obsidian-style embed syntax:
@@ -278,6 +289,7 @@ Markdown may transclude named objects using Obsidian-style embed syntax:
 The target is resolved in the namespace of the referenced file.
 
 A transclusion must be alone on its line. Inside a paragraph, `![[...]]` is not a transclusion.
+Inside a fenced code block, it is not a transclusion either: a document can show the syntax.
 
 ### 11.1 Markdown section
 
@@ -344,6 +356,8 @@ The part of the document under that heading is transcluded: the heading and what
 
 Heading matching is exact and case-sensitive, on the heading's text.
 
+Headings are ATX headings (`#` to `######`) outside fenced code blocks. An optional closing sequence (`## Setup ##`) is not part of the text.
+
 A final `#code` step is always the associated-code selector, never a heading name: `![[notes.md#Setup#code]]` is an error (a Markdown document has no associated code), not a subheading named `code`.
 
 ## 12. Relative paths
@@ -357,6 +371,8 @@ A path in a transclusion is resolved relative to the file containing the transcl
 Resolution must not depend on the process working directory.
 
 The initial specification requires explicit filenames and extensions for cross-file references. Project-wide basename lookup and implicit extension resolution are outside the specification.
+
+A text that comes from no file (a string given to a renderer) has no base: `![[#target]]` is an error in it, and where its relative paths are looked up is up to the implementation.
 
 ## 13. Transclusion semantics
 
@@ -374,6 +390,8 @@ Transcluded Markdown may itself contain transclusions.
 
 Implementations must detect recursive transclusion cycles and report them as errors rather than recurse indefinitely.
 
+When the result is Markdown text, the transcluded material replaces the transclusion line, separated from the surrounding lines by one blank line. A transclusion whose material is empty (an empty section) removes its line.
+
 ## 14. Error conditions
 
 At minimum, implementations should diagnose:
@@ -390,6 +408,13 @@ At minimum, implementations should diagnose:
 - a missing transclusion target (a name, or a heading);
 - `#code` applied to a section without associated code, or to a Markdown document;
 - recursive transclusion cycles.
+- a directive other than the unnamed `::code` inside the prose of a section;
+- a string or block comment that starts with a directive other than `::md`;
+- a line of source code inside the prose of a section written in line comments;
+- a reserved character in a name;
+- a target of several names in a source file (a source file has no headings).
+
+A source file with an annotation error provides no object: every transclusion from it is an error.
 
 Diagnostics should identify the source file and annotation or transclusion responsible for the error.
 
@@ -417,3 +442,7 @@ The exact lexical rules for paths and names should follow the restrictions defin
 ## 16. Relation to the earlier syntax
 
 This specification replaces the syntax used until 2026 by rich_md and Hello ImGui's documentation tools (`@@md#Name` ... `@@/md` markers, `@import "file" {md_id=Name}` directives). Implementations do not need to read it.
+
+## 17. Conformance cases
+
+The folder [tests/narrative/cases](../../tests/narrative/cases) of imgui_rich_md holds test cases. Each case is a folder with source files, a `doc.md` with transclusions, and `expected.md`, the result of resolving `doc.md`. Two implementations run them: imgui_rich_md's (C++) and the documentation tool of Hello ImGui (Python). In the expected results, errors use imgui_rich_md's format (`<md-error title="reason">`) and messages, which are not part of this specification.
