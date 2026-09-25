@@ -16,8 +16,13 @@ namespace RichMd
 {
     class MarkdownRenderer;
 
-    // A context: its options, its renderer (and the fonts), its caches. Defined here for the Python binding, which
-    // hands it out as an opaque object.
+    // ::md Context
+    // A context holds the options, the renderer (created at the first render: it loads the fonts), the fenced block
+    // renderers registered by the application, and caches: the resolved transclusions (per text), the Mermaid
+    // diagrams (per source, font and size). The renderer keeps the fonts, the images and the formulas (a formula
+    // not drawn for 60 frames is dropped). The host services and MicroTeX are global: every context shares them.
+    // ::code
+    // Defined here for the Python binding, which hands it out as an opaque object.
     struct Context
     {
         MarkdownOptions options;
@@ -31,6 +36,7 @@ namespace RichMd
 #endif
         ~Context();
     };
+    // ::endcode
 }
 
 namespace RichMd { namespace Internal

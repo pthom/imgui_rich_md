@@ -86,6 +86,7 @@ The public API is in [imgui_rich_md/rich_md.h](imgui_rich_md/rich_md.h) (initial
 fonts) and, for applications that provide their own textures, assets or downloads,
 [imgui_rich_md/rich_md_host.h](imgui_rich_md/rich_md_host.h). [docs/api.md](docs/api.md) presents it, assembled from the
 headers.
+How the library works inside, for contributors: [docs/architecture.md](docs/architecture.md).
 
 ## Python
 

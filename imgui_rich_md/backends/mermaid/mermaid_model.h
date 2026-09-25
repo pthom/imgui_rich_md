@@ -3,10 +3,13 @@
 /*::md Mermaid model and pipeline
 The Mermaid backend's model and pipeline, for its own files and for the tests (`rich_md.cpp` only needs
 `rich_md_mermaid.h`):
-
-    Parse: source -> Diagram;  Layout: positions, sizes, polylines;  Draw: with ImDrawList
-
-In the model, the fields after "filled by the layout" are results of `Layout`; the others come from `Parse`.
+```mermaid
+flowchart LR
+    Source[source] --> Parse --> Diagram --> Layout --> Draw
+```
+`Parse` reads the source into a `Diagram`; `Layout` computes the positions, the sizes and the polylines, with the
+current font; `Draw` draws them with `ImDrawList`. In the model, the fields after "filled by the layout" are results
+of `Layout`; the others come from `Parse`.
 */
 #include "imgui.h"
 

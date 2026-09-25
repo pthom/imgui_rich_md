@@ -1,5 +1,7 @@
 // Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
-// Mermaid: the drawing, with ImDrawList. Colors come from the ImGui style.
+// ::md Drawing
+// The drawing, with `ImDrawList`. The colors come from the ImGui style.
+// ::endmd
 #include "mermaid_model.h"
 
 #include <algorithm>

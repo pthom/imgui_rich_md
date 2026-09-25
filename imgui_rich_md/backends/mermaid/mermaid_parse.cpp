@@ -1,6 +1,8 @@
 // Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
-// Mermaid: the parsers. A line is scanned by hand (no std::regex); a line that is not understood is an error,
-// except the styling and interaction lines, which are skipped.
+// ::md Parsing
+// The parsers. A line is scanned by hand (no std::regex); a line that is not understood is an error, except the
+// styling and interaction lines, which are skipped.
+// ::endmd
 #include "mermaid_model.h"
 
 #include <algorithm>

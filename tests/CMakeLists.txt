@@ -27,7 +27,8 @@ if(IMGUI_RICHMD_WITH_MERMAID)
     add_executable(imgui_rich_md_mermaid_test ${CMAKE_CURRENT_LIST_DIR}/mermaid/mermaid_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
     target_include_directories(imgui_rich_md_mermaid_test PRIVATE ${IMGUI_DIR}/backends)
     target_link_libraries(imgui_rich_md_mermaid_test PRIVATE imgui_rich_md)
-    target_compile_definitions(imgui_rich_md_mermaid_test PRIVATE MERMAID_CORPUS_DIR="${CMAKE_CURRENT_LIST_DIR}/mermaid/corpus")
+    target_compile_definitions(imgui_rich_md_mermaid_test PRIVATE MERMAID_CORPUS_DIR="${CMAKE_CURRENT_LIST_DIR}/mermaid/corpus"
+                               MERMAID_DOCS_DIR="${CMAKE_CURRENT_LIST_DIR}/../docs")
     add_test(NAME mermaid_test COMMAND imgui_rich_md_mermaid_test)
 endif()
 
@@ -37,12 +38,17 @@ target_link_libraries(imgui_rich_md_narrative_test PRIVATE imgui_rich_md)
 target_compile_definitions(imgui_rich_md_narrative_test PRIVATE NARRATIVE_CASES_DIR="${CMAKE_CURRENT_LIST_DIR}/narrative/cases")
 add_test(NAME narrative_test COMMAND imgui_rich_md_narrative_test)
 
-# The API page, docs/api.md: generated from docs/api.src.md and the headers by tools/narrative_resolve (no ImGui).
-# Regenerate it with the target rich_md_api_doc; the test api_doc fails when it is not up to date.
+# The pages of docs/ assembled from the sources, by tools/narrative_resolve (no ImGui): docs/<name>.src.md -> docs/<name>.md.
+# Regenerate them with the target rich_md_docs; the test doc_<name> fails when a page is not up to date.
 add_executable(narrative_resolve ${CMAKE_CURRENT_LIST_DIR}/../tools/narrative_resolve/narrative_resolve.cpp
                                  ${CMAKE_CURRENT_LIST_DIR}/../imgui_rich_md/narrative_programming.cpp)
 target_include_directories(narrative_resolve PRIVATE ${CMAKE_CURRENT_LIST_DIR}/..)
 get_filename_component(_richmd_docs_dir ${CMAKE_CURRENT_LIST_DIR}/../docs ABSOLUTE)
-add_custom_target(rich_md_api_doc COMMAND narrative_resolve ${_richmd_docs_dir}/api.src.md ${_richmd_docs_dir}/api.md
-                  COMMENT "Generating docs/api.md")
-add_test(NAME api_doc COMMAND narrative_resolve --check ${_richmd_docs_dir}/api.src.md ${_richmd_docs_dir}/api.md)
+set(_richmd_docs_commands)
+foreach(_page api architecture)
+    set(_src ${_richmd_docs_dir}/${_page}.src.md)
+    set(_md ${_richmd_docs_dir}/${_page}.md)
+    list(APPEND _richmd_docs_commands COMMAND narrative_resolve ${_src} ${_md})
+    add_test(NAME doc_${_page} COMMAND narrative_resolve --check ${_src} ${_md})
+endforeach()
+add_custom_target(rich_md_docs ${_richmd_docs_commands} COMMENT "Generating the pages of docs/")

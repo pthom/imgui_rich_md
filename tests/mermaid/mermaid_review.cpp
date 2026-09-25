@@ -1,7 +1,9 @@
-// A development tool, not an example: renders each diagram of tests/mermaid/corpus to a PNG, and writes a page that
-// shows, for each one, its source, Mermaid's own render (mermaid.js, run by the browser) and ours.
-//   imgui_rich_md_mermaid_review [output_folder]      (default: ./mermaid_review), then open output_folder/index.html
+// ::md Mermaid review
+// A development tool, not an example: renders each diagram of `tests/mermaid/corpus` to a PNG, and writes a page that
+// shows, for each one, its source, Mermaid's own render (mermaid.js, run by the browser) and ours:
+// `imgui_rich_md_mermaid_review [output_folder]` (default: `./mermaid_review`), then open `output_folder/index.html`.
 // Built with the examples (desktop only): it uses their window, Dear ImGui with GLFW and OpenGL 3.
+// ::endmd
 #include "common/app_glfw_gl3.h"
 #include "mermaid_checks.h"
 

@@ -1,6 +1,8 @@
 // Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
-// Mermaid: the layout. Graphs are laid out in layers (back edges reversed, longest-path ranks, barycenter
-// ordering, one band per subgraph); sizes come from the text, measured with the current font.
+// ::md Layout
+// Graphs are laid out in layers (back edges reversed, longest-path ranks, barycenter ordering, one band per
+// subgraph); the sizes come from the text, measured with the current font.
+// ::endmd
 #include "mermaid_model.h"
 
 #include <algorithm>
@@ -424,7 +426,9 @@ namespace RichMd::Mermaid
 
         bool SegmentThroughRect(ImVec2 p, ImVec2 q, ImVec2 r0, ImVec2 r1);
 
+        // ::md RouteEdges
         // The polylines, and the labels on the middle segment when there is one, else at the middle of the edge
+        // ::endmd
         void RouteEdges(Graph& graph, const LayoutState& s, float em)
         {
             std::vector<std::pair<float, float>> anchors = Anchors(graph, s, em);
@@ -577,7 +581,9 @@ namespace RichMd::Mermaid
             }
         }
 
+        // ::md Mirror
         // BT and RL: the layout of TD and LR, mirrored along the main axis (the titles of the boxes stay on top)
+        // ::endmd
         void Mirror(Graph& graph, float em)
         {
             const bool vertical = graph.vertical;
@@ -626,8 +632,10 @@ namespace RichMd::Mermaid
             return out;
         }
 
+        // ::md Rank
         // Ranks: back edges reversed, the longest path from a source, links to boxes as constraints; the layers, and
         // the member that stands for a box at each end of a link to it
+        // ::endmd
         LayoutState Rank(Graph& graph)
         {
             LayoutState s;
@@ -763,8 +771,10 @@ namespace RichMd::Mermaid
             return s;
         }
 
+        // ::md Order
         // Ordering: barycenter sweeps, downward (a node goes to the mean position of its predecessors) and upward
         // (of its successors), keeping the ordering with the fewest crossings between neighbouring layers
+        // ::endmd
         void Order(Graph& graph, LayoutState& s)
         {
             const int n = (int)graph.nodes.size();
@@ -826,8 +836,10 @@ namespace RichMd::Mermaid
                     order[layer[i]] = (int)i;
         }
 
+        // ::md PlaceAcross
         // Across the main axis: the sizes of the nodes, the bands of the subgraphs (nested), the straightened columns,
         // the positions
+        // ::endmd
         void PlaceAcross(Graph& graph, LayoutState& s, float em)
         {
             const int n = (int)graph.nodes.size();
@@ -984,10 +996,12 @@ namespace RichMd::Mermaid
             s.totalCross = totalCross;
         }
 
+        // ::md AssignLanes
         // Lane edges: their lanes, the ones that span fewer layers inside (nested like brackets), and their
         // approach lines after the layer of their source and before the layer of their target. So that the lane
         // routes do not cross: from the layer outward, the back edges (their lanes go the other way), the inner
         // lanes first, then the edges that skip layers, the outer lanes first
+        // ::endmd
         void AssignLanes(Graph& graph, LayoutState& s)
         {
             auto& exitCount = s.exitCount;
@@ -1024,8 +1038,10 @@ namespace RichMd::Mermaid
             }
         }
 
+        // ::md MeasureGaps
         // The least room along the main axis: after each layer, for the labels and the markers of the edges that
         // cross the gap; before and after each layer, for the boxes that start or end on it
+        // ::endmd
         void MeasureGaps(const Graph& graph, LayoutState& s, float em, const std::vector<Relation>* relations)
         {
             const bool vertical = graph.vertical;
@@ -1086,8 +1102,10 @@ namespace RichMd::Mermaid
             }
         }
 
+        // ::md PlaceAlong
         // Along the main axis: the tracks of the channels, the layers one after the other with the room of their
         // gaps, the shift for the back edges, the size
+        // ::endmd
         void PlaceAlong(Graph& graph, LayoutState& s, float em, float gapY)
         {
             const bool vertical = graph.vertical;
@@ -1167,6 +1185,15 @@ namespace RichMd::Mermaid
             graph.size = vertical ? ImVec2(totalCross + lanes, mainTotal) : ImVec2(mainTotal, totalCross + lanes);
         }
 
+        /*::md Layout phases
+        The layout of a graph, in phases:
+        ```mermaid
+        flowchart LR
+            Rank --> Order --> PlaceAcross --> AssignLanes --> MeasureGaps --> PlaceAlong --> RouteEdges --> Mirror
+        ```
+        The main axis goes along the layers (down in TD, right in LR); `Mirror` runs for BT and RL only.
+        ::code
+        */
         // gapY: the gap between two layers; relations: the markers and cardinalities of a class diagram
         void LayoutGraph(Graph& graph, float em, float gapY, const std::vector<Relation>* relations)
         {
@@ -1180,6 +1207,7 @@ namespace RichMd::Mermaid
             if (graph.reversed)
                 Mirror(graph, em);
         }
+        // ::endcode
 
         // Whether the segment [p, q] goes through the rect [r0, r1] (Liang-Barsky clipping)
         bool SegmentThroughRect(ImVec2 p, ImVec2 q, ImVec2 r0, ImVec2 r1)

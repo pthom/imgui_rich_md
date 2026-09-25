@@ -52,6 +52,12 @@ static ImVec4 resolve_color(const ImVec4& color, const ImVec4& automatic)
 }
 
 
+// ::md Parsing and drawing
+// The renderer is md4c's client. `print()` parses a fragment with md4c, which calls back `block()`, `span()` and
+// `text()` as it enters and leaves each block and span; they dispatch to `BLOCK_*()` and `SPAN_*()`, which draw as they
+// go, with ImGui widgets and the window's draw list. `MarkdownRenderer` (in rich_md.cpp) derives from it, and provides
+// the fonts, the images, the formulas, the code blocks, and the application's callbacks (links, headings, HTML).
+// ::code
 Renderer::Renderer()
 {
 	m_md.abi_version = 0;
@@ -82,6 +88,7 @@ Renderer::Renderer()
 
 	m_md.syntax = nullptr;
 }
+// ::endcode
 
 void Renderer::BLOCK_UL(const MD_BLOCK_UL_DETAIL* d, bool e)
 {

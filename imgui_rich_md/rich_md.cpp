@@ -353,6 +353,12 @@ namespace RichMd
         return tex;
     }
 
+    // ::md Default host services
+    // Every host service has a default, installed when a context is created: textures registered with Dear ImGui
+    // (created by the rendering backend at the next frame), assets embedded in the binary or read from the assets
+    // folder, the code editor and MicroTeX when they are built in, logging to stderr. A host replaces any of them
+    // with `SetHostServices()` before `CreateContext()`; the fields it leaves empty keep their default.
+    // ::code
     static void _InstallDefaultHostServices()
     {
         if (!gHostServices.UploadRgba)
@@ -370,6 +376,7 @@ namespace RichMd
         if (!gHostServices.Log)
             gHostServices.Log = [](const std::string& message) { fprintf(stderr, "rich_md: %s\n", message.c_str()); };
     }
+    // ::endcode
 
     // Default code block: monospaced text in a frame, with a copy button
     static void _RenderCodeBlockPlain(const std::string& code)
@@ -994,6 +1001,13 @@ namespace RichMd
     }
 
 
+    // ::md Rendering a fragment
+    // Each `Render()` call renders a *fragment*: `Render()` removes its common indentation and resolves its
+    // transclusions (once per text: the result is cached in the context), then `RenderRaw()` gives it its own ImGui
+    // id scope and hands it to the renderer, which parses it with md4c and draws it. This happens every frame:
+    // rich_md keeps no document between frames, only caches (fonts, textures, formulas, diagrams). At the end, the
+    // textures the backend has destroyed are freed.
+    // ::code
     void RenderRaw(const std::string& markdownString)
     {
         MarkdownRenderer* renderer = _Renderer();
@@ -1015,6 +1029,7 @@ namespace RichMd
         ImGui::PopID();
         _SweepDestroyedTextures();
     }
+    // ::endcode
 
     // A text file: from the assets, else from the file system as is (a source file rendering itself)
     static std::optional<std::string> _ReadTextAssetOrFile(const std::string& path)
