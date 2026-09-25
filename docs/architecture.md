@@ -129,9 +129,10 @@ classDiagram
 ```
 
 A context holds the options, the renderer (created at the first render: it loads the fonts), the fenced block
-renderers registered by the application, and caches: the resolved transclusions (per text), the Mermaid
-diagrams (per source, font and size). The renderer keeps the fonts, the images and the formulas (a formula
-not drawn for 60 frames is dropped). The host services and MicroTeX are global: every context shares them.
+renderers registered by the application, and caches: the resolved transclusions (per text, resolved again when
+one of their files changes), the Mermaid diagrams (per source, font and size). The renderer keeps the fonts, the
+images and the formulas (a formula not drawn for 60 frames is dropped). The host services and MicroTeX are
+global: every context shares them.
 
 ```cpp
     // Defined here for the Python binding, which hands it out as an opaque object.
@@ -140,7 +141,7 @@ not drawn for 60 frames is dropped). The host services and MicroTeX are global: 
         MarkdownOptions options;
         std::unique_ptr<MarkdownRenderer> renderer;  // created on first use (it loads the fonts)
         std::map<std::string, std::function<void(const std::string& code)>> fencedBlockRenderers;
-        std::unordered_map<std::string, std::string> resolvedTransclusions;  // text -> text with its transclusions resolved
+        std::unordered_map<std::string, ResolvedText> resolvedTransclusions;  // per text
         int fragmentFrame = -1;    // frame of the last Render call
         int fragmentCounter = 0;   // Render calls in this frame (seeds their ImGui ids)
 #ifdef IMGUI_RICHMD_WITH_MERMAID

@@ -5,8 +5,12 @@
 #include "imgui.h"
 #include "imgui_impl_null.h"
 #include "imgui_rich_md/rich_md.h"
+#include "imgui_rich_md/internal/rich_md_internal.h"  // Context::resolvedTransclusions
 
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 static const char* kDocument = R"md(
@@ -158,12 +162,49 @@ static bool CheckContexts()
     return ok;
 }
 
+// A running program shows the new version of its narrative: Render() resolves a text again when a file it
+// transcludes changes
+static bool CheckLiveStory()
+{
+    namespace fs = std::filesystem;
+    fs::path file = fs::temp_directory_path() / "rich_md_smoke_test_live_story.md";
+    std::ofstream(file, std::ios::binary) << "first version\n";
+    const std::string embed = "![[" + file.generic_string() + "]]";
+    RichMd::CreateContext();
+    auto renderFrames = [&](int count) {
+        for (int i = 0; i < count; ++i)
+        {
+            ImGui_ImplNull_NewFrame();
+            ImGui::NewFrame();
+            ImGui::Begin("Live story");
+            RichMd::Render(embed);
+            ImGui::End();
+            ImGui::Render();
+            ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+        }
+    };
+    auto resolved = [&]() { return RichMd::GetCurrentContext()->resolvedTransclusions.begin()->second.markdown; };
+
+    renderFrames(1);
+    bool ok = resolved().find("first version") != std::string::npos;
+    std::ofstream(file, std::ios::binary) << "second version\n";
+    fs::last_write_time(file, fs::last_write_time(file) + std::chrono::seconds(2));  // file times can be coarse
+    renderFrames(40);  // the files are checked twice a second (40 frames of 1/60 s)
+    ok = ok && resolved().find("second version") != std::string::npos;
+
+    RichMd::DestroyContext();
+    fs::remove(file);
+    if (!ok)
+        printf("smoke test failed: the narrative did not follow its file\n");
+    return ok;
+}
+
 static int RunOneCycle()
 {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplNull_Init();
-    if (!CheckContexts())
+    if (!CheckContexts() || !CheckLiveStory())
         return 0;
 
     RichMd::MarkdownOptions options;

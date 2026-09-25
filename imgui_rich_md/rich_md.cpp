@@ -1045,16 +1045,45 @@ namespace RichMd
         return std::string(bytes->begin(), bytes->end());
     }
 
-    // A text with its transclusions resolved (cached per text: the files are read once)
+    static std::filesystem::file_time_type _ModificationTime(const std::string& path)
+    {
+        std::error_code ec;
+        auto time = std::filesystem::last_write_time(path, ec);
+        return ec ? std::filesystem::file_time_type::min() : time;
+    }
+
+    // Whether a file asked for by a resolved text changed on disk (checked at most twice a second)
+    static bool _FilesChanged(ResolvedText& resolved)
+    {
+        double now = ImGui::GetTime();
+        if (now - resolved.lastCheck < 0.5)
+            return false;
+        resolved.lastCheck = now;
+        for (const auto& [path, time] : resolved.files)
+            if (_ModificationTime(path) != time)
+                return true;
+        return false;
+    }
+
+    // A text with its transclusions resolved, cached per text. It is resolved again when one of its files changes:
+    // a running program shows the new version of its own narrative.
     static const std::string& _ResolveTransclusionsCached(const std::string& text)
     {
         if (text.find("![[") == std::string::npos)
             return text;
         auto& cache = gCurrentContext->resolvedTransclusions;
         auto it = cache.find(text);
-        if (it != cache.end())
-            return it->second;
-        return cache[text] = ResolveTransclusions(text, _ReadTextAssetOrFile);
+        if (it != cache.end() && !_FilesChanged(it->second))
+            return it->second.markdown;
+        ResolvedText& resolved = cache[text];
+        resolved.files.clear();
+        auto readAndRecord = [&resolved](const std::string& path) {
+            resolved.files.push_back({path, _ModificationTime(path)});
+            return _ReadTextAssetOrFile(path);
+        };
+        resolved.markdown = ResolveTransclusions(text, readAndRecord);
+        resolved.lastCheck = ImGui::GetTime();
+        return resolved.markdown;
     }
 
     void Render(const std::string& markdownString)
