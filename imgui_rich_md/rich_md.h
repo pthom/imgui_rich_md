@@ -182,7 +182,7 @@ namespace RichMd
     void Render(const std::string& markdownString);
     // Renders a markdown string as is (no unindent, no @import resolution)
     void RenderRaw(const std::string& markdownString);
-    // Same as Render (kept for compatibility)
+    // The former name of Render
     void RenderUnindented(const std::string& markdownString);
 
     // Reads a text file for ResolveImports, or returns std::nullopt when it does not exist
