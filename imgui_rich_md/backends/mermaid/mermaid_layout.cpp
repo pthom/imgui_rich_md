@@ -43,7 +43,10 @@ namespace RichMd::Mermaid
         case NodeShape::Rounded: roundedRect(0.6f * em); break;
         case NodeShape::Stadium: roundedRect(h / 2.f); break;
         case NodeShape::Circle:
-        case NodeShape::DoubleCircle: arc(ImVec2(w / 2.f, h / 2.f), ImVec2(w / 2.f, h / 2.f), 0.f, 2.f * pi, 48); pts.pop_back(); break;
+        case NodeShape::DoubleCircle:
+            arc(ImVec2(w / 2.f, h / 2.f), ImVec2(w / 2.f, h / 2.f), 0.f, 2.f * pi, 48);
+            pts.pop_back();
+            break;
         case NodeShape::Cylinder:
         {
             float ry = 0.35f * em;  // the lids: the top half of the top ellipse, the bottom half of the bottom one
@@ -51,18 +54,31 @@ namespace RichMd::Mermaid
             arc(ImVec2(w / 2.f, h - ry), ImVec2(w / 2.f, ry), 0.f, pi, 16);
             break;
         }
-        case NodeShape::Diamond: pts = {ImVec2(w / 2.f, 0.f), ImVec2(w, h / 2.f), ImVec2(w / 2.f, h), ImVec2(0.f, h / 2.f)}; break;
+        case NodeShape::Diamond:
+            pts = {ImVec2(w / 2.f, 0.f), ImVec2(w, h / 2.f), ImVec2(w / 2.f, h), ImVec2(0.f, h / 2.f)};
+            break;
         case NodeShape::Hexagon:
         {
             float s = h / 4.f;
-            pts = {ImVec2(s, 0.f), ImVec2(w - s, 0.f), ImVec2(w, h / 2.f), ImVec2(w - s, h), ImVec2(s, h), ImVec2(0.f, h / 2.f)};
+            pts = {ImVec2(s, 0.f),   ImVec2(w - s, 0.f), ImVec2(w, h / 2.f),
+                   ImVec2(w - s, h), ImVec2(s, h),       ImVec2(0.f, h / 2.f)};
             break;
         }
-        case NodeShape::Parallelogram: pts = {ImVec2(h / 2.f, 0.f), ImVec2(w, 0.f), ImVec2(w - h / 2.f, h), ImVec2(0.f, h)}; break;
-        case NodeShape::ParallelogramAlt: pts = {ImVec2(0.f, 0.f), ImVec2(w - h / 2.f, 0.f), ImVec2(w, h), ImVec2(h / 2.f, h)}; break;
-        case NodeShape::Trapezoid: pts = {ImVec2(h / 2.f, 0.f), ImVec2(w - h / 2.f, 0.f), ImVec2(w, h), ImVec2(0.f, h)}; break;
-        case NodeShape::TrapezoidAlt: pts = {ImVec2(0.f, 0.f), ImVec2(w, 0.f), ImVec2(w - h / 2.f, h), ImVec2(h / 2.f, h)}; break;
-        case NodeShape::Asymmetric: pts = {ImVec2(0.f, 0.f), ImVec2(w, 0.f), ImVec2(w, h), ImVec2(0.f, h), ImVec2(h / 4.f, h / 2.f)}; break;
+        case NodeShape::Parallelogram:
+            pts = {ImVec2(h / 2.f, 0.f), ImVec2(w, 0.f), ImVec2(w - h / 2.f, h), ImVec2(0.f, h)};
+            break;
+        case NodeShape::ParallelogramAlt:
+            pts = {ImVec2(0.f, 0.f), ImVec2(w - h / 2.f, 0.f), ImVec2(w, h), ImVec2(h / 2.f, h)};
+            break;
+        case NodeShape::Trapezoid:
+            pts = {ImVec2(h / 2.f, 0.f), ImVec2(w - h / 2.f, 0.f), ImVec2(w, h), ImVec2(0.f, h)};
+            break;
+        case NodeShape::TrapezoidAlt:
+            pts = {ImVec2(0.f, 0.f), ImVec2(w, 0.f), ImVec2(w - h / 2.f, h), ImVec2(h / 2.f, h)};
+            break;
+        case NodeShape::Asymmetric:
+            pts = {ImVec2(0.f, 0.f), ImVec2(w, 0.f), ImVec2(w, h), ImVec2(0.f, h), ImVec2(h / 4.f, h / 2.f)};
+            break;
         default: pts = {ImVec2(0.f, 0.f), ImVec2(w, 0.f), ImVec2(w, h), ImVec2(0.f, h)}; break;
         }
         return pts;
@@ -70,7 +86,13 @@ namespace RichMd::Mermaid
 
     namespace
     {
-        enum Side { Top, Bottom, Left, Right };
+        enum Side
+        {
+            Top,
+            Bottom,
+            Left,
+            Right
+        };
 
         // How far inside its box a node's outline is, on a side, at fraction t along that side
         float SideInset(const Node& node, float em, Side side, float t)
@@ -107,7 +129,8 @@ namespace RichMd::Mermaid
             auto cross = [&](int edge, int v) {
                 const Edge& e = graph.edges[edge];
                 if (e.lane > 0)
-                    return graph.backEdges.count({e.src, e.dst}) ? 3e6f - (float)e.lane : 1e6f + (float)e.lane;  // exact in float
+                    // exact in float
+                    return graph.backEdges.count({e.src, e.dst}) ? 3e6f - (float)e.lane : 1e6f + (float)e.lane;
                 return graph.vertical ? graph.nodes[v].pos.x : graph.nodes[v].pos.y;
             };
             std::map<int, std::vector<int>> out, in;
@@ -121,13 +144,17 @@ namespace RichMd::Mermaid
             std::vector<std::pair<float, float>> result(graph.edges.size(), {0.5f, 0.5f});
             for (auto& [v, edges] : out)
             {
-                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(a, graph.edges[a].dst) < cross(b, graph.edges[b].dst); });
+                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) {
+                    return cross(a, graph.edges[a].dst) < cross(b, graph.edges[b].dst);
+                });
                 for (size_t k = 0; k < edges.size(); ++k)
                     result[edges[k]].first = (float)(k + 1) / (float)(edges.size() + 1);
             }
             for (auto& [v, edges] : in)
             {
-                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) { return cross(a, graph.edges[a].src) < cross(b, graph.edges[b].src); });
+                std::stable_sort(edges.begin(), edges.end(), [&](int a, int b) {
+                    return cross(a, graph.edges[a].src) < cross(b, graph.edges[b].src);
+                });
                 for (size_t k = 0; k < edges.size(); ++k)
                     result[edges[k]].second = (float)(k + 1) / (float)(edges.size() + 1);
             }
@@ -214,11 +241,22 @@ namespace RichMd::Mermaid
             const Node& b = graph.nodes[e.dst];
             // Along the main axis: where the source ends (its node, or its box), where the target starts
             auto mainOf = [&](ImVec2 p) { return vertical ? p.y : p.x; };
-            float srcEnd = e.srcBox >= 0 ? mainOf(graph.subgraphs[e.srcBox].boxMax) : mainOf(ImVec2(a.pos.x + a.size.x, a.pos.y + a.size.y));
+            float srcEnd = e.srcBox >= 0 ? mainOf(graph.subgraphs[e.srcBox].boxMax)
+                                         : mainOf(ImVec2(a.pos.x + a.size.x, a.pos.y + a.size.y));
             float dstStart = e.dstBox >= 0 ? mainOf(graph.subgraphs[e.dstBox].boxMin) : mainOf(b.pos);
             auto [c0, c1] = EndsAcross(graph, e, anchor, em);
-            float m0 = srcEnd - (e.srcBox >= 0 ? 0.f : SideInset(a, em, vertical ? (graph.reversed ? Top : Bottom) : (graph.reversed ? Left : Right), anchor.first));
-            float m1 = dstStart + (e.dstBox >= 0 ? 0.f : SideInset(b, em, vertical ? (graph.reversed ? Bottom : Top) : (graph.reversed ? Right : Left), anchor.second));
+            float m0 =
+                srcEnd
+                - (e.srcBox >= 0
+                       ? 0.f
+                       : SideInset(a, em, vertical ? (graph.reversed ? Top : Bottom) : (graph.reversed ? Left : Right),
+                                   anchor.first));
+            float m1 =
+                dstStart
+                + (e.dstBox >= 0
+                       ? 0.f
+                       : SideInset(b, em, vertical ? (graph.reversed ? Bottom : Top) : (graph.reversed ? Right : Left),
+                                   anchor.second));
             ImVec2 pa = vertical ? ImVec2(c0, m0) : ImVec2(m0, c0), pb = vertical ? ImVec2(c1, m1) : ImVec2(m1, c1);
             if (e.lane > 0)
             {
@@ -226,9 +264,11 @@ namespace RichMd::Mermaid
                 const float step = 0.45f * em;
                 float exit = graph.laneExit.at(a.rank) + (float)e.exitTrack * step;
                 float entry = graph.laneEntry.at(b.rank) - (float)e.entryTrack * step;
-                float lanePos = (vertical ? graph.size.x : graph.size.y) - 1.2f * em * (float)graph.lanes + 1.2f * em * (float)e.lane;
+                float lanePos = (vertical ? graph.size.x : graph.size.y) - 1.2f * em * (float)graph.lanes
+                                + 1.2f * em * (float)e.lane;
                 if (vertical)
-                    return {pa, ImVec2(pa.x, exit), ImVec2(lanePos, exit), ImVec2(lanePos, entry), ImVec2(pb.x, entry), pb};
+                    return {pa, ImVec2(pa.x, exit), ImVec2(lanePos, exit), ImVec2(lanePos, entry), ImVec2(pb.x, entry),
+                            pb};
                 return {pa, ImVec2(exit, pa.y), ImVec2(exit, lanePos), ImVec2(entry, lanePos), ImVec2(entry, pb.y), pb};
             }
             auto channel = graph.channels.find(a.rank);
@@ -247,11 +287,17 @@ namespace RichMd::Mermaid
 
         // Tracks: in a channel, the segments across of two edges that overlap run on their own lines, unless the two
         // edges leave the same node or enter the same node (a fan stays a tree). Returns the room the tracks of each
-        // channel take (from the first to the last): 0.45 em between two tracks, a line of text when a label sits on one.
+        // channel take (from the first to the last): 0.45 em between two tracks, a line of text when a label sits on
+        // one.
         std::map<int, float> AssignTracks(Graph& graph, float em)
         {
             std::vector<std::pair<float, float>> anchors = Anchors(graph, em);
-            struct Segment { int edge; float lo, hi, x0, x1; };  // x0: where it leaves its source, x1: where it enters its target
+            // x0: where it leaves its source, x1: where it enters its target
+            struct Segment
+            {
+                int edge;
+                float lo, hi, x0, x1;
+            };
             std::map<int, std::vector<Segment>> segments;  // channel (the rank of the sources) -> its segments across
             for (size_t i = 0; i < graph.edges.size(); ++i)
             {
@@ -268,9 +314,10 @@ namespace RichMd::Mermaid
             {
                 const int r = channel.first;
                 std::vector<Segment>& list = channel.second;
-                std::stable_sort(list.begin(), list.end(), [](const Segment& a, const Segment& b) { return a.lo < b.lo; });
-                // Two segments conflict when they overlap, unless their edges form a fan (they leave, or enter, the same
-                // node) and no label sits where they meet
+                std::stable_sort(list.begin(), list.end(),
+                                 [](const Segment& a, const Segment& b) { return a.lo < b.lo; });
+                // Two segments conflict when they overlap, unless their edges form a fan (they leave, or enter, the
+                // same node) and no label sits where they meet
                 auto onLabel = [&](const Segment& g, const Segment& other) {  // other's segment where g's label sits
                     const std::string& label = graph.edges[g.edge].label;
                     if (label.empty())
@@ -282,11 +329,12 @@ namespace RichMd::Mermaid
                     const Segment &sa = list[a], &sb = list[b];
                     const Edge &ea = graph.edges[sa.edge], &eb = graph.edges[sb.edge];
                     bool overlap = sa.lo < sb.hi + 0.3f * em && sb.lo < sa.hi + 0.3f * em;
-                    return a != b && overlap && ((ea.src != eb.src && ea.dst != eb.dst) || onLabel(sa, sb) || onLabel(sb, sa));
+                    return a != b && overlap
+                           && ((ea.src != eb.src && ea.dst != eb.dst) || onLabel(sa, sb) || onLabel(sb, sa));
                 };
-                // Of two conflicting segments, the one that runs above: the order where fewer of their vertical parts cross
-                // the other's segment (the descent into the target of the one above, the rise from the source of the one
-                // below). The segments are placed after those that must run above them.
+                // Of two conflicting segments, the one that runs above: the order where fewer of their vertical parts
+                // cross the other's segment (the descent into the target of the one above, the rise from the source of
+                // the one below). The segments are placed after those that must run above them.
                 auto within = [&](float x, const Segment& g) { return x > g.lo - 0.2f * em && x < g.hi + 0.2f * em; };
                 auto above = [&](size_t a, size_t b) {
                     if (!conflict(a, b))
@@ -300,7 +348,8 @@ namespace RichMd::Mermaid
                 for (size_t placed = 0; placed < list.size(); ++placed)
                 {
                     size_t k = list.size();
-                    for (size_t c = 0; c < list.size() && k == list.size(); ++c)  // the first one whose predecessors are placed
+                    // the first one whose predecessors are placed
+                    for (size_t c = 0; c < list.size() && k == list.size(); ++c)
                     {
                         if (trackOf[c] >= 0)
                             continue;
@@ -373,7 +422,8 @@ namespace RichMd::Mermaid
                                 if (SegmentThroughRect(graph.edges[j].points[m], graph.edges[j].points[m + 1], i0, i1))
                                     return false;
                     for (const Node& nd : graph.nodes)
-                        if (nd.pos.x < i1.x && i0.x < nd.pos.x + nd.size.x && nd.pos.y < i1.y && i0.y < nd.pos.y + nd.size.y)
+                        if (nd.pos.x < i1.x && i0.x < nd.pos.x + nd.size.x && nd.pos.y < i1.y
+                            && i0.y < nd.pos.y + nd.size.y)
                             return false;
                     return true;
                 };
@@ -403,7 +453,8 @@ namespace RichMd::Mermaid
                     float n = std::max(std::sqrt(dx * dx + dy * dy), 1e-3f);
                     ImVec2 ts = ImGui::CalcTextSize(card.c_str());
                     float along = 1.3f * em, side = 0.4f * em;
-                    return ImVec2(p.x + dx / n * along + (dy != 0.f ? side : -ts.x / 2.f), p.y + dy / n * along + (dx != 0.f ? side : -ts.y / 2.f));
+                    return ImVec2(p.x + dx / n * along + (dy != 0.f ? side : -ts.x / 2.f),
+                                  p.y + dy / n * along + (dx != 0.f ? side : -ts.y / 2.f));
                 };
                 r.cardinalitySrcPos = place(r.cardinalitySrc, pts[0], pts[1]);
                 r.cardinalityDstPos = place(r.cardinalityDst, pts.back(), pts[pts.size() - 2]);
@@ -414,7 +465,8 @@ namespace RichMd::Mermaid
         ImVec2 NodeSize(const Node& node, float em)
         {
             const float pad = 0.8f * em;
-            if (!node.compartments.empty())  // a class: its widest line, a line of text per row, a padding per compartment
+            // a class: its widest line, a line of text per row, a padding per compartment
+            if (!node.compartments.empty())
             {
                 float w = 0.f, h = 0.f;
                 for (const auto& compartment : node.compartments)
@@ -430,17 +482,25 @@ namespace RichMd::Mermaid
             switch (node.shape)
             {
             case NodeShape::Diamond: return ImVec2(w + text.y, h + text.y);
-            case NodeShape::Cylinder: return ImVec2(w, h + text.y);  // room for the lids
+            case NodeShape::Cylinder: return ImVec2(w, h + text.y);      // room for the lids
             case NodeShape::Subroutine: return ImVec2(w + 1.f * em, h);  // the inner lines, 0.5 em from the sides
-            case NodeShape::Circle: { float d = std::max(text.x, text.y) + 2.f * pad; return ImVec2(d, d); }
-            case NodeShape::DoubleCircle: { float d = std::max(text.x, text.y) + 2.f * pad + 0.7f * em; return ImVec2(d, d); }
+            case NodeShape::Circle:
+            {
+                float d = std::max(text.x, text.y) + 2.f * pad;
+                return ImVec2(d, d);
+            }
+            case NodeShape::DoubleCircle:
+            {
+                float d = std::max(text.x, text.y) + 2.f * pad + 0.7f * em;
+                return ImVec2(d, d);
+            }
             case NodeShape::Stadium:  // the round ends
             case NodeShape::Hexagon:
             case NodeShape::Parallelogram:
             case NodeShape::ParallelogramAlt:
             case NodeShape::Trapezoid:
             case NodeShape::TrapezoidAlt: return ImVec2(w + h / 2.f, h);  // the slanted sides
-            case NodeShape::Asymmetric: return ImVec2(w + h / 4.f, h);  // the notch
+            case NodeShape::Asymmetric: return ImVec2(w + h / 4.f, h);    // the notch
             default: return ImVec2(w, h);
             }
         }
@@ -517,7 +577,8 @@ namespace RichMd::Mermaid
                 while (mean.size() > 1 && mean[mean.size() - 2] > mean.back())
                 {
                     size_t k = mean.size() - 2;
-                    mean[k] = (mean[k] * (float)size[k] + mean[k + 1] * (float)size[k + 1]) / (float)(size[k] + size[k + 1]);
+                    mean[k] =
+                        (mean[k] * (float)size[k] + mean[k + 1] * (float)size[k + 1]) / (float)(size[k] + size[k + 1]);
                     size[k] += size[k + 1];
                     mean.pop_back(), size.pop_back();
                 }
@@ -668,7 +729,8 @@ namespace RichMd::Mermaid
                         for (int p : forwardPreds[v])
                             for (int q : forwardPreds[w])
                             {
-                                const Node &nv = graph.nodes[v], &nw = graph.nodes[w], &np = graph.nodes[p], &nq = graph.nodes[q];
+                                const Node &nv = graph.nodes[v], &nw = graph.nodes[w], &np = graph.nodes[p],
+                                           &nq = graph.nodes[q];
                                 if (nv.rank != nw.rank || np.rank != nv.rank - 1 || nq.rank != nw.rank - 1 || p == q)
                                     continue;
                                 count += (nv.order - nw.order) * (np.order - nq.order) < 0 ? 1 : 0;
@@ -745,12 +807,14 @@ namespace RichMd::Mermaid
             };
             for (auto& [r, layer] : layers)
                 std::stable_sort(layer.begin(), layer.end(), [&](int a, int b) {
-                    return std::make_pair(band(a), graph.nodes[a].order) < std::make_pair(band(b), graph.nodes[b].order);
+                    return std::make_pair(band(a), graph.nodes[a].order)
+                           < std::make_pair(band(b), graph.nodes[b].order);
                 });
 
-            // Across, in the column of each band: a node goes to the median position of its neighbours in the layer above,
-            // then below (alternately), keeping the order and the gaps (least squares: an isotonic regression), so that
-            // the edges between neighbouring layers are as straight as the order allows. Relative to the column.
+            // Across, in the column of each band: a node goes to the median position of its neighbours in the layer
+            // above, then below (alternately), keeping the order and the gaps (least squares: an isotonic regression),
+            // so that the edges between neighbouring layers are as straight as the order allows. Relative to the
+            // column.
             std::vector<float> center(n, 0.f), columnMin(freeBand + 1, 0.f);
             std::vector<float> ownWidth(freeBand + 1, 0.f);  // the column of a band's own nodes
             for (int b = 0; b <= freeBand; ++b)
@@ -781,7 +845,8 @@ namespace RichMd::Mermaid
                         {
                             int v = row[i];
                             if (i > 0)  // the least distance between the centers of two neighbours
-                                offset[i] = offset[i - 1] + (cross(graph.nodes[row[i - 1]]) + cross(graph.nodes[v])) / 2.f + gapX;
+                                offset[i] = offset[i - 1]
+                                            + (cross(graph.nodes[row[i - 1]]) + cross(graph.nodes[v])) / 2.f + gapX;
                             std::vector<float> xs;
                             for (int w : down ? forwardPreds[v] : forwardSuccs[v])
                                 if (band(w) == b && std::abs(graph.nodes[w].rank - graph.nodes[v].rank) == 1)
@@ -802,7 +867,8 @@ namespace RichMd::Mermaid
                 float lo = FLT_MAX, hi = -FLT_MAX;
                 for (const std::vector<int>& row : rows)
                     for (int v : row)
-                        lo = std::min(lo, center[v] - cross(graph.nodes[v]) / 2.f), hi = std::max(hi, center[v] + cross(graph.nodes[v]) / 2.f);
+                        lo = std::min(lo, center[v] - cross(graph.nodes[v]) / 2.f),
+                        hi = std::max(hi, center[v] + cross(graph.nodes[v]) / 2.f);
                 columnMin[b] = lo;
                 ownWidth[b] = hi - lo;
             }
@@ -824,7 +890,8 @@ namespace RichMd::Mermaid
             {
                 const int b = k >= 0 ? k : freeBand;
                 float w = columnsWidth(b);
-                if (b != freeBand && w > 0.f)  // room for the box, and for its title when the cross axis is vertical (LR)
+                // room for the box, and for its title when the cross axis is vertical (LR)
+                if (b != freeBand && w > 0.f)
                 {
                     w += 2.f * boxPad + (vertical ? 0.f : titleHeight);
                     if (vertical)
@@ -880,7 +947,8 @@ namespace RichMd::Mermaid
             // Along the main axis, a subgraph's box adds its padding before its first layer and after its last one, and
             // its title before its first layer (TD), or after its last one (BT: mirrored afterwards)
             // (nested boxes that start, or end, on the same layer: their rooms add up)
-            std::vector<int> first(freeBand, INT_MAX), last(freeBand, INT_MIN);  // the layers of each subgraph, its nested ones included
+            // the layers of each subgraph, its nested ones included
+            std::vector<int> first(freeBand, INT_MAX), last(freeBand, INT_MIN);
             for (const Node& nd : graph.nodes)
                 for (int b = nd.subgraph; b >= 0; b = graph.subgraphs[b].parent)
                     first[b] = std::min(first[b], nd.rank), last[b] = std::max(last[b], nd.rank);
@@ -906,10 +974,10 @@ namespace RichMd::Mermaid
                 Node& nd = graph.nodes[v];
                 (vertical ? nd.pos.x : nd.pos.y) = ownStart[band(v)] + center[v] - columnMin[band(v)] - cross(nd) / 2.f;
             }
-            // Lane edges: their lanes, the ones that span fewer layers inside (nested like brackets), and their approach
-            // lines after the layer of their source and before the layer of their target. So that the lane routes do not
-            // cross: from the layer outward, the back edges (their lanes go the other way), the inner lanes first, then
-            // the edges that skip layers, the outer lanes first
+            // Lane edges: their lanes, the ones that span fewer layers inside (nested like brackets), and their
+            // approach lines after the layer of their source and before the layer of their target. So that the lane
+            // routes do not cross: from the layer outward, the back edges (their lanes go the other way), the inner
+            // lanes first, then the edges that skip layers, the outer lanes first
             std::vector<int> laneEdges;
             for (size_t i = 0; i < graph.edges.size(); ++i)
             {
@@ -918,7 +986,9 @@ namespace RichMd::Mermaid
                 if (UsesLane(graph, e))
                     laneEdges.push_back((int)i);
             }
-            auto span = [&](int i) { return std::abs(graph.nodes[graph.edges[i].src].rank - graph.nodes[graph.edges[i].dst].rank); };
+            auto span = [&](int i) {
+                return std::abs(graph.nodes[graph.edges[i].src].rank - graph.nodes[graph.edges[i].dst].rank);
+            };
             std::stable_sort(laneEdges.begin(), laneEdges.end(), [&](int a, int b) { return span(a) < span(b); });
             graph.lanes = 0;
             for (int i : laneEdges)
@@ -927,7 +997,8 @@ namespace RichMd::Mermaid
             std::stable_sort(laneEdges.begin(), laneEdges.end(), [&](int a, int b) {
                 if (isBack(a) != isBack(b))
                     return isBack(a);
-                return isBack(a) ? graph.edges[a].lane < graph.edges[b].lane : graph.edges[a].lane > graph.edges[b].lane;
+                return isBack(a) ? graph.edges[a].lane < graph.edges[b].lane
+                                 : graph.edges[a].lane > graph.edges[b].lane;
             });
             std::map<int, int> exitCount, entryCount;
             for (int i : laneEdges)
@@ -946,7 +1017,9 @@ namespace RichMd::Mermaid
             // enough for its tracks, where the edges run
             graph.channels.clear(), graph.laneExit.clear(), graph.laneEntry.clear();
             const float halfGap = 0.7f * em;  // from a layer (past its boxes) to the first approach line
-            auto laneRoom = [&](std::map<int, int>& count, int r) { return count[r] > 0 ? halfGap + extraLines(count, r) : 0.f; };
+            auto laneRoom = [&](std::map<int, int>& count, int r) {
+                return count[r] > 0 ? halfGap + extraLines(count, r) : 0.f;
+            };
             float offsetMain = layers.empty() ? 0.f : before[layers.begin()->first], previousEnd = 0.f;
             int previous = -1;
             for (auto& [r, layer] : layers)
@@ -956,9 +1029,11 @@ namespace RichMd::Mermaid
                     float tracks = trackRoom[previous] + 1.2f * em;
                     float free = std::max({1.5f * em, gapAfter[previous], tracks});
                     float exits = laneRoom(exitCount, previous), entries = laneRoom(entryCount, r);
-                    float gap = std::max({gapY, gapAfter[previous], tracks, after[previous] + exits + free + entries + before[r]});
+                    float gap = std::max(
+                        {gapY, gapAfter[previous], tracks, after[previous] + exits + free + entries + before[r]});
                     offsetMain = previousEnd + gap;
-                    graph.channels[previous] = (previousEnd + after[previous] + exits + offsetMain - before[r] - entries) / 2.f;
+                    graph.channels[previous] =
+                        (previousEnd + after[previous] + exits + offsetMain - before[r] - entries) / 2.f;
                 }
                 float thickness = 0.f;
                 for (int v : layer)
@@ -976,8 +1051,11 @@ namespace RichMd::Mermaid
             const float mainEnd = previousEnd + (previous >= 0 ? after[previous] : 0.f);
             ComputeSubgraphBoxes(graph, boxPad, titleHeight, em);
 
-            // Everything shifted along the main axis: room for the back edges that come back in front of the first layer
-            float shift = !graph.backEdges.empty() ? 1.5f * em + (layers.empty() ? 0.f : extraLines(entryCount, layers.begin()->first)) : 0.f;
+            // Everything shifted along the main axis: room for the back edges that come back in front of the first
+            // layer
+            float shift = !graph.backEdges.empty()
+                              ? 1.5f * em + (layers.empty() ? 0.f : extraLines(entryCount, layers.begin()->first))
+                              : 0.f;
             ImVec2 delta = vertical ? ImVec2(0.f, shift) : ImVec2(shift, 0.f);
             for (Node& nd : graph.nodes)
                 nd.pos = ImVec2(nd.pos.x + delta.x, nd.pos.y + delta.y);
@@ -989,7 +1067,8 @@ namespace RichMd::Mermaid
                 sub.boxMin = ImVec2(sub.boxMin.x + delta.x, sub.boxMin.y + delta.y);
                 sub.boxMax = ImVec2(sub.boxMax.x + delta.x, sub.boxMax.y + delta.y);
             }
-            const float lanes = 1.2f * em * (float)graph.lanes;  // room on the right (TD) or below (LR) for the lane edges
+            // room on the right (TD) or below (LR) for the lane edges
+            const float lanes = 1.2f * em * (float)graph.lanes;
             const float mainTotal = mainEnd + shift;
             graph.size = vertical ? ImVec2(totalCross + lanes, mainTotal) : ImVec2(mainTotal, totalCross + lanes);
             RouteEdges(graph, em);
@@ -1085,7 +1164,8 @@ namespace RichMd::Mermaid
                     extent.Add(e.labelMin, e.labelMax);
             }
             for (const Relation& r : relations)
-                for (const auto& [card, pos] : {std::make_pair(&r.cardinalitySrc, r.cardinalitySrcPos), std::make_pair(&r.cardinalityDst, r.cardinalityDstPos)})
+                for (const auto& [card, pos] : {std::make_pair(&r.cardinalitySrc, r.cardinalitySrcPos),
+                                                std::make_pair(&r.cardinalityDst, r.cardinalityDstPos)})
                     if (!card->empty())
                     {
                         ImVec2 ts = ImGui::CalcTextSize(card->c_str());
@@ -1109,8 +1189,8 @@ namespace RichMd::Mermaid
                 move(r.cardinalitySrcPos), move(r.cardinalityDstPos);
         }
 
-        // Flowcharts, as Mermaid lays them out (its dagre wrapper): a subgraph that no edge links to the outside (an end
-        // on the subgraph itself does not count) is laid out on its own, in its `direction`, else in the flipped
+        // Flowcharts, as Mermaid lays them out (its dagre wrapper): a subgraph that no edge links to the outside (an
+        // end on the subgraph itself does not count) is laid out on its own, in its `direction`, else in the flipped
         // direction of the layout around it (TB -> LR, the others -> TB). In the layout around it, it is a node.
         void LayoutFlowchart(Graph& graph, float em, float gapY)
         {
@@ -1124,7 +1204,9 @@ namespace RichMd::Mermaid
             std::vector<bool> own(nSub, false);
             for (int s = 0; s < nSub; ++s)
             {
-                auto inside = [&](int node, int box) { return box >= 0 ? box != s && within(box, s) : within(graph.nodes[node].subgraph, s); };
+                auto inside = [&](int node, int box) {
+                    return box >= 0 ? box != s && within(box, s) : within(graph.nodes[node].subgraph, s);
+                };
                 bool members = false, linked = false;
                 for (const Node& nd : graph.nodes)
                     members = members || within(nd.subgraph, s);
@@ -1140,12 +1222,14 @@ namespace RichMd::Mermaid
 
             // The scope of a subgraph or a node: the innermost subgraph laid out on its own around it, -1 for the root
             auto scopeOfBox = [&](int b) {
-                for (b = graph.subgraphs[b].parent; b >= 0 && !own[b]; b = graph.subgraphs[b].parent) {}
+                for (b = graph.subgraphs[b].parent; b >= 0 && !own[b]; b = graph.subgraphs[b].parent)
+                {}
                 return b;
             };
             auto scopeOfNode = [&](int v) {
                 int b = graph.nodes[v].subgraph;
-                for (; b >= 0 && !own[b]; b = graph.subgraphs[b].parent) {}
+                for (; b >= 0 && !own[b]; b = graph.subgraphs[b].parent)
+                {}
                 return b;
             };
             auto inScope = [&](int scope, int c) {  // scope is c, or a scope inside c
@@ -1160,14 +1244,20 @@ namespace RichMd::Mermaid
                     ++v;
                 return v;
             };
-            // What stands for an edge's end in the layout of the scope s: the node, a box, or the node of a subgraph laid
-            // out on its own (inner: the end is inside it, the edge is laid out there); or nothing (outside the scope)
-            struct End { int node = -1, box = -1, compound = -1; bool inner = false, outside = false; };
+            // What stands for an edge's end in the layout of the scope s: the node, a box, or the node of a subgraph
+            // laid out on its own (inner: the end is inside it, the edge is laid out there); or nothing (outside the
+            // scope)
+            struct End
+            {
+                int node = -1, box = -1, compound = -1;
+                bool inner = false, outside = false;
+            };
             const float boxPad = BoxPadding(em), titleHeight = TitleRoom(em);
             graph.backEdges.clear();
             std::vector<int> edgeScope(graph.edges.size(), -1);
 
-            // Returns the size of what the scope draws; its content is placed from (0, 0), the root's as LayoutGraph does
+            // Returns the size of what the scope draws; its content is placed from (0, 0), the root's as LayoutGraph
+            // does
             std::function<ImVec2(int, bool, bool)> layoutScope = [&](int s, bool vertical, bool reversed) {
                 // the subgraphs laid out on their own directly inside, first: their size is the size of their node here
                 std::map<int, ImVec2> inner;
@@ -1208,7 +1298,8 @@ namespace RichMd::Mermaid
                 Graph reduced;
                 reduced.vertical = vertical, reduced.reversed = reversed;
                 std::vector<int> subIndex(nSub, -1), nodeIndex(graph.nodes.size(), -1), compoundIndex(nSub, -1);
-                std::vector<int> fullNode, fullCompound;  // per node of the reduced graph: the node, or the subgraph, it stands for
+                // per node of the reduced graph: the node, or the subgraph, it stands for
+                std::vector<int> fullNode, fullCompound;
                 auto parentIn = [&](int p) { return p < 0 || p == s ? -1 : subIndex[p]; };
                 for (int b = 0; b < nSub; ++b)
                     if (!own[b] && scopeOfBox(b) == s)
@@ -1219,7 +1310,8 @@ namespace RichMd::Mermaid
                         subIndex[b] = (int)reduced.subgraphs.size();
                         reduced.subgraphs.push_back(sub);
                     }
-                for (int v = 0; v < (int)graph.nodes.size(); ++v)  // in source order, a subgraph where its first node is
+                // in source order, a subgraph where its first node is
+                for (int v = 0; v < (int)graph.nodes.size(); ++v)
                 {
                     End e = end(v, -1);
                     if (e.node >= 0)
@@ -1237,7 +1329,8 @@ namespace RichMd::Mermaid
                         nd.subgraph = parentIn(sub.parent);
                         nd.keepSize = true;
                         const ImVec2 content = inner[e.compound];
-                        nd.size = ImVec2(std::max(content.x + 2.f * boxPad, TitleWidth(sub, em)), content.y + 2.f * boxPad + titleHeight);
+                        nd.size = ImVec2(std::max(content.x + 2.f * boxPad, TitleWidth(sub, em)),
+                                         content.y + 2.f * boxPad + titleHeight);
                         compoundIndex[e.compound] = (int)reduced.nodes.size();
                         reduced.nodes.push_back(nd), fullNode.push_back(-1), fullCompound.push_back(e.compound);
                     }
@@ -1351,7 +1444,8 @@ namespace RichMd::Mermaid
             seq.boxHeight = lineHeight + (anyActor ? 2.6f : 1.f) * em;
             seq.boxWidth.assign(n, 0.f);
             for (int i = 0; i < n; ++i)
-                seq.boxWidth[i] = std::max(ImGui::CalcTextSize(seq.participantLabels[i].c_str()).x + 2.f * em, 3.f * em);
+                seq.boxWidth[i] =
+                    std::max(ImGui::CalcTextSize(seq.participantLabels[i].c_str()).x + 2.f * em, 3.f * em);
 
             // The distance between two neighbours: room for their boxes, for the messages between them, for the notes
             // beside them
@@ -1384,7 +1478,7 @@ namespace RichMd::Mermaid
             float cursor = seq.boxHeight + 0.5f * em;
             for (SequenceFrame& f : seq.frames)
                 f.sectionY.clear();
-            auto boundary = [&](int k) {  // between the rows k - 1 and k
+            auto boundary = [&](int k) {                                  // between the rows k - 1 and k
                 for (int fi = (int)seq.frames.size() - 1; fi >= 0; --fi)  // the frames that end, the inner ones first
                 {
                     SequenceFrame& f = seq.frames[fi];
@@ -1434,7 +1528,9 @@ namespace RichMd::Mermaid
 
             // Activations: a box on the lifeline, from the message that starts it to the one that ends it; the nested
             // ones shifted to the right
-            auto rowY = [&](int row) { return row >= 0 && row < rowCount ? seq.rows[row].y : seq.boxHeight + 0.5f * em; };
+            auto rowY = [&](int row) {
+                return row >= 0 && row < rowCount ? seq.rows[row].y : seq.boxHeight + 0.5f * em;
+            };
             for (size_t ai = 0; ai < seq.activations.size(); ++ai)
             {
                 SequenceActivation& a = seq.activations[ai];
@@ -1503,7 +1599,8 @@ namespace RichMd::Mermaid
 
             // Frames, across: the participants and the texts of their rows, wider for each level of frame inside
             std::vector<int> innerLevels(seq.frames.size(), 0);
-            auto inside = [&](const SequenceFrame& inner, const SequenceFrame& outer, size_t innerIndex, size_t outerIndex) {
+            auto inside = [&](const SequenceFrame& inner, const SequenceFrame& outer, size_t innerIndex,
+                              size_t outerIndex) {
                 return innerIndex > outerIndex && inner.first >= outer.first && inner.last <= outer.last;
             };
             for (size_t fi = seq.frames.size(); fi-- > 0;)
@@ -1523,7 +1620,8 @@ namespace RichMd::Mermaid
                     const SequenceRow& r = seq.rows[k];
                     std::vector<int> involved = r.isNote ? r.over : std::vector<int>{r.src, r.dst};
                     for (int v : involved)
-                        x0 = std::min(x0, seq.xCenter[v] - seq.boxWidth[v] / 2.f), x1 = std::max(x1, seq.xCenter[v] + seq.boxWidth[v] / 2.f);
+                        x0 = std::min(x0, seq.xCenter[v] - seq.boxWidth[v] / 2.f),
+                        x1 = std::max(x1, seq.xCenter[v] + seq.boxWidth[v] / 2.f);
                     x0 = std::min(x0, std::min(r.textMin.x, r.isNote ? r.boxMin.x : r.textMin.x) - 0.3f * em);
                     x1 = std::max(x1, std::max(r.textMax.x, r.isNote ? r.boxMax.x : r.textMax.x) + 0.3f * em);
                 }
@@ -1535,7 +1633,8 @@ namespace RichMd::Mermaid
                 // the header's width: the kind's tab and the label
                 if (f.kind != "rect")
                 {
-                    float header = ImGui::CalcTextSize(f.kind.c_str()).x + 2.f * em + ImGui::CalcTextSize(("[" + f.label + "]").c_str()).x;
+                    float header = ImGui::CalcTextSize(f.kind.c_str()).x + 2.f * em
+                                   + ImGui::CalcTextSize(("[" + f.label + "]").c_str()).x;
                     f.frameMax.x = std::max(f.frameMax.x, f.frameMin.x + header);
                 }
             }
@@ -1543,14 +1642,16 @@ namespace RichMd::Mermaid
             // What overflows (a wide note, the text of a message to itself) widens the diagram
             Extent extent;
             for (int i = 0; i < n; ++i)
-                extent.Add(ImVec2(seq.xCenter[i] - seq.boxWidth[i] / 2.f, 0.f), ImVec2(seq.xCenter[i] + seq.boxWidth[i] / 2.f, seq.height));
+                extent.Add(ImVec2(seq.xCenter[i] - seq.boxWidth[i] / 2.f, 0.f),
+                           ImVec2(seq.xCenter[i] + seq.boxWidth[i] / 2.f, seq.height));
             for (const SequenceRow& r : seq.rows)
             {
                 extent.Add(r.textMin, r.textMax);
                 if (r.isNote)
                     extent.Add(r.boxMin, r.boxMax);
                 if (r.number > 0)
-                    extent.Add(ImVec2(r.xStart - 0.7f * em, r.y - 0.7f * em), ImVec2(r.xStart + 0.7f * em, r.y + 0.7f * em));
+                    extent.Add(ImVec2(r.xStart - 0.7f * em, r.y - 0.7f * em),
+                               ImVec2(r.xStart + 0.7f * em, r.y + 0.7f * em));
             }
             for (const SequenceFrame& f : seq.frames)
                 extent.Add(f.frameMin, f.frameMax);
@@ -1562,7 +1663,8 @@ namespace RichMd::Mermaid
             for (float& xc : seq.xCenter)
                 xc += d.x;
             for (SequenceRow& r : seq.rows)
-                r.textMin.x += d.x, r.textMax.x += d.x, r.boxMin.x += d.x, r.boxMax.x += d.x, r.xStart += d.x, r.xEnd += d.x;
+                r.textMin.x += d.x, r.textMax.x += d.x, r.boxMin.x += d.x, r.boxMax.x += d.x, r.xStart += d.x,
+                    r.xEnd += d.x;
             for (SequenceFrame& f : seq.frames)
                 f.frameMin.x += d.x, f.frameMax.x += d.x;
             for (SequenceActivation& a : seq.activations)

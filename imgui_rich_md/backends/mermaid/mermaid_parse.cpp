@@ -25,7 +25,10 @@ namespace RichMd::Mermaid
         }
 
         bool StartsWith(string_view s, string_view prefix) { return s.substr(0, prefix.size()) == prefix; }
-        bool EndsWith(string_view s, string_view suffix) { return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix; }
+        bool EndsWith(string_view s, string_view suffix)
+        {
+            return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
+        }
 
         // Identifiers: letters, digits, '_', and any non-ASCII character (UTF-8)
         bool IsWordChar(char c) { return std::isalnum((unsigned char)c) || c == '_' || (unsigned char)c >= 0x80; }
@@ -38,7 +41,11 @@ namespace RichMd::Mermaid
 
             bool AtEnd() const { return i >= s.size(); }
             char Peek(size_t offset = 0) const { return i + offset < s.size() ? s[i + offset] : '\0'; }
-            void SkipSpaces() { while (i < s.size() && std::isspace((unsigned char)s[i])) ++i; }
+            void SkipSpaces()
+            {
+                while (i < s.size() && std::isspace((unsigned char)s[i]))
+                    ++i;
+            }
             string_view Word()
             {
                 size_t start = i;
@@ -67,7 +74,11 @@ namespace RichMd::Mermaid
         string_view AfterFirstWord(string_view line) { return Trim(line.substr(FirstWord(line).size())); }
 
         // The source split in lines, without the %% comments; lines are numbered from 1
-        struct SourceLine { int number; string_view text; };
+        struct SourceLine
+        {
+            int number;
+            string_view text;
+        };
         std::vector<SourceLine> Lines(const std::string& source)
         {
             std::vector<SourceLine> lines;
@@ -91,7 +102,10 @@ namespace RichMd::Mermaid
             return lines;
         }
 
-        std::string LineError(int number, const std::string& message) { return "line " + std::to_string(number) + ": " + message; }
+        std::string LineError(int number, const std::string& message)
+        {
+            return "line " + std::to_string(number) + ": " + message;
+        }
 
         bool IsStylingLine(string_view word)
         {
@@ -132,7 +146,8 @@ namespace RichMd::Mermaid
             return index;
         }
 
-        // A node, created at its first mention; a node first seen outside a subgraph joins the first one that mentions it
+        // A node, created at its first mention; a node first seen outside a subgraph joins the first one that mentions
+        // it
         int AddNode(Graph& graph, string_view id, int subgraph)
         {
             int index = FindNode(graph, id);
@@ -153,7 +168,8 @@ namespace RichMd::Mermaid
         // Flowcharts
         // ---------------------------------------------------------------------------------------------------------
 
-        // A label as written in the source: without its quotes, with its line breaks (<br>) and entity codes (#quot;, #35;)
+        // A label as written in the source: without its quotes, with its line breaks (<br>) and entity codes (#quot;,
+        // #35;)
         std::string CleanLabel(string_view text)
         {
             text = Trim(text);
@@ -182,7 +198,12 @@ namespace RichMd::Mermaid
                     if (semicolon != string_view::npos && semicolon - i <= 8)
                     {
                         string_view name = text.substr(i + 1, semicolon - i - 1);
-                        const char* named = name == "quot" ? "\"" : name == "amp" ? "&" : name == "lt" ? "<" : name == "gt" ? ">" : name == "nbsp" ? " " : nullptr;
+                        const char* named = name == "quot"   ? "\""
+                                            : name == "amp"  ? "&"
+                                            : name == "lt"   ? "<"
+                                            : name == "gt"   ? ">"
+                                            : name == "nbsp" ? " "
+                                                             : nullptr;
                         unsigned code = 0;
                         bool numeric = !name.empty();
                         for (char c : name)
@@ -196,10 +217,11 @@ namespace RichMd::Mermaid
                             else if (code < 0x800)
                                 out += (char)(0xC0 | (code >> 6)), out += (char)(0x80 | (code & 0x3F));
                             else if (code < 0x10000)
-                                out += (char)(0xE0 | (code >> 12)), out += (char)(0x80 | ((code >> 6) & 0x3F)), out += (char)(0x80 | (code & 0x3F));
+                                out += (char)(0xE0 | (code >> 12)), out += (char)(0x80 | ((code >> 6) & 0x3F)),
+                                    out += (char)(0x80 | (code & 0x3F));
                             else
                                 out += (char)(0xF0 | (code >> 18)), out += (char)(0x80 | ((code >> 12) & 0x3F)),
-                                out += (char)(0x80 | ((code >> 6) & 0x3F)), out += (char)(0x80 | (code & 0x3F));
+                                    out += (char)(0x80 | ((code >> 6) & 0x3F)), out += (char)(0x80 | (code & 0x3F));
                             i = semicolon + 1;
                             continue;
                         }
@@ -222,13 +244,26 @@ namespace RichMd::Mermaid
             const size_t afterId = sc.i;
             sc.SkipSpaces();
             const size_t opener = sc.i;
-            struct Bracket { string_view open, close; NodeShape shape; };
-            static const Bracket brackets[] = {  // the longest openers first
-                {"(((", ")))", NodeShape::DoubleCircle}, {"((", "))", NodeShape::Circle}, {"([", "])", NodeShape::Stadium},
-                {"[[", "]]", NodeShape::Subroutine}, {"[(", ")]", NodeShape::Cylinder}, {"{{", "}}", NodeShape::Hexagon},
-                {"[/", "/]", NodeShape::Parallelogram}, {"[/", "\\]", NodeShape::Trapezoid},
-                {"[\\", "\\]", NodeShape::ParallelogramAlt}, {"[\\", "/]", NodeShape::TrapezoidAlt},
-                {"[", "]", NodeShape::Rect}, {"(", ")", NodeShape::Rounded}, {"{", "}", NodeShape::Diamond},
+            struct Bracket
+            {
+                string_view open, close;
+                NodeShape shape;
+            };
+            static const Bracket brackets[] = {
+                // the longest openers first
+                {"(((", ")))", NodeShape::DoubleCircle},
+                {"((", "))", NodeShape::Circle},
+                {"([", "])", NodeShape::Stadium},
+                {"[[", "]]", NodeShape::Subroutine},
+                {"[(", ")]", NodeShape::Cylinder},
+                {"{{", "}}", NodeShape::Hexagon},
+                {"[/", "/]", NodeShape::Parallelogram},
+                {"[/", "\\]", NodeShape::Trapezoid},
+                {"[\\", "\\]", NodeShape::ParallelogramAlt},
+                {"[\\", "/]", NodeShape::TrapezoidAlt},
+                {"[", "]", NodeShape::Rect},
+                {"(", ")", NodeShape::Rounded},
+                {"{", "}", NodeShape::Diamond},
                 {">", "]", NodeShape::Asymmetric},
             };
             bool matched = false;
@@ -306,7 +341,8 @@ namespace RichMd::Mermaid
             edge->end = EdgeEnd::None;
             if (sc.Eat("~~~"))
             {
-                while (sc.Eat("~")) {}
+                while (sc.Eat("~"))
+                {}
                 edge->style = LineStyle::Invisible;
             }
             else
@@ -334,7 +370,8 @@ namespace RichMd::Mermaid
                             return false;
                         edge->label = CleanLabel(sc.s.substr(sc.i, close - sc.i));
                         sc.i = close;
-                        while (sc.Eat(".")) {}
+                        while (sc.Eat("."))
+                        {}
                         if (!sc.Eat("-"))
                             return false;
                         ScanLinkEnd(sc, edge, true);
@@ -533,7 +570,8 @@ namespace RichMd::Mermaid
             bool found = false;
             const std::pair<string_view, int> placements[] = {{"over", 0}, {"right of", 1}, {"left of", -1}};
             for (const auto& [where, placement] : placements)
-                if (rest.size() > where.size() && EqualsNoCase(rest.substr(0, where.size()), where) && std::isspace((unsigned char)rest[where.size()]))
+                if (rest.size() > where.size() && EqualsNoCase(rest.substr(0, where.size()), where)
+                    && std::isspace((unsigned char)rest[where.size()]))
                 {
                     rest = Trim(rest.substr(where.size()));
                     row.notePlacement = placement;
@@ -566,9 +604,9 @@ namespace RichMd::Mermaid
         struct SequenceParser
         {
             Sequence& seq;
-            std::vector<std::pair<int, int>> openFrames;         // index in seq.frames, line of the opening
-            std::map<int, std::vector<int>> openActivations;    // participant -> indices in seq.activations
-            int nextNumber = 0, numberStep = 1;                 // autonumber (0: off)
+            std::vector<std::pair<int, int>> openFrames;      // index in seq.frames, line of the opening
+            std::map<int, std::vector<int>> openActivations;  // participant -> indices in seq.activations
+            int nextNumber = 0, numberStep = 1;               // autonumber (0: off)
 
             void Activate(int participant, int row)
             {
@@ -594,13 +632,23 @@ namespace RichMd::Mermaid
         bool ScanMessage(string_view line, SequenceParser& parser, std::string* error)
         {
             Sequence& seq = parser.seq;
-            struct ArrowToken { string_view token; bool dashed; SequenceArrow start, end; };
+            struct ArrowToken
+            {
+                string_view token;
+                bool dashed;
+                SequenceArrow start, end;
+            };
             static const ArrowToken arrows[] = {
-                {"<<-->>", true, SequenceArrow::Filled, SequenceArrow::Filled}, {"<<->>", false, SequenceArrow::Filled, SequenceArrow::Filled},
-                {"-->>", true, SequenceArrow::None, SequenceArrow::Filled}, {"->>", false, SequenceArrow::None, SequenceArrow::Filled},
-                {"--x", true, SequenceArrow::None, SequenceArrow::Cross}, {"-x", false, SequenceArrow::None, SequenceArrow::Cross},
-                {"--)", true, SequenceArrow::None, SequenceArrow::Open}, {"-)", false, SequenceArrow::None, SequenceArrow::Open},
-                {"-->", true, SequenceArrow::None, SequenceArrow::None}, {"->", false, SequenceArrow::None, SequenceArrow::None},
+                {"<<-->>", true, SequenceArrow::Filled, SequenceArrow::Filled},
+                {"<<->>", false, SequenceArrow::Filled, SequenceArrow::Filled},
+                {"-->>", true, SequenceArrow::None, SequenceArrow::Filled},
+                {"->>", false, SequenceArrow::None, SequenceArrow::Filled},
+                {"--x", true, SequenceArrow::None, SequenceArrow::Cross},
+                {"-x", false, SequenceArrow::None, SequenceArrow::Cross},
+                {"--)", true, SequenceArrow::None, SequenceArrow::Open},
+                {"-)", false, SequenceArrow::None, SequenceArrow::Open},
+                {"-->", true, SequenceArrow::None, SequenceArrow::None},
+                {"->", false, SequenceArrow::None, SequenceArrow::None},
             };
             Scanner sc{line};
             string_view src = sc.Word();
@@ -712,7 +760,8 @@ namespace RichMd::Mermaid
                     }
                     continue;
                 }
-                if (word == "loop" || word == "alt" || word == "opt" || word == "par" || word == "critical" || word == "break" || word == "rect")
+                if (word == "loop" || word == "alt" || word == "opt" || word == "par" || word == "critical"
+                    || word == "break" || word == "rect")
                 {
                     SequenceFrame frame;
                     frame.kind = std::string(word);
@@ -733,7 +782,8 @@ namespace RichMd::Mermaid
                         d.error = LineError(line.number, "`" + std::string(word) + "` outside of " + owner);
                         return;
                     }
-                    seq.frames[parser.openFrames.back().first].sections.push_back({(int)seq.rows.size(), CleanLabel(rest)});
+                    seq.frames[parser.openFrames.back().first].sections.push_back(
+                        {(int)seq.rows.size(), CleanLabel(rest)});
                     continue;
                 }
                 if (line.text == "end")
@@ -752,15 +802,18 @@ namespace RichMd::Mermaid
                 std::string error;
                 if (ScanNote(line.text, seq) || ScanMessage(line.text, parser, &error))
                     continue;
-                d.error = LineError(line.number, error.empty() ? "cannot parse `" + std::string(line.text) + "`" : error);
+                d.error =
+                    LineError(line.number, error.empty() ? "cannot parse `" + std::string(line.text) + "`" : error);
                 return;
             }
             if (!parser.openFrames.empty())
             {
-                d.error = LineError(parser.openFrames.back().second, "`" + seq.frames[parser.openFrames.back().first].kind + "` without its `end`");
+                d.error = LineError(parser.openFrames.back().second,
+                                    "`" + seq.frames[parser.openFrames.back().first].kind + "` without its `end`");
                 return;
             }
-            for (const auto& [participant, open] : parser.openActivations)  // still active at the end: up to the last row
+            // still active at the end: up to the last row
+            for (const auto& [participant, open] : parser.openActivations)
                 for (int index : open)
                     seq.activations[index].endRow = std::max((int)seq.rows.size() - 1, seq.activations[index].startRow);
         }
@@ -778,7 +831,8 @@ namespace RichMd::Mermaid
                 if (text[i] != '~')
                     out += text[i];
                 else
-                    out += (i + 1 < text.size() && IsWordChar(text[i + 1]) && i > 0 && IsWordChar(text[i - 1])) ? '<' : '>';
+                    out += (i + 1 < text.size() && IsWordChar(text[i + 1]) && i > 0 && IsWordChar(text[i - 1])) ? '<'
+                                                                                                                : '>';
             }
             return out;
         }
@@ -803,14 +857,16 @@ namespace RichMd::Mermaid
             member = Trim(member);
             if (StartsWith(member, "<<") && EndsWith(member, ">>"))
             {
-                std::string annotation = "\xC2\xAB" + std::string(Trim(member.substr(2, member.size() - 4))) + "\xC2\xBB";
+                std::string annotation =
+                    "\xC2\xAB" + std::string(Trim(member.substr(2, member.size() - 4))) + "\xC2\xBB";
                 node.compartments[0].insert(node.compartments[0].end() - 1, ClassLine{annotation});
                 return;
             }
             ClassLine line;
             std::string text(member);
             size_t paren = text.find(')');
-            for (size_t at : {text.empty() ? std::string::npos : text.size() - 1, paren == std::string::npos ? paren : paren + 1})
+            for (size_t at :
+                 {text.empty() ? std::string::npos : text.size() - 1, paren == std::string::npos ? paren : paren + 1})
             {
                 if (at >= text.size() || (text[at] != '$' && text[at] != '*'))
                     continue;
@@ -825,9 +881,21 @@ namespace RichMd::Mermaid
         // The ends of a relation: <|, *, o, <, () before the line (-- or ..), |>, *, o, >, () after it
         Marker ScanRelationEnd(Scanner& sc, bool before)
         {
-            struct EndToken { string_view token; Marker marker; };
-            static const EndToken beforeTokens[] = {{"<|", Marker::Triangle}, {"()", Marker::Lollipop}, {"*", Marker::DiamondFilled}, {"o", Marker::Diamond}, {"<", Marker::Arrow}};
-            static const EndToken afterTokens[] = {{"|>", Marker::Triangle}, {"()", Marker::Lollipop}, {"*", Marker::DiamondFilled}, {"o", Marker::Diamond}, {">", Marker::Arrow}};
+            struct EndToken
+            {
+                string_view token;
+                Marker marker;
+            };
+            static const EndToken beforeTokens[] = {{"<|", Marker::Triangle},
+                                                    {"()", Marker::Lollipop},
+                                                    {"*", Marker::DiamondFilled},
+                                                    {"o", Marker::Diamond},
+                                                    {"<", Marker::Arrow}};
+            static const EndToken afterTokens[] = {{"|>", Marker::Triangle},
+                                                   {"()", Marker::Lollipop},
+                                                   {"*", Marker::DiamondFilled},
+                                                   {"o", Marker::Diamond},
+                                                   {">", Marker::Arrow}};
             for (const EndToken& t : before ? beforeTokens : afterTokens)
             {
                 if (sc.Rest().substr(0, t.token.size()) != t.token)
@@ -884,8 +952,11 @@ namespace RichMd::Mermaid
                 return false;
             if (dst.empty())
                 return false;
-            auto hierarchy = [](Marker m) { return m == Marker::Triangle || m == Marker::Diamond || m == Marker::DiamondFilled; };
-            if ((relation.markerSrc == Marker::None && hierarchy(relation.markerDst)) || (relation.markerSrc == Marker::Arrow && relation.markerDst == Marker::None))
+            auto hierarchy = [](Marker m) {
+                return m == Marker::Triangle || m == Marker::Diamond || m == Marker::DiamondFilled;
+            };
+            if ((relation.markerSrc == Marker::None && hierarchy(relation.markerDst))
+                || (relation.markerSrc == Marker::Arrow && relation.markerDst == Marker::None))
             {
                 std::swap(src, dst), std::swap(cardSrc, cardDst);
                 std::swap(relation.markerSrc, relation.markerDst);
@@ -911,7 +982,7 @@ namespace RichMd::Mermaid
                 return false;
             sc.SkipSpaces();
             int target = -1;
-            if (sc.Rest().substr(0, 4) == "for " )
+            if (sc.Rest().substr(0, 4) == "for ")
             {
                 sc.i += 4;
                 sc.SkipSpaces();
@@ -1029,7 +1100,8 @@ namespace RichMd::Mermaid
                     }
                     continue;
                 }
-                if (word == "namespace")  // namespace Name, namespace Name["Label"], namespace A.B.C (A contains B, B contains C)
+                if (word == "namespace")  // namespace Name, namespace Name["Label"], namespace A.B.C (A contains B, B
+                                          // contains C)
                 {
                     string_view rest = AfterFirstWord(line.text);
                     if (EndsWith(rest, "{"))
@@ -1043,12 +1115,14 @@ namespace RichMd::Mermaid
                         title = CleanLabel(rest.substr(bracket + 1, rest.size() - bracket - 2));
                     }
                     int parent = ns();
-                    while (!name.empty())  // each level inside the previous one, named by its own part (its id: the path)
+                    // each level inside the previous one, named by its own part (its id: the path)
+                    while (!name.empty())
                     {
                         size_t dot = name.find('.');
                         string_view part = name.substr(0, dot);
                         bool last = dot == string_view::npos;
-                        std::string id = parent < 0 ? std::string(part) : d.graph.subgraphs[parent].id + "." + std::string(part);
+                        std::string id =
+                            parent < 0 ? std::string(part) : d.graph.subgraphs[parent].id + "." + std::string(part);
                         parent = AddSubgraph(d.graph, id, last && !title.empty() ? title : std::string(part), parent);
                         name = last ? string_view() : name.substr(dot + 1);
                     }
@@ -1103,7 +1177,9 @@ namespace RichMd::Mermaid
             if (current >= 0)
                 d.error = LineError(currentLine, "the block of `" + d.graph.nodes[current].id + "` is not closed");
             else if (!namespaces.empty())
-                d.error = LineError(namespaces.back().second, "the namespace `" + d.graph.subgraphs[namespaces.back().first].id + "` is not closed");
+                d.error =
+                    LineError(namespaces.back().second,
+                              "the namespace `" + d.graph.subgraphs[namespaces.back().first].id + "` is not closed");
         }
     }
 

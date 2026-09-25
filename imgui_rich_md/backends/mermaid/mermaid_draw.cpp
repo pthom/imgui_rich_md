@@ -82,7 +82,8 @@ namespace RichMd::Mermaid
         }
 
         // The segments, and the markers at the ends
-        void Polyline(ImDrawList* dl, std::vector<ImVec2> pts, ImU32 col, EdgeEnd start, EdgeEnd end, float em, LineStyle style)
+        void Polyline(ImDrawList* dl, std::vector<ImVec2> pts, ImU32 col, EdgeEnd start, EdgeEnd end, float em,
+                      LineStyle style)
         {
             if (style == LineStyle::Invisible)
                 return;
@@ -118,7 +119,8 @@ namespace RichMd::Mermaid
             CenteredText(dl, ImVec2((p0.x + p1.x) / 2.f, (p0.y + p1.y) / 2.f), textCol, e.label);
         }
 
-        void DrawNode(ImDrawList* dl, const Node& node, ImVec2 origin, ImU32 fill, ImU32 border, ImU32 textCol, float em)
+        void DrawNode(ImDrawList* dl, const Node& node, ImVec2 origin, ImU32 fill, ImU32 border, ImU32 textCol,
+                      float em)
         {
             ImVec2 p0 = Add(origin, node.pos), p1 = Add(p0, node.size);
             ImVec2 c((p0.x + p1.x) / 2.f, (p0.y + p1.y) / 2.f);
@@ -129,7 +131,9 @@ namespace RichMd::Mermaid
             case NodeShape::Stadium:
             case NodeShape::Subroutine:
             {
-                float rounding = node.shape == NodeShape::Rounded ? 0.6f * em : node.shape == NodeShape::Stadium ? node.size.y / 2.f : 0.15f * em;
+                float rounding = node.shape == NodeShape::Rounded   ? 0.6f * em
+                                 : node.shape == NodeShape::Stadium ? node.size.y / 2.f
+                                                                    : 0.15f * em;
                 dl->AddRectFilled(p0, p1, fill, rounding);
                 StrokeRect(dl, p0, p1, border, rounding, 1.5f);
                 if (node.shape == NodeShape::Subroutine)
@@ -245,7 +249,8 @@ namespace RichMd::Mermaid
             if (kind == Marker::Triangle)
             {
                 ImVec2 base(tip.x + s * ux, tip.y + s * uy);
-                ImVec2 q1(base.x + s * 0.5f * px, base.y + s * 0.5f * py), q2(base.x - s * 0.5f * px, base.y - s * 0.5f * py);
+                ImVec2 q1(base.x + s * 0.5f * px, base.y + s * 0.5f * py),
+                    q2(base.x - s * 0.5f * px, base.y - s * 0.5f * py);
                 dl->AddTriangleFilled(tip, q1, q2, bg);
                 dl->AddTriangle(tip, q1, q2, col, 1.5f);
                 return base;
@@ -299,7 +304,8 @@ namespace RichMd::Mermaid
                 dl->AddRectFilled(tab0, tab1, ImGui::GetColorU32(ImGuiCol_WindowBg));
                 dl->AddRectFilled(tab0, tab1, fill);
                 StrokeRect(dl, tab0, tab1, border, 0.f, 1.f);
-                dl->AddText(ImVec2(q0.x + sub.titleX, q0.y + 0.2f * em), ImGui::GetColorU32(ImGuiCol_Text, 0.8f), sub.title.c_str());
+                dl->AddText(ImVec2(q0.x + sub.titleX, q0.y + 0.2f * em), ImGui::GetColorU32(ImGuiCol_Text, 0.8f),
+                            sub.title.c_str());
             }
         }
 
@@ -336,7 +342,8 @@ namespace RichMd::Mermaid
                 ImVec2 end = DrawMarker(dl, r.markerDst, pts.back(), pts[pts.size() - 2], border, windowBg, em);
                 pts.front() = start;
                 pts.back() = end;
-                Polyline(dl, pts, border, EdgeEnd::None, EdgeEnd::None, em, r.dashed ? LineStyle::Dotted : LineStyle::Solid);
+                Polyline(dl, pts, border, EdgeEnd::None, EdgeEnd::None, em,
+                         r.dashed ? LineStyle::Dotted : LineStyle::Solid);
                 if (!e.label.empty())
                     EdgeLabel(dl, e, origin, textCol, windowBg);
                 if (!r.cardinalitySrc.empty())
@@ -384,7 +391,8 @@ namespace RichMd::Mermaid
         {
             dl->AddCircle(ImVec2(cx, top + 0.45f * em), 0.35f * em, col, 0, 1.5f);
             dl->AddLine(ImVec2(cx, top + 0.8f * em), ImVec2(cx, top + 1.5f * em), col, 1.5f);
-            dl->AddLine(ImVec2(cx - 0.55f * em, top + 1.05f * em), ImVec2(cx + 0.55f * em, top + 1.05f * em), col, 1.5f);
+            dl->AddLine(ImVec2(cx - 0.55f * em, top + 1.05f * em), ImVec2(cx + 0.55f * em, top + 1.05f * em), col,
+                        1.5f);
             dl->AddLine(ImVec2(cx, top + 1.5f * em), ImVec2(cx - 0.45f * em, top + 2.1f * em), col, 1.5f);
             dl->AddLine(ImVec2(cx, top + 1.5f * em), ImVec2(cx + 0.45f * em, top + 2.1f * em), col, 1.5f);
         }
@@ -451,9 +459,11 @@ namespace RichMd::Mermaid
             for (const SequenceFrame& f : seq.frames)
                 if (f.kind == "rect")
                 {
-                    ImVec4 c = f.color ? ImGui::ColorConvertU32ToFloat4(f.color) : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+                    ImVec4 c = f.color ? ImGui::ColorConvertU32ToFloat4(f.color)
+                                       : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
                     c.w *= 0.25f;  // a tint: the text stays readable with a light or a dark style
-                    dl->AddRectFilled(Add(origin, f.frameMin), Add(origin, f.frameMax), ImGui::ColorConvertFloat4ToU32(c));
+                    dl->AddRectFilled(Add(origin, f.frameMin), Add(origin, f.frameMax),
+                                      ImGui::ColorConvertFloat4ToU32(c));
                 }
 
             // Lifelines, and the participants above and below
@@ -470,14 +480,16 @@ namespace RichMd::Mermaid
                         dl->AddText(ImVec2(cx - ts.x / 2.f, top + 2.3f * em), textCol, label.c_str());
                         continue;
                     }
-                    bool above = top == origin.y;  // the box touches the lifeline: at the bottom of the header above, at the top below
+                    // the box touches the lifeline: at the bottom of the header above, at the top below
+                    bool above = top == origin.y;
                     float y = above ? top + seq.boxHeight - boxH : top;
                     ImVec2 p0(cx - seq.boxWidth[i] / 2.f, y), p1(cx + seq.boxWidth[i] / 2.f, y + boxH);
                     OpaqueRect(dl, p0, p1, fill, 0.2f * em);
                     StrokeRect(dl, p0, p1, lineCol, 0.2f * em, 1.5f);
                     CenteredText(dl, ImVec2(cx, y + boxH / 2.f), textCol, label);
                 }
-                DashedLine(dl, ImVec2(cx, origin.y + seq.boxHeight), ImVec2(cx, origin.y + seq.height - seq.boxHeight), lineCol, 0.5f * em, 0.5f * em, 1.f);
+                DashedLine(dl, ImVec2(cx, origin.y + seq.boxHeight), ImVec2(cx, origin.y + seq.height - seq.boxHeight),
+                           lineCol, 0.5f * em, 0.5f * em, 1.f);
             }
 
             // Activations
@@ -497,7 +509,8 @@ namespace RichMd::Mermaid
                 StrokeRect(dl, p0, p1, lineCol, 0.f, 1.f);
                 ImVec2 kindSize = ImGui::CalcTextSize(f.kind.c_str());
                 ImVec2 tab(p0.x + kindSize.x + 0.8f * em, p0.y + lineHeight + 0.5f * em);
-                ImVec2 tabPts[5] = {p0, ImVec2(tab.x + 0.3f * em, p0.y), ImVec2(tab.x + 0.3f * em, tab.y - 0.3f * em), ImVec2(tab.x, tab.y), ImVec2(p0.x, tab.y)};
+                ImVec2 tabPts[5] = {p0, ImVec2(tab.x + 0.3f * em, p0.y), ImVec2(tab.x + 0.3f * em, tab.y - 0.3f * em),
+                                    ImVec2(tab.x, tab.y), ImVec2(p0.x, tab.y)};
                 dl->AddConvexPolyFilled(tabPts, 5, windowBg);
                 dl->AddConvexPolyFilled(tabPts, 5, fill);
                 StrokeClosedPolyline(dl, tabPts, 5, lineCol, 1.f);
@@ -537,7 +550,8 @@ namespace RichMd::Mermaid
                 if (r.src == r.dst)  // a message to itself: a small hook on the right of the lifeline
                 {
                     float w = 1.5f * em;
-                    ImVec2 pts[4] = {ImVec2(xa, y - 0.5f * em), ImVec2(xa + w, y - 0.5f * em), ImVec2(xa + w, y + 0.5f * em), ImVec2(xa, y + 0.5f * em)};
+                    ImVec2 pts[4] = {ImVec2(xa, y - 0.5f * em), ImVec2(xa + w, y - 0.5f * em),
+                                     ImVec2(xa + w, y + 0.5f * em), ImVec2(xa, y + 0.5f * em)};
                     float end = DrawSequenceArrow(dl, r.arrowEnd, pts[3], -1.f, lineCol, em);
                     pts[3].x = end;
                     for (int i = 0; i < 3; ++i)
@@ -559,7 +573,9 @@ namespace RichMd::Mermaid
                         dl->AddLine(ImVec2(start, y), ImVec2(end, y), lineCol, thickness);
                 }
                 std::string lines = r.text;
-                CenteredText(dl, ImVec2((textPos.x + origin.x + r.textMax.x) / 2.f, (textPos.y + origin.y + r.textMax.y) / 2.f), textCol, lines);
+                CenteredText(
+                    dl, ImVec2((textPos.x + origin.x + r.textMax.x) / 2.f, (textPos.y + origin.y + r.textMax.y) / 2.f),
+                    textCol, lines);
                 if (r.number > 0)  // autonumber: in a disc at the start of the line
                 {
                     std::string number = std::to_string(r.number);
