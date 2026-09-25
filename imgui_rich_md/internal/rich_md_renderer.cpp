@@ -540,12 +540,14 @@ bool Renderer::link_item(const Style& style, const char* url)
 	const ImGuiStyle& s = ImGui::GetStyle();
 	ImVec4 underline;
 	bool clicked = false;
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+	// A press on a link may start a text selection (which then holds the active id): the link opens on the release,
+	// when the mouse did not drag, as in a browser
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
 		ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-		if (style.linkTooltip)
+		if (style.linkTooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 			ImGui::SetTooltip("%s", url);
 		underline = resolve_color(style.linkUnderlineHovered, s.Colors[ImGuiCol_ButtonHovered]);
-		clicked = ImGui::IsMouseClicked(0);
+		clicked = ImGui::IsMouseReleased(0) && !ImGui::IsMouseDragPastThreshold(0);
 	} else {
 		underline = resolve_color(style.linkUnderline, s.Colors[ImGuiCol_Button]);
 	}

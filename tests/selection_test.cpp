@@ -9,6 +9,7 @@
 #include <string>
 
 static std::string gClipboard;
+static std::string gOpenedLink;
 
 // Where a frame drew the markdown
 struct Frame
@@ -178,6 +179,29 @@ static bool CheckWidgetsAndClear()
     return Expect("after a click beside the text", gClipboard, "") && ok;
 }
 
+// A click on a link opens it when the mouse is released; a drag that starts on a link selects text and opens nothing
+static bool CheckLinks()
+{
+    const char* md = "A [link](https://example.com) here\n";
+    Frame f = DrawFrame(md, 400.f);
+    ImVec2 onLink(f.textOrigin.x + TextWidth("A ") + TextWidth("link") * 0.5f, f.textOrigin.y + LineHeight() * 0.5f);
+    gOpenedLink.clear();
+    MouseTo(onLink);
+    DrawFrame(md, 400.f);
+    MouseButton(true);
+    DrawFrame(md, 400.f);
+    bool ok = Expect("a link, on the press", gOpenedLink, "");
+    MouseButton(false);
+    DrawFrame(md, 400.f);
+    ok = Expect("a link, on the release", gOpenedLink, "https://example.com") && ok;
+    gOpenedLink.clear();
+    gClipboard.clear();
+    DragAndCopy(md, 400.f, ImVec2(onLink.x - TextWidth("link") * 0.5f + 1.f, onLink.y),
+                ImVec2(f.textOrigin.x + 300.f, onLink.y));
+    ok = Expect("a drag from a link opens nothing", gOpenedLink, "") && ok;
+    return Expect("a drag from a link selects", gClipboard, "link here") && ok;
+}
+
 int main(int, char**)
 {
     ImGui::CreateContext();
@@ -186,13 +210,16 @@ int main(int, char**)
     ImGui_ImplNull_Init();
     ImGui::GetPlatformIO().Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { gClipboard = text; };
     ImGui::GetPlatformIO().Platform_GetClipboardTextFn = [](ImGuiContext*) { return gClipboard.c_str(); };
-    RichMd::CreateContext();
+    RichMd::MarkdownOptions options;
+    options.callbacks.OnOpenLink = [](const std::string& url) { gOpenedLink = url; };
+    RichMd::CreateContext(options);
     DrawFrame("warm up", 400.f);  // the first frame loads the fonts
 
     bool ok = CheckPartialSelection();
     ok = CheckWrappedSelection() && ok;
     ok = CheckSelectionOverSpecialBlocks() && ok;
     ok = CheckWidgetsAndClear() && ok;
+    ok = CheckLinks() && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();
