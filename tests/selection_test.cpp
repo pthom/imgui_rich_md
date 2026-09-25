@@ -2,6 +2,7 @@
 // and the keys are injected, the clipboard is a string of the test). Build it in Debug: a selection is drawn with a
 // draw list splitter, which asserts when it is misused.
 #include "imgui.h"
+#include "imgui_internal.h"  // ImGuiContext::ErrorCountCurrentFrame
 #include "imgui_impl_null.h"
 #include "imgui_rich_md/rich_md.h"
 
@@ -11,6 +12,7 @@
 static std::string gClipboard;
 static std::string gOpenedLink;
 static int gPushSelectable = -1;  // -1: no PushSelectableText() around the render, else its value
+static bool gForgetPop = false;   // a PushSelectableText() without its PopSelectableText()
 
 // Where a frame drew the markdown
 struct Frame
@@ -34,7 +36,7 @@ static Frame DrawFrame(const char* markdown, float width, bool movable = false)
     if (gPushSelectable >= 0)
         RichMd::PushSelectableText(gPushSelectable == 1);
     RichMd::Render(markdown);
-    if (gPushSelectable >= 0)
+    if (gPushSelectable >= 0 && !gForgetPop)
         RichMd::PopSelectableText();
     frame.textEndY = ImGui::GetCursorScreenPos().y;
     ImGui::End();
@@ -80,7 +82,8 @@ static bool Expect(const char* what, const std::string& actual, const std::strin
 {
     if (actual == expected)
         return true;
-    printf("selection test failed: %s\n  expected: \"%s\"\n  actual:   \"%s\"\n", what, expected.c_str(), actual.c_str());
+    printf("selection test failed: %s\n  expected: \"%s\"\n  actual:   \"%s\"\n", what, expected.c_str(),
+           actual.c_str());
     return false;
 }
 
@@ -132,11 +135,12 @@ static bool CheckWrappedSelection()
     return Expect("selection after a relayout", gClipboard, expected) && ok;
 }
 
-// A hard line break, marked text, an aligned table and centered text (all drawn with their own draw list splitters, or shifted after
-// being drawn) under a selection: no assertion, and they are copied
+// A hard line break, marked text, an aligned table and centered text (drawn with their own draw list splitters, or
+// shifted after being drawn) under a selection: no assertion, and they are copied
 static bool CheckSelectionOverSpecialBlocks()
 {
-    const char* md = "hard  \nbreak\n\n<mark>marked</mark> text\n\n| a | b |\n|---|--:|\n| 1 | 2 |\n\n<center>\n\ncentered\n\n</center>\n\nend\n";
+    const char* md = "hard  \nbreak\n\n<mark>marked</mark> text\n\n| a | b |\n|---|--:|\n| 1 | 2 |\n\n"
+                     "<center>\n\ncentered\n\n</center>\n\nend\n";
     Frame f = DrawFrame(md, 400.f);
     gClipboard.clear();
     DragAndCopy(md, 400.f, ImVec2(f.textOrigin.x + 1.f, f.textOrigin.y + LineHeight() * 0.5f),
@@ -234,6 +238,41 @@ static bool CheckSelectableSwitch(RichMd::Context* mainContext)
     gPushSelectable = -1;
     RichMd::DestroyContext(context);
     RichMd::SetCurrentContext(mainContext);
+
+    RichMd::SetSelectableTextDefault(false);
+    gClipboard.clear();
+    DragAndCopy(md, 400.f, from, to);
+    ok = Expect("SetSelectableTextDefault(false)", gClipboard, "") && ok;
+    RichMd::SetSelectableTextDefault(true);
+    DragAndCopy(md, 400.f, from, to);
+    return Expect("SetSelectableTextDefault(true)", gClipboard, "Some text") && ok;
+}
+
+// A PushSelectableText() without its PopSelectableText() in the same frame is a recoverable error of Dear ImGui: it is
+// reported by the next render (here counted by the error tooltip, the assert being off), and the stack is dropped
+static bool CheckUnbalancedPush()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigErrorRecoveryEnableAssert = false;
+    io.ConfigErrorRecoveryEnableDebugLog = false;
+    const char* md = "Some text\n";
+    gPushSelectable = 0;
+    gForgetPop = true;
+    Frame f = DrawFrame(md, 400.f);
+    gPushSelectable = -1;
+    gForgetPop = false;
+    DrawFrame(md, 400.f);
+    bool ok = true;
+    if (GImGui->ErrorCountCurrentFrame != 1) {
+        printf("selection test failed: %d errors for a push without pop (expected 1)\n",
+               GImGui->ErrorCountCurrentFrame);
+        ok = false;
+    }
+    ImVec2 from(f.textOrigin.x + 1.f, f.textOrigin.y + LineHeight() * 0.5f);
+    DragAndCopy(md, 400.f, from, ImVec2(f.textOrigin.x + 300.f, from.y));
+    ok = Expect("after a push without pop", gClipboard, "Some text") && ok;
+    io.ConfigErrorRecoveryEnableAssert = true;
+    io.ConfigErrorRecoveryEnableDebugLog = true;
     return ok;
 }
 
@@ -256,6 +295,7 @@ int main(int, char**)
     ok = CheckWidgetsAndClear() && ok;
     ok = CheckLinks() && ok;
     ok = CheckSelectableSwitch(mainContext) && ok;
+    ok = CheckUnbalancedPush() && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

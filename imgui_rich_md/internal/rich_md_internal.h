@@ -45,6 +45,7 @@ namespace RichMd
         int fragmentFrame = -1;    // frame of the last Render call
         int fragmentCounter = 0;   // Render calls in this frame (seeds their ImGui ids)
         std::vector<bool> selectableTextStack;  // PushSelectableText()
+        int selectableTextFrame = -1;            // the frame of the last PushSelectableText()
 #ifdef IMGUI_RICHMD_WITH_MERMAID
         Mermaid::CachePtr mermaidCache;  // created on first use
 #endif

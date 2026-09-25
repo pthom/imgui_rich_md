@@ -999,6 +999,16 @@ namespace RichMd
     }
 
 
+    // A PushSelectableText() is popped in the same frame: what an earlier frame left on the stack is an error (reported
+    // as a recoverable error of Dear ImGui), then dropped
+    static void _CheckSelectableTextStack(Context* context)
+    {
+        if (context->selectableTextStack.empty() || context->selectableTextFrame == ImGui::GetFrameCount())
+            return;
+        IM_ASSERT_USER_ERROR(false, "RichMd: PushSelectableText() without PopSelectableText() in the same frame");
+        context->selectableTextStack.clear();
+    }
+
     // ::md Rendering a fragment
     // Each `Render()` call renders a *fragment*: `Render()` removes its common indentation and resolves its
     // transclusions (once per text: the result is cached in the context), then `RenderRaw()` gives it its own ImGui
@@ -1023,6 +1033,8 @@ namespace RichMd
             context->fragmentCounter = 0;
         }
         ImGui::PushID(context->fragmentCounter++);
+        // Whether its text can be selected: the last PushSelectableText(), else the option
+        _CheckSelectableTextStack(context);
         renderer->selectableText = context->selectableTextStack.empty()
             ? context->options.selectableText : context->selectableTextStack.back();
         renderer->Render(markdownString);
@@ -1099,7 +1111,9 @@ namespace RichMd
     void PushSelectableText(bool selectable)
     {
         IM_ASSERT(gCurrentContext && "RichMd: call InitializeMarkdown first");
+        _CheckSelectableTextStack(gCurrentContext);
         gCurrentContext->selectableTextStack.push_back(selectable);
+        gCurrentContext->selectableTextFrame = ImGui::GetFrameCount();
     }
 
     void PopSelectableText()
@@ -1107,6 +1121,12 @@ namespace RichMd
         IM_ASSERT(gCurrentContext && !gCurrentContext->selectableTextStack.empty()
                   && "RichMd: PopSelectableText() without PushSelectableText()");
         gCurrentContext->selectableTextStack.pop_back();
+    }
+
+    void SetSelectableTextDefault(bool selectable)
+    {
+        IM_ASSERT(gCurrentContext && "RichMd: call InitializeMarkdown first");
+        gCurrentContext->options.selectableText = selectable;
     }
 
     void RegisterFencedBlockRenderer(const std::string& language, std::function<void(const std::string& code)> renderer)

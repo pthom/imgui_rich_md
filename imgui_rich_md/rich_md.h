@@ -32,11 +32,13 @@ namespace RichMd
     // Renders a markdown string as is (no unindent, no transclusion)
     void RenderRaw(const std::string& markdownString);
 
-    // Whether the text of the renders that follow can be selected, until the matching PopSelectableText() (the option
-    // selectableText is the default). For markdown inside something that reacts to a drag itself (a node of a node
-    // editor, a custom widget).
+    // Whether the text of the renders that follow can be selected, until the matching PopSelectableText(), in the same
+    // frame. For markdown inside something that reacts to a drag itself (a node of a node editor, a custom widget).
     void PushSelectableText(bool selectable);
     void PopSelectableText();
+    // Whether the text can be selected, outside of a PushSelectableText(): changes the option selectableText of the
+    // current context
+    void SetSelectableTextDefault(bool selectable);
     // ::endcode
 
     // =================================================================================================================
@@ -175,7 +177,8 @@ namespace RichMd
         // A newline in the source is a line break (as in GitHub comments and chat messages)
         bool hardSoftBreaks = false;
 
-        // The text can be selected with the mouse and copied (see PushSelectableText to change it for some renders)
+        // The text can be selected with the mouse and copied (SetSelectableTextDefault changes it later,
+        // PushSelectableText for some renders)
         bool selectableText = true;
     };
     // ::endcode
