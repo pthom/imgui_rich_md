@@ -607,6 +607,9 @@ namespace RichMd
         std::unordered_map<std::string, std::string> resolvedImports;  // text -> text with its @import resolved
         int fragmentFrame = -1;    // frame of the last Render call
         int fragmentCounter = 0;   // Render calls in this frame (seeds their ImGui ids)
+#ifdef IMGUI_RICHMD_WITH_MERMAID
+        Mermaid::CachePtr mermaidCache;  // created on first use
+#endif
         ~Context();
     };
 
@@ -965,9 +968,6 @@ namespace RichMd
         // The options' callbacks (which may hold Python objects) go with it.
         delete context;
         _SweepDestroyedTextures();
-#ifdef IMGUI_RICHMD_WITH_MERMAID
-        Mermaid::ClearCache();
-#endif
     }
 
     void SetCurrentContext(Context* context) { gCurrentContext = context; }
@@ -1064,7 +1064,11 @@ namespace RichMd
     void RenderMermaid(const std::string& source)
     {
 #ifdef IMGUI_RICHMD_WITH_MERMAID
-        Mermaid::RenderResult result = Mermaid::Render(source);
+        static Mermaid::CachePtr cacheWithoutContext;  // a diagram drawn outside of any context (no markdown fonts)
+        Mermaid::CachePtr& cache = gCurrentContext ? gCurrentContext->mermaidCache : cacheWithoutContext;
+        if (!cache)
+            cache = Mermaid::CreateCache();
+        Mermaid::RenderResult result = Mermaid::Render(source, *cache);
         if (result.drawn)
             return;
 #endif

@@ -4,45 +4,48 @@
 #include "imgui_rich_md/rich_md.h"
 
 #include <cfloat>
-#include <unordered_map>
+#include <map>
+#include <tuple>
 
 namespace RichMd::Mermaid
 {
-    namespace
+    struct Cache
     {
-        struct CacheEntry
+        struct Entry
         {
             Diagram diagram;
             int lastFrame = 0;
         };
-        std::unordered_map<std::string, CacheEntry> gCache;  // source -> its diagram
-        // Diagrams not drawn for this many frames are dropped (lazily, when a new one is parsed): an editor
-        // makes a new source at each keystroke
-        const int kEvictionFrames = 60;
-    }
+        std::map<std::tuple<std::string, ImFont*, float>, Entry> entries;  // a source, laid out with a font at a size
+    };
 
-    RenderResult Render(const std::string& source)
+    void CacheDeleter::operator()(Cache* cache) const { delete cache; }
+    CachePtr CreateCache() { return CachePtr(new Cache()); }
+
+    // Diagrams not drawn for this many frames are dropped (lazily, when a new one is parsed): an editor makes a new
+    // source at each keystroke
+    static const int kEvictionFrames = 60;
+
+    RenderResult Render(const std::string& source, Cache& cache)
     {
-        int frame = ImGui::GetFrameCount();
-        auto it = gCache.find(source);
-        if (it == gCache.end())
+        const int frame = ImGui::GetFrameCount();
+        const auto key = std::make_tuple(source, ImGui::GetFont(), ImGui::GetFontSize());
+        auto it = cache.entries.find(key);
+        if (it == cache.entries.end())
         {
-            for (auto i = gCache.begin(); i != gCache.end();)
-                i = (frame - i->second.lastFrame > kEvictionFrames) ? gCache.erase(i) : std::next(i);
-            it = gCache.emplace(source, CacheEntry{Parse(source), frame}).first;
+            for (auto i = cache.entries.begin(); i != cache.entries.end();)
+                i = (frame - i->second.lastFrame > kEvictionFrames) ? cache.entries.erase(i) : std::next(i);
+            it = cache.entries.emplace(key, Cache::Entry{Parse(source), frame}).first;
+            if (it->second.diagram.error.empty())
+                Layout(it->second.diagram);
         }
-        CacheEntry& entry = it->second;
+        Cache::Entry& entry = it->second;
         entry.lastFrame = frame;
-        Diagram& diagram = entry.diagram;
-        if (!diagram.error.empty())
-            return RenderResult{false, diagram.error};
-        if (diagram.layoutFont != ImGui::GetFont() || diagram.layoutFontSize != ImGui::GetFontSize())
-            Layout(diagram);
-        Draw(diagram);
+        if (!entry.diagram.error.empty())
+            return RenderResult{false, entry.diagram.error};
+        Draw(entry.diagram);
         return RenderResult{true, ""};
     }
-
-    void ClearCache() { gCache.clear(); }
 
     ImFont* ItalicFont()
     {

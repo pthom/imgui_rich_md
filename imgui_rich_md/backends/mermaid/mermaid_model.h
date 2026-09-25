@@ -203,7 +203,7 @@ namespace RichMd::Mermaid
         Graph graph;                      // flowchart, class
         std::vector<Relation> relations;  // class: one per edge of the graph
         Sequence sequence;
-        // the font of the last layout (laid out again when it changes)
+        // the font of its layout
         ImFont* layoutFont = nullptr;
         float layoutFontSize = 0.f;
     };
