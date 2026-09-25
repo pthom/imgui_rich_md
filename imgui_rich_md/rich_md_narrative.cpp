@@ -637,7 +637,8 @@ namespace
                 std::string block = Transclude(target, line, currentFile, depth);
                 if (block.empty())
                     continue;
-                if (!out.empty() && out.compare(out.size() - 2, 2, "\n\n") != 0)
+                bool afterBlankLine = out == "\n" || (out.size() >= 2 && out.compare(out.size() - 2, 2, "\n\n") == 0);
+                if (!out.empty() && !afterBlankLine)
                     out += "\n";
                 out += block;
                 blankNeeded = true;

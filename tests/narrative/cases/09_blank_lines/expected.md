@@ -1,3 +1,6 @@
+
+B.
+
 Text right before.
 
 A.

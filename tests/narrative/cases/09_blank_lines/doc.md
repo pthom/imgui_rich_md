@@ -1,3 +1,5 @@
+
+![[p.py#B]]
 Text right before.
 ![[p.py#A]]
 ![[p.py#B]]
