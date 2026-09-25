@@ -1,10 +1,13 @@
 // Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
-//
-// The Mermaid backend's model and pipeline, for its own files and for the tests (rich_md.cpp only needs
-// rich_md_mermaid.h):
-//     Parse: source -> Diagram;  Layout: positions, sizes, polylines;  Draw: with ImDrawList
-// In the model, the fields after "filled by the layout" are results of Layout; the others come from Parse.
 #pragma once
+/*::md Mermaid model and pipeline
+The Mermaid backend's model and pipeline, for its own files and for the tests (`rich_md.cpp` only needs
+`rich_md_mermaid.h`):
+
+    Parse: source -> Diagram;  Layout: positions, sizes, polylines;  Draw: with ImDrawList
+
+In the model, the fields after "filled by the layout" are results of `Layout`; the others come from `Parse`.
+*/
 #include "imgui.h"
 
 #include <string>
@@ -16,6 +19,7 @@ namespace RichMd::Mermaid
     // -----------------------------------------------------------------------------------------------------------------
     // The model: flowcharts and class diagrams (a graph laid out in layers)
     // -----------------------------------------------------------------------------------------------------------------
+    // ::code Graph model
     enum class NodeShape
     {
         Rect,
@@ -125,10 +129,12 @@ namespace RichMd::Mermaid
         std::string cardinalitySrc, cardinalityDst;   // the label is the edge's
         ImVec2 cardinalitySrcPos, cardinalityDstPos;  // filled by the layout: where their text starts
     };
+    // ::endcode
 
     // -----------------------------------------------------------------------------------------------------------------
     // The model: sequence diagrams
     // -----------------------------------------------------------------------------------------------------------------
+    // ::code Sequence model
     enum class SequenceArrow
     {
         None,
@@ -185,10 +191,12 @@ namespace RichMd::Mermaid
         std::vector<float> boxWidth, xCenter;
         float totalWidth = 0.f, boxHeight = 0.f, height = 0.f;
     };
+    // ::endcode
 
     // -----------------------------------------------------------------------------------------------------------------
     // The model: a diagram
     // -----------------------------------------------------------------------------------------------------------------
+    // ::code Diagram
     enum class DiagramKind
     {
         Flowchart,
@@ -207,18 +215,22 @@ namespace RichMd::Mermaid
         ImFont* layoutFont = nullptr;
         float layoutFontSize = 0.f;
     };
+    // ::endcode
 
     // -----------------------------------------------------------------------------------------------------------------
     // The pipeline
     // -----------------------------------------------------------------------------------------------------------------
+    // ::code Pipeline
     Diagram Parse(const std::string& source);
     void Layout(Diagram& diagram);               // with the current font
     ImVec2 DiagramSize(const Diagram& diagram);  // once laid out, the size Draw reserves
     void Draw(const Diagram& diagram);           // at the cursor, then a Dummy of DiagramSize
+    // ::endcode
 
     // -----------------------------------------------------------------------------------------------------------------
     // Shared by the layout, the drawing and the tests
     // -----------------------------------------------------------------------------------------------------------------
+    // ::code Shared
     // The distances that the layout, the drawing and the tests must agree on
     struct Metrics
     {
@@ -236,4 +248,5 @@ namespace RichMd::Mermaid
     ImFont* ItalicFont();
     // The size of a class line's text: abstract members are in italic
     ImVec2 ClassLineSize(const ClassLine& line);
+    // ::endcode
 }

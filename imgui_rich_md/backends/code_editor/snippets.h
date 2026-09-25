@@ -4,10 +4,19 @@
 #include <string>
 #include <vector>
 
-// Code snippets with syntax highlighting (ImGuiColorTextEdit), read-only or editable, with a copy
-// button. The markdown code blocks use ShowCodeSnippet when built with IMGUI_RICHMD_WITH_CODE_EDITOR.
+/*::md Code snippets
+Code snippets with syntax highlighting (ImGuiColorTextEdit), read-only or editable, with a copy button. The markdown
+code blocks use `ShowCodeSnippet` when built with `IMGUI_RICHMD_WITH_CODE_EDITOR`.
+*/
 namespace Snippets
 {
+    // =================================================================================================================
+    //                                      Snippet data
+    // =================================================================================================================
+    /*::md Snippet data
+    A snippet: its code, its language, its look.
+    ::code
+    */
 
     enum class SnippetLanguage
     {
@@ -29,7 +38,8 @@ namespace Snippets
     };
 
 
-    // DefaultSnippetLanguage: Cpp, or Python when the host defines IMGUI_RICHMD_DEFAULT_SNIPPET_LANGUAGE_PYTHON (Python bindings)
+    // DefaultSnippetLanguage: Cpp, or Python when the host defines IMGUI_RICHMD_DEFAULT_SNIPPET_LANGUAGE_PYTHON
+    // (Python bindings)
     inline SnippetLanguage DefaultSnippetLanguage()
     {
 #ifdef IMGUI_RICHMD_DEFAULT_SNIPPET_LANGUAGE_PYTHON
@@ -51,7 +61,8 @@ namespace Snippets
         std::string DisplayedFilename = {}; // Displayed on top of the editor
 
         int HeightInLines = 0;              // Number of visible lines in the editor
-        int MaxHeightInLines = 40;          // If the number of lines in the code exceeds this, the editor will scroll. Set to 0 to disable.
+        // If the number of lines in the code exceeds MaxHeightInLines, the editor will scroll. Set to 0 to disable.
+        int MaxHeightInLines = 40;
 
         bool ReadOnly = false;               // Snippets are read-only by default
 
@@ -62,12 +73,22 @@ namespace Snippets
 
         bool AddFinalEmptyLine = false;     // Add an empty line at the end of the code if missing
     };
+    // ::endcode
 
+    // =================================================================================================================
+    //                                      Showing snippets
+    // =================================================================================================================
+    /*::md Showing snippets
+    One snippet, editable or not, or several side by side.
+    ::code
+    */
 
-    bool ShowEditableCodeSnippet(const std::string& label_id, SnippetData* snippetData, float width = 0.f, int overrideHeightInLines = 0);
+    bool ShowEditableCodeSnippet(const std::string& label_id, SnippetData* snippetData, float width = 0.f,
+                                 int overrideHeightInLines = 0);
     void ShowCodeSnippet(const SnippetData& snippetData, float width = 0.f, int overrideHeightInLines = 0);
     void ShowSideBySideSnippets(const SnippetData& snippet1, const SnippetData& snippet2,
                                 bool hideIfEmpty = true, bool equalVisibleLines = true);
     void ShowSideBySideSnippets(const std::vector<SnippetData>& snippets ,
                                 bool hideIfEmpty = true, bool equalVisibleLines = true);
+    // ::endcode
 };
