@@ -1,3 +1,4 @@
+// Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 // Sections and imports: see the documentation of ResolveImports in rich_md.h
 #include "rich_md.h"
 

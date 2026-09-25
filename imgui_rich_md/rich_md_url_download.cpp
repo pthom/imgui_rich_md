@@ -1,3 +1,4 @@
+// Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 // URL image download using libcurl.
 // Async: each URL is downloaded in a background thread.
 // The callback returns Downloading until the thread completes.

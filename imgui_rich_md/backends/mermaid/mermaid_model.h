@@ -1,4 +1,4 @@
-// Part of ImGui Bundle - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_bundle
+// Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 //
 // The Mermaid backend's model and pipeline, for its own files and for the tests (rich_md.cpp only needs
 // rich_md_mermaid.h):

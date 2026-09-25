@@ -1,4 +1,4 @@
-// Part of ImGui Bundle - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_bundle
+// Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 #pragma once
 // Host services: what the markdown renderer needs from the application or the framework
 // that hosts it (GPU textures, asset files, logging). Every service is optional and has a

@@ -1,3 +1,4 @@
+// Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 /*
  * imgui_md: Markdown for Dear ImGui using MD4C
  * (http://https://github.com/mekhontsev/imgui_md)

@@ -1,4 +1,4 @@
-// Part of ImGui Bundle - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_bundle
+// Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 //
 // Mermaid diagrams, drawn natively: the entry points of the backend, for rich_md.cpp. Applications call
 // RichMd::RenderMermaid (rich_md.h); the supported subset: docs/mermaid.md. The backend's model and pipeline:
