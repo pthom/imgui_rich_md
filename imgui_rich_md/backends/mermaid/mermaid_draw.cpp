@@ -1,6 +1,6 @@
 // Part of ImGui Bundle - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_bundle
 // Mermaid: the drawing, with ImDrawList. Colors come from the ImGui style.
-#include "rich_md_mermaid.h"
+#include "mermaid_model.h"
 
 #include <algorithm>
 #include <cmath>

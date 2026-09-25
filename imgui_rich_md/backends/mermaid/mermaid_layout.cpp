@@ -1,7 +1,7 @@
 // Part of ImGui Bundle - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_bundle
 // Mermaid: the layout. Graphs are laid out in layers (back edges reversed, longest-path ranks, barycenter
 // ordering, one band per subgraph); sizes come from the text, measured with the current font.
-#include "rich_md_mermaid.h"
+#include "mermaid_model.h"
 
 #include <algorithm>
 #include <cfloat>

@@ -1,7 +1,7 @@
 // Part of ImGui Bundle - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_bundle
 // Mermaid: the parsers. A line is scanned by hand (no std::regex); a line that is not understood is an error,
 // except the styling and interaction lines, which are skipped.
-#include "rich_md_mermaid.h"
+#include "mermaid_model.h"
 
 #include <algorithm>
 #include <cctype>

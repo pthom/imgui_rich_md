@@ -5,7 +5,7 @@
 //   %% known: label-on-node (<why>)              the checks known to fail until the layout improves
 // The layout checks need an ImGui frame, with the font the diagram is laid out with.
 #pragma once
-#include "imgui_rich_md/backends/mermaid/rich_md_mermaid.h"
+#include "imgui_rich_md/backends/mermaid/mermaid_model.h"
 
 #include <algorithm>
 #include <cmath>

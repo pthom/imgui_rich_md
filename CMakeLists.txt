@@ -93,6 +93,7 @@ endif()
 if(IMGUI_RICHMD_WITH_MERMAID)
     target_sources(imgui_rich_md PRIVATE
         ${_richmd_dir}/backends/mermaid/rich_md_mermaid.cpp ${_richmd_dir}/backends/mermaid/rich_md_mermaid.h
+        ${_richmd_dir}/backends/mermaid/mermaid_model.h
         ${_richmd_dir}/backends/mermaid/mermaid_parse.cpp ${_richmd_dir}/backends/mermaid/mermaid_layout.cpp
         ${_richmd_dir}/backends/mermaid/mermaid_draw.cpp)
     target_compile_definitions(imgui_rich_md PUBLIC IMGUI_RICHMD_WITH_MERMAID)
