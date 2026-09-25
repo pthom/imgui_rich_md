@@ -84,7 +84,8 @@ They build against stock Dear ImGui, fetched by CMake: `cmake -S examples -B bui
 
 The public API is in [imgui_rich_md/rich_md.h](imgui_rich_md/rich_md.h) (initialization, rendering, options, callbacks,
 fonts) and, for applications that provide their own textures, assets or downloads,
-[imgui_rich_md/rich_md_host.h](imgui_rich_md/rich_md_host.h).
+[imgui_rich_md/rich_md_host.h](imgui_rich_md/rich_md_host.h). [docs/api.md](docs/api.md) presents it, assembled from the
+headers.
 
 ## Python
 

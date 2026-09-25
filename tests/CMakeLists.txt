@@ -36,3 +36,13 @@ add_executable(imgui_rich_md_narrative_test ${CMAKE_CURRENT_LIST_DIR}/narrative/
 target_link_libraries(imgui_rich_md_narrative_test PRIVATE imgui_rich_md)
 target_compile_definitions(imgui_rich_md_narrative_test PRIVATE NARRATIVE_CASES_DIR="${CMAKE_CURRENT_LIST_DIR}/narrative/cases")
 add_test(NAME narrative_test COMMAND imgui_rich_md_narrative_test)
+
+# The API page, docs/api.md: generated from docs/api.src.md and the headers by tools/narrative_resolve (no ImGui).
+# Regenerate it with the target rich_md_api_doc; the test api_doc fails when it is not up to date.
+add_executable(narrative_resolve ${CMAKE_CURRENT_LIST_DIR}/../tools/narrative_resolve/narrative_resolve.cpp
+                                 ${CMAKE_CURRENT_LIST_DIR}/../imgui_rich_md/narrative_programming.cpp)
+target_include_directories(narrative_resolve PRIVATE ${CMAKE_CURRENT_LIST_DIR}/..)
+get_filename_component(_richmd_docs_dir ${CMAKE_CURRENT_LIST_DIR}/../docs ABSOLUTE)
+add_custom_target(rich_md_api_doc COMMAND narrative_resolve ${_richmd_docs_dir}/api.src.md ${_richmd_docs_dir}/api.md
+                  COMMENT "Generating docs/api.md")
+add_test(NAME api_doc COMMAND narrative_resolve --check ${_richmd_docs_dir}/api.src.md ${_richmd_docs_dir}/api.md)

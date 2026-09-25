@@ -2,7 +2,7 @@
 // Narrative programming: the annotations of source files (::md, ::code) and the transclusions (![[file#name]]).
 // Specification: docs/narrative_programming/narrative_programming_spec.md. No ImGui here: files are read through
 // a callback.
-#include "rich_md.h"
+#include "narrative_programming.h"
 
 #include <algorithm>
 #include <cstring>
@@ -254,6 +254,8 @@ namespace
         std::vector<std::string> prose;     // its lines, comment tokens removed
         int redundantEndmd = -1;            // a section closed by the ::endcode just above: an ::endmd may follow
 
+        Parser(const std::string& file_, Syntax syntax_) : file(file_), syntax(syntax_) {}
+
         bool Fail(size_t line, const std::string& message)
         {
             r.error = file + ":" + std::to_string(line + 1) + ": " + message;
@@ -465,7 +467,7 @@ namespace
 
     ParsedFile Parse(const std::string& file, std::vector<std::string> lines, Syntax syntax)
     {
-        Parser parser{file, syntax, {}};
+        Parser parser(file, syntax);
         parser.r.directiveOnly.assign(lines.size(), false);
         parser.r.lines = std::move(lines);
         parser.Run();

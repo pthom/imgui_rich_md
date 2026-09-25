@@ -47,7 +47,7 @@ endif()
 add_library(imgui_rich_md STATIC
     ${_md4c_dir}/md4c.c ${_md4c_dir}/md4c.h
     ${_richmd_dir}/rich_md.cpp ${_richmd_dir}/rich_md.h
-    ${_richmd_dir}/rich_md_narrative.cpp
+    ${_richmd_dir}/narrative_programming.cpp ${_richmd_dir}/narrative_programming.h
     ${_richmd_dir}/rich_md_host.h
     ${_richmd_dir}/internal/rich_md_renderer.cpp ${_richmd_dir}/internal/rich_md_renderer.h
     ${_richmd_dir}/internal/rich_md_internal.h
@@ -187,7 +187,8 @@ endif()
 
 # --- install (headers under include/imgui_rich_md, targets exported by the parent or here)
 if(_richmd_standalone OR IMGUI_RICHMD_INSTALL)
-    install(FILES ${_richmd_dir}/rich_md.h ${_richmd_dir}/rich_md_host.h DESTINATION include/imgui_rich_md)
+    install(FILES ${_richmd_dir}/rich_md.h ${_richmd_dir}/rich_md_host.h ${_richmd_dir}/narrative_programming.h
+            DESTINATION include/imgui_rich_md)
     if(IMGUI_RICHMD_WITH_CODE_EDITOR)
         install(FILES ${_richmd_dir}/backends/code_editor/snippets.h DESTINATION include/imgui_rich_md/backends/code_editor)
     endif()
