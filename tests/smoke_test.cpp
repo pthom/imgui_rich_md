@@ -199,12 +199,41 @@ static bool CheckLiveStory()
     return ok;
 }
 
+// An HTML comment is not shown: a document with comments draws as many vertices as the same document without them
+static bool CheckHtmlComments()
+{
+    RichMd::CreateContext();
+    auto vertexCount = [](const char* markdown) {
+        int count = 0;
+        for (int i = 0; i < 2; ++i)  // the first frame loads the fonts
+        {
+            ImGui_ImplNull_NewFrame();
+            ImGui::NewFrame();
+            ImGui::SetNextWindowSize(ImVec2(600.f, 400.f));
+            ImGui::Begin("Comments");
+            RichMd::Render(markdown);
+            ImGui::End();
+            ImGui::Render();
+            ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+            count = ImGui::GetDrawData()->TotalVtxCount;
+        }
+        return count;
+    };
+    int withComments = vertexCount("Before\n\n<!-- a comment,\non two lines -->\n\nAfter <!-- inline --> the end.\n");
+    int withoutComments = vertexCount("Before\n\nAfter  the end.\n");
+    RichMd::DestroyContext();
+    bool ok = withComments == withoutComments;
+    if (!ok)
+        printf("smoke test failed: HTML comments are shown (%d vertices, %d without them)\n", withComments, withoutComments);
+    return ok;
+}
+
 static int RunOneCycle()
 {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplNull_Init();
-    if (!CheckContexts() || !CheckLiveStory())
+    if (!CheckContexts() || !CheckLiveStory() || !CheckHtmlComments())
         return 0;
 
     RichMd::MarkdownOptions options;

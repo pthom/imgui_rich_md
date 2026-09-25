@@ -993,6 +993,29 @@ static int extract_html_int_attr(const std::string& tag, const char* name, int d
 
 static bool details_hidden(const std::vector<bool>& stack);  // defined below
 
+// md4c hands a comment over as raw HTML: one chunk inline, one chunk per line in a block, each line followed by a
+// "\n" chunk (skipped too, when it follows the end of the comment)
+bool Renderer::skip_html_comment(const char* str, const char* str_end, bool afterComment)
+{
+	std::string chunk(str, str_end);
+	size_t start = chunk.find_first_not_of(" \t\r\n");
+	if (!m_in_html_comment)
+	{
+		if (start == std::string::npos)
+			return afterComment;  // the newline after a comment line
+		if (chunk.compare(start, 4, "<!--") != 0)
+			return false;
+		m_in_html_comment = true;
+		start += 4;
+	}
+	if (start != std::string::npos && chunk.find("-->", start) != std::string::npos)
+	{
+		m_in_html_comment = false;
+		m_html_comment_closed = true;
+	}
+	return true;
+}
+
 bool Renderer::check_html(const char* str, const char* str_end)
 {
 	const size_t sz = str_end - str;
@@ -1366,6 +1389,8 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 	// can pop the stack; everything else is discarded.
 	if (details_hidden(m_details_open_stack) && type != MD_TEXT_HTML)
 		return 0;
+	bool afterComment = m_html_comment_closed;
+	m_html_comment_closed = false;
 
 	switch (type) {
 	case MD_TEXT_NORMAL:
@@ -1414,6 +1439,8 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 		};
 		break;
 	case MD_TEXT_HTML:
+		if (skip_html_comment(str, str_end, afterComment))
+			break;
 		if (!check_html(str, str_end)) {
 			// Drop stray raw-HTML chunks (typically "\n") that
 			// md4c emits between recognized tags inside/around a
@@ -1608,6 +1635,8 @@ int Renderer::print(const char* str, const char* str_end)
     // separator-eligible block; set the flag so the very first one is
     // skipped (rendering starts flush at the caller's cursor).
     m_skip_next_block_gap = true;
+    m_in_html_comment = false;
+    m_html_comment_closed = false;
     m_table_id_counter = 0;
     m_details_id_counter = 0;
     m_in_pre = false;
