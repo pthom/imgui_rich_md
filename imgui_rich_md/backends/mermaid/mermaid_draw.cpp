@@ -228,6 +228,8 @@ namespace RichMd::Mermaid
             SubgraphBoxes(dl, graph, origin, em);
             for (const Edge& e : graph.edges)
             {
+                if (e.points.size() < 2)  // not laid out: a bug, but not a reason to crash the application
+                    continue;
                 Polyline(dl, Translated(e.points, origin), border, e.start, e.end, em, e.style);
                 if (!e.label.empty() && e.style != LineStyle::Invisible)
                     EdgeLabel(dl, e, origin, textCol, windowBg);
@@ -337,6 +339,8 @@ namespace RichMd::Mermaid
             {
                 const Edge& e = graph.edges[i];
                 const Relation& r = relations[i];
+                if (e.points.size() < 2)  // not laid out: a bug, but not a reason to crash the application
+                    continue;
                 std::vector<ImVec2> pts = Translated(e.points, origin);
                 ImVec2 start = DrawMarker(dl, r.markerSrc, pts[0], pts[1], border, windowBg, em);
                 ImVec2 end = DrawMarker(dl, r.markerDst, pts.back(), pts[pts.size() - 2], border, windowBg, em);

@@ -202,6 +202,11 @@ namespace MermaidChecks
         }
 
         const Graph& g = d.graph;
+        for (size_t i = 0; i < g.edges.size(); ++i)  // the other checks need the points
+            if (g.edges[i].points.size() < 2)
+                issues.push_back({"edge-without-points", "the edge " + std::to_string(i) + " was not laid out"});
+        if (!issues.empty())
+            return issues;
         std::vector<Rect> nodes;
         for (const Node& n : g.nodes)
             nodes.push_back(Rect{n.pos, ImVec2(n.pos.x + n.size.x, n.pos.y + n.size.y), n.id});
@@ -340,6 +345,8 @@ namespace MermaidChecks
                 const Edge& f = g.edges[j];
                 const auto& p = e.points;
                 const auto& q = f.points;
+                if (p.size() < 2 || q.size() < 2)  // not laid out (reported by edge-without-points)
+                    continue;
                 // between neighbouring layers (not an edge to a subgraph laid out on its own: its ends' ranks are apart)
                 auto neighbouring = [&](const Edge& k) { return k.lane == 0 && g.nodes[k.dst].rank == g.nodes[k.src].rank + 1; };
                 bool sameGap = neighbouring(e) && neighbouring(f) && g.nodes[e.src].rank == g.nodes[f.src].rank;

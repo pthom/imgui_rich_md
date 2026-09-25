@@ -484,6 +484,8 @@ namespace RichMd::Mermaid
             {
                 const std::vector<ImVec2>& pts = graph.edges[i].points;
                 Relation& r = relations[i];
+                if (pts.size() < 2)
+                    continue;
                 auto place = [&](const std::string& card, ImVec2 p, ImVec2 q) {
                     float dx = q.x - p.x, dy = q.y - p.y;
                     float n = std::max(std::sqrt(dx * dx + dy * dy), 1e-3f);
