@@ -130,6 +130,7 @@ namespace Snippets
         static std::map<ImGuiID, TextEditor> gEditors;
         static std::map<ImGuiID, double> timeClickCopyButton;
         static std::map<ImGuiID, bool> gEditorChanged;
+        static std::map<ImGuiID, std::string> gSubmittedCode;  // the code last given to each editor
 
         if (gEditors.find(id) == gEditors.end())
         {
@@ -151,8 +152,14 @@ namespace Snippets
             if (snippetData.AddFinalEmptyLine)
                 displayedCode = AddFinalEmptyLineIfMissing(displayedCode);
 
-            if (editor.GetText() != displayedCode)
+            // SetText resets the editor (its scroll, its selection): only when the code changed. Not compared with
+            // GetText(), which the editor normalizes (a final newline): the code would be set again every frame.
+            std::string& submitted = gSubmittedCode[id];
+            if (submitted != displayedCode)
+            {
                 editor.SetText(displayedCode);
+                submitted = displayedCode;
+            }
         }
 
         ImGui::BeginGroup();
