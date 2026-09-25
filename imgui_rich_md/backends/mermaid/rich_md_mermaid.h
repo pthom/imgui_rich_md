@@ -208,6 +208,18 @@ namespace RichMd::Mermaid
         float layoutFontSize = 0.f;
     };
 
+    // The distances that the layout, the drawing and the tests must agree on
+    struct Metrics
+    {
+        float boxPad;       // a subgraph's box, around its members
+        float titleHeight;  // the room of a box's title, above its members
+        float titleInset;   // from the top of a box to the top of its title
+        float lidHeight;    // a cylinder's lids: the half height of their ellipses
+        float lineStep;     // between two parallel lines: the tracks of a channel, the approach lines of the lanes
+        float laneStep;     // between two lanes
+    };
+    Metrics GetMetrics(float em);  // with the current font (its line height)
+
     Diagram Parse(const std::string& source);
     void Layout(Diagram& diagram);               // with the current font
     ImVec2 DiagramSize(const Diagram& diagram);  // once laid out, the size Draw reserves

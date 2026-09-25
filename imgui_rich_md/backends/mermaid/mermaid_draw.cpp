@@ -153,7 +153,7 @@ namespace RichMd::Mermaid
             }
             case NodeShape::Cylinder:
             {
-                float ry = 0.35f * em;
+                float ry = GetMetrics(em).lidHeight;
                 ImVec2 radius(node.size.x / 2.f, ry);
                 dl->AddRectFilled(ImVec2(p0.x, p0.y + ry), ImVec2(p1.x, p1.y - ry), fill);
                 dl->AddEllipseFilled(ImVec2(c.x, p1.y - ry), radius, fill);
@@ -209,7 +209,7 @@ namespace RichMd::Mermaid
                     continue;
                 ImVec2 q0 = Add(origin, sub.boxMin);
                 // the title on the box's own background: an edge that crosses it passes under it
-                ImVec2 t0(q0.x + sub.titleX, q0.y + 0.2f * em);
+                ImVec2 t0(q0.x + sub.titleX, q0.y + GetMetrics(em).titleInset);
                 ImVec2 ts = ImGui::CalcTextSize(sub.title.c_str());
                 ImVec2 b0(t0.x - 2.f, t0.y), b1(t0.x + ts.x + 2.f, t0.y + ts.y);
                 dl->AddRectFilled(b0, b1, ImGui::GetColorU32(ImGuiCol_WindowBg));
@@ -292,7 +292,7 @@ namespace RichMd::Mermaid
                 if (!sub.hasBox)
                     continue;
                 ImVec2 q0 = Add(origin, sub.boxMin), q1 = Add(origin, sub.boxMax);
-                float tabHeight = ImGui::GetTextLineHeight() + 0.4f * em;
+                float tabHeight = GetMetrics(em).titleHeight;
                 if (!tabs)
                 {
                     dl->AddRectFilled(ImVec2(q0.x, q0.y + tabHeight), q1, fill);
@@ -304,8 +304,8 @@ namespace RichMd::Mermaid
                 dl->AddRectFilled(tab0, tab1, ImGui::GetColorU32(ImGuiCol_WindowBg));
                 dl->AddRectFilled(tab0, tab1, fill);
                 StrokeRect(dl, tab0, tab1, border, 0.f, 1.f);
-                dl->AddText(ImVec2(q0.x + sub.titleX, q0.y + 0.2f * em), ImGui::GetColorU32(ImGuiCol_Text, 0.8f),
-                            sub.title.c_str());
+                dl->AddText(ImVec2(q0.x + sub.titleX, q0.y + GetMetrics(em).titleInset),
+                            ImGui::GetColorU32(ImGuiCol_Text, 0.8f), sub.title.c_str());
             }
         }
 

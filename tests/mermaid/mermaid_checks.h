@@ -256,7 +256,7 @@ namespace MermaidChecks
         std::vector<Rect> titles;  // the titles of the subgraphs (the tab of a namespace)
         for (const Subgraph& sub : g.subgraphs)
             if (sub.hasBox)
-                titles.push_back(TextRect(ImVec2(sub.boxMin.x + sub.titleX, sub.boxMin.y + 0.2f * em), sub.title, sub.title));
+                titles.push_back(TextRect(ImVec2(sub.boxMin.x + sub.titleX, sub.boxMin.y + GetMetrics(em).titleInset), sub.title, sub.title));
         for (size_t i = 0; i < g.edges.size(); ++i)
         {
             const Edge& e = g.edges[i];

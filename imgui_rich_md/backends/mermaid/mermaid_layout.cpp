@@ -18,6 +18,12 @@ namespace RichMd::Mermaid
         return graph.backEdges.count({e.src, e.dst}) > 0 || graph.nodes[e.dst].rank - graph.nodes[e.src].rank > 1;
     }
 
+    Metrics GetMetrics(float em)
+    {
+        const float lineHeight = ImGui::GetTextLineHeight();
+        return Metrics{0.8f * em, lineHeight + 0.4f * em, 0.2f * em, 0.35f * em, 0.45f * em, 1.2f * em};
+    }
+
     std::vector<ImVec2> ShapeOutline(const Node& node, float em)
     {
         const float w = node.size.x, h = node.size.y;
@@ -49,7 +55,8 @@ namespace RichMd::Mermaid
             break;
         case NodeShape::Cylinder:
         {
-            float ry = 0.35f * em;  // the lids: the top half of the top ellipse, the bottom half of the bottom one
+            float ry = GetMetrics(em)
+                           .lidHeight;  // the lids: the top half of the top ellipse, the bottom half of the bottom one
             arc(ImVec2(w / 2.f, ry), ImVec2(w / 2.f, ry), pi, 2.f * pi, 16);
             arc(ImVec2(w / 2.f, h - ry), ImVec2(w / 2.f, ry), 0.f, pi, 16);
             break;
@@ -206,7 +213,7 @@ namespace RichMd::Mermaid
         float BoxCross(const Graph& graph, int box, float other, float em)
         {
             const Subgraph& sub = graph.subgraphs[box];
-            float lo = graph.vertical ? sub.boxMin.x : sub.boxMin.y + ImGui::GetTextLineHeight() + 0.4f * em;
+            float lo = graph.vertical ? sub.boxMin.x : sub.boxMin.y + GetMetrics(em).titleHeight;
             float hi = graph.vertical ? sub.boxMax.x : sub.boxMax.y;
             return std::clamp(other, lo + em, std::max(lo + em, hi - em));
         }
@@ -261,11 +268,11 @@ namespace RichMd::Mermaid
             if (e.lane > 0)
             {
                 // each lane on its own approach lines, in the room the gaps keep for them (away from the channels)
-                const float step = 0.45f * em;
-                float exit = graph.laneExit.at(a.rank) + (float)e.exitTrack * step;
-                float entry = graph.laneEntry.at(b.rank) - (float)e.entryTrack * step;
-                float lanePos = (vertical ? graph.size.x : graph.size.y) - 1.2f * em * (float)graph.lanes
-                                + 1.2f * em * (float)e.lane;
+                const Metrics m = GetMetrics(em);
+                float exit = graph.laneExit.at(a.rank) + (float)e.exitTrack * m.lineStep;
+                float entry = graph.laneEntry.at(b.rank) - (float)e.entryTrack * m.lineStep;
+                float lanePos = (vertical ? graph.size.x : graph.size.y) - m.laneStep * (float)graph.lanes
+                                + m.laneStep * (float)e.lane;
                 if (vertical)
                     return {pa, ImVec2(pa.x, exit), ImVec2(lanePos, exit), ImVec2(lanePos, entry), ImVec2(pb.x, entry),
                             pb};
@@ -378,7 +385,8 @@ namespace RichMd::Mermaid
                 bool labels = false;
                 for (const Segment& seg : list)
                     labels = labels || !graph.edges[seg.edge].label.empty();
-                const float spacing = labels && count > 1 ? ImGui::GetTextLineHeight() + 0.3f * em : 0.45f * em;
+                const float spacing =
+                    labels && count > 1 ? ImGui::GetTextLineHeight() + 0.3f * em : GetMetrics(em).lineStep;
                 for (size_t k = 0; k < list.size(); ++k)
                     graph.edges[list[k].edge].track = ((float)trackOf[k] - (float)(count - 1) / 2.f) * spacing;
                 trackRoom[r] = (float)(count - 1) * spacing;
@@ -507,14 +515,12 @@ namespace RichMd::Mermaid
 
         // The width a box needs for its title
         float TitleWidth(const Subgraph& sub, float em) { return ImGui::CalcTextSize(sub.title.c_str()).x + 1.5f * em; }
-        // A box: its padding around the members, and the room of its title
-        float BoxPadding(float em) { return 0.8f * em; }
-        float TitleRoom(float em) { return ImGui::GetTextLineHeight() + 0.4f * em; }
 
         // Subgraph boxes: the bounding box of the members, padded, with room for the title above them, and at least
         // as wide as the title
-        void ComputeSubgraphBoxes(Graph& graph, float boxPad, float titleHeight, float em)
+        void ComputeSubgraphBoxes(Graph& graph, float em)
         {
+            const Metrics m = GetMetrics(em);
             // the children first (a subgraph comes after its parent in the source): a box encloses its nodes and the
             // boxes of its children
             for (size_t b = graph.subgraphs.size(); b-- > 0;)
@@ -522,7 +528,8 @@ namespace RichMd::Mermaid
                 Subgraph& sub = graph.subgraphs[b];
                 sub.hasBox = false;
                 auto enclose = [&](ImVec2 min, ImVec2 max) {
-                    ImVec2 p0(min.x - boxPad, min.y - boxPad - titleHeight), p1(max.x + boxPad, max.y + boxPad);
+                    ImVec2 p0(min.x - m.boxPad, min.y - m.boxPad - m.titleHeight),
+                        p1(max.x + m.boxPad, max.y + m.boxPad);
                     if (!sub.hasBox)
                         sub.boxMin = p0, sub.boxMax = p1, sub.hasBox = true;
                     sub.boxMin = ImVec2(std::min(sub.boxMin.x, p0.x), std::min(sub.boxMin.y, p0.y));
@@ -541,7 +548,7 @@ namespace RichMd::Mermaid
         }
 
         // BT and RL: the layout of TD and LR, mirrored along the main axis (the titles of the boxes stay on top)
-        void Mirror(Graph& graph, float boxPad, float titleHeight)
+        void Mirror(Graph& graph, float em)
         {
             const bool vertical = graph.vertical;
             const float extent = vertical ? graph.size.y : graph.size.x;
@@ -563,7 +570,7 @@ namespace RichMd::Mermaid
                 if (!e.label.empty())
                     flipBox(e.labelMin, e.labelMax);
             }
-            ComputeSubgraphBoxes(graph, boxPad, titleHeight, ImGui::GetFontSize());
+            ComputeSubgraphBoxes(graph, em);
         }
 
         // The non-decreasing sequence closest to t (least squares): isotonic regression, by pooling adjacent violators
@@ -789,8 +796,9 @@ namespace RichMd::Mermaid
             // free nodes. A column is as wide as its widest layer, so that the subgraph boxes never overlap
             const int freeBand = (int)graph.subgraphs.size();  // the root
             auto band = [&](int v) { return graph.nodes[v].subgraph >= 0 ? graph.nodes[v].subgraph : freeBand; };
-            const float boxPad = BoxPadding(em);
-            const float titleHeight = TitleRoom(em);
+            const Metrics metrics = GetMetrics(em);
+            const float boxPad = metrics.boxPad;
+            const float titleHeight = metrics.titleHeight;
             std::vector<float> bandWidth(freeBand + 1, 0.f);
             auto membersWidth = [&](const std::vector<int>& members) {
                 float w = gapX * (float)(members.size() - 1);
@@ -1007,10 +1015,11 @@ namespace RichMd::Mermaid
                 e.exitTrack = exitCount[graph.nodes[e.src].rank]++;
                 e.entryTrack = entryCount[graph.nodes[e.dst].rank]++;
             }
-            ComputeSubgraphBoxes(graph, boxPad, titleHeight, em);  // across only (for the ends of the edges on boxes)
+            ComputeSubgraphBoxes(graph, em);  // across only (for the ends of the edges on boxes)
             std::map<int, float> trackRoom = AssignTracks(graph, em);
-            const float step = 0.45f * em;
-            auto extraLines = [&](std::map<int, int>& count, int r) { return (float)std::max(count[r] - 1, 0) * step; };
+            auto extraLines = [&](std::map<int, int>& count, int r) {
+                return (float)std::max(count[r] - 1, 0) * metrics.lineStep;
+            };
 
             // Positions along: the layers one after the other. Between two layers, the gap leaves the boxes' paddings
             // and titles, the approach lines of the lane edges, and a channel in the middle of the free space, wide
@@ -1049,7 +1058,7 @@ namespace RichMd::Mermaid
                 previous = r;
             }
             const float mainEnd = previousEnd + (previous >= 0 ? after[previous] : 0.f);
-            ComputeSubgraphBoxes(graph, boxPad, titleHeight, em);
+            ComputeSubgraphBoxes(graph, em);
 
             // Everything shifted along the main axis: room for the back edges that come back in front of the first
             // layer
@@ -1068,12 +1077,12 @@ namespace RichMd::Mermaid
                 sub.boxMax = ImVec2(sub.boxMax.x + delta.x, sub.boxMax.y + delta.y);
             }
             // room on the right (TD) or below (LR) for the lane edges
-            const float lanes = 1.2f * em * (float)graph.lanes;
+            const float lanes = metrics.laneStep * (float)graph.lanes;
             const float mainTotal = mainEnd + shift;
             graph.size = vertical ? ImVec2(totalCross + lanes, mainTotal) : ImVec2(mainTotal, totalCross + lanes);
             RouteEdges(graph, em);
             if (graph.reversed)
-                Mirror(graph, boxPad, titleHeight);
+                Mirror(graph, em);
         }
 
         // Whether the segment [p, q] goes through the rect [r0, r1] (Liang-Barsky clipping)
@@ -1114,7 +1123,7 @@ namespace RichMd::Mermaid
                 int bestCrossings = INT_MAX;
                 for (float x : candidates)
                 {
-                    ImVec2 t0(sub.boxMin.x + x, sub.boxMin.y + 0.2f * em), t1(t0.x + ts.x, t0.y + ts.y);
+                    ImVec2 t0(sub.boxMin.x + x, sub.boxMin.y + GetMetrics(em).titleInset), t1(t0.x + ts.x, t0.y + ts.y);
                     int crossings = 0;
                     for (const Edge& e : graph.edges)
                         for (size_t k = 0; k + 1 < e.points.size(); ++k)
@@ -1252,7 +1261,8 @@ namespace RichMd::Mermaid
                 int node = -1, box = -1, compound = -1;
                 bool inner = false, outside = false;
             };
-            const float boxPad = BoxPadding(em), titleHeight = TitleRoom(em);
+            const Metrics metrics = GetMetrics(em);
+            const float boxPad = metrics.boxPad, titleHeight = metrics.titleHeight;
             graph.backEdges.clear();
             std::vector<int> edgeScope(graph.edges.size(), -1);
 
