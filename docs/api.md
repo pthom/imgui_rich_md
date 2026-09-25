@@ -13,7 +13,7 @@ its source is [api.src.md](api.src.md).
 ## Rendering
 
 `Render()` draws a markdown string where it is called, every frame: rich_md is immediate mode, like Dear ImGui.
-It needs a context (see Contexts).
+It needs a context (see Contexts). Its text can be selected with the mouse and copied with Ctrl+C (Cmd+C on macOS).
 
 ```cpp
 // Renders a markdown string. Its common indentation is removed first (so that a string written
