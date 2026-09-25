@@ -1684,8 +1684,9 @@ int Renderer::print(const char* str, const char* str_end)
 
     // The fragment's selection is drawn behind its text: the text goes to channel 1, the highlight to channel 0
     ImGuiID selectionId = ImGui::GetID("##rich_md_selection");
-    if (m_selection_fragment == selectionId && ImHashStr(str, (size_t)(str_end - str)) != m_selection_text_hash)
-        m_selection_fragment = 0;  // the fragment shows another text: its offsets mean nothing anymore
+    if (m_selection_fragment == selectionId
+        && (!selectableText || ImHashStr(str, (size_t)(str_end - str)) != m_selection_text_hash))
+        m_selection_fragment = 0;  // not selectable anymore, or another text (its offsets mean nothing anymore)
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     bool drawSelection = m_selection_fragment == selectionId && m_selection_anchor != m_selection_focus;
     if (drawSelection) {
@@ -1697,7 +1698,8 @@ int Renderer::print(const char* str, const char* str_end)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapTop));
 	int result = md_parse(str, (MD_SIZE)(str_end - str), &m_md, this);
 
-    update_selection(selectionId);
+    if (selectableText)
+        update_selection(selectionId);
     if (drawSelection) {
         m_selection_splitter.SetCurrentChannel(drawList, 0);
         draw_selection();

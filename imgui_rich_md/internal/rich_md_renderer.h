@@ -64,6 +64,7 @@ struct Renderer
 	void set_flag(unsigned flag, bool enable);
 
 	Style style;
+	bool selectableText = true;  // the text can be selected (set by RichMd::RenderRaw for each fragment)
 
 	// The automatic link color: the text color, shifted to blue
 	static ImVec4 default_link_color();

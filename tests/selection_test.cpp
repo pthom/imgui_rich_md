@@ -10,6 +10,7 @@
 
 static std::string gClipboard;
 static std::string gOpenedLink;
+static int gPushSelectable = -1;  // -1: no PushSelectableText() around the render, else its value
 
 // Where a frame drew the markdown
 struct Frame
@@ -30,7 +31,11 @@ static Frame DrawFrame(const char* markdown, float width, bool movable = false)
     ImGui::Begin("Selection", nullptr, ImGuiWindowFlags_NoTitleBar);
     frame.windowPos = ImGui::GetWindowPos();
     frame.textOrigin = ImGui::GetCursorScreenPos();
+    if (gPushSelectable >= 0)
+        RichMd::PushSelectableText(gPushSelectable == 1);
     RichMd::Render(markdown);
+    if (gPushSelectable >= 0)
+        RichMd::PopSelectableText();
     frame.textEndY = ImGui::GetCursorScreenPos().y;
     ImGui::End();
     ImGui::Render();
@@ -202,6 +207,36 @@ static bool CheckLinks()
     return Expect("a drag from a link selects", gClipboard, "link here") && ok;
 }
 
+// PushSelectableText(false) turns the selection off for the renders it covers; in a context whose option selectableText
+// is off, PushSelectableText(true) turns it on
+static bool CheckSelectableSwitch(RichMd::Context* mainContext)
+{
+    const char* md = "Some text\n";
+    Frame f = DrawFrame(md, 400.f);
+    ImVec2 from(f.textOrigin.x + 1.f, f.textOrigin.y + LineHeight() * 0.5f);
+    ImVec2 to(f.textOrigin.x + 300.f, from.y);
+    gClipboard.clear();
+    gPushSelectable = 0;
+    DragAndCopy(md, 400.f, from, to);
+    bool ok = Expect("PushSelectableText(false)", gClipboard, "");
+
+    RichMd::MarkdownOptions options;
+    options.selectableText = false;
+    RichMd::Context* context = RichMd::CreateContext(options);
+    RichMd::SetCurrentContext(context);
+    gPushSelectable = -1;
+    DrawFrame(md, 400.f);  // loads the fonts of this context
+    DragAndCopy(md, 400.f, from, to);
+    ok = Expect("the option selectableText = false", gClipboard, "") && ok;
+    gPushSelectable = 1;
+    DragAndCopy(md, 400.f, from, to);
+    ok = Expect("PushSelectableText(true) over the option", gClipboard, "Some text") && ok;
+    gPushSelectable = -1;
+    RichMd::DestroyContext(context);
+    RichMd::SetCurrentContext(mainContext);
+    return ok;
+}
+
 int main(int, char**)
 {
     ImGui::CreateContext();
@@ -212,7 +247,7 @@ int main(int, char**)
     ImGui::GetPlatformIO().Platform_GetClipboardTextFn = [](ImGuiContext*) { return gClipboard.c_str(); };
     RichMd::MarkdownOptions options;
     options.callbacks.OnOpenLink = [](const std::string& url) { gOpenedLink = url; };
-    RichMd::CreateContext(options);
+    RichMd::Context* mainContext = RichMd::CreateContext(options);
     DrawFrame("warm up", 400.f);  // the first frame loads the fonts
 
     bool ok = CheckPartialSelection();
@@ -220,6 +255,7 @@ int main(int, char**)
     ok = CheckSelectionOverSpecialBlocks() && ok;
     ok = CheckWidgetsAndClear() && ok;
     ok = CheckLinks() && ok;
+    ok = CheckSelectableSwitch(mainContext) && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

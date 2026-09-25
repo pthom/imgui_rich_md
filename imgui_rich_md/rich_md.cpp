@@ -1023,6 +1023,8 @@ namespace RichMd
             context->fragmentCounter = 0;
         }
         ImGui::PushID(context->fragmentCounter++);
+        renderer->selectableText = context->selectableTextStack.empty()
+            ? context->options.selectableText : context->selectableTextStack.back();
         renderer->Render(markdownString);
         ImGui::PopID();
         _SweepDestroyedTextures();
@@ -1092,6 +1094,19 @@ namespace RichMd
     void RenderFile(const std::string& path, const std::string& target)
     {
         RenderRaw(_ResolveTransclusionsCached("![[" + path + (target.empty() ? "" : "#" + target) + "]]"));
+    }
+
+    void PushSelectableText(bool selectable)
+    {
+        IM_ASSERT(gCurrentContext && "RichMd: call InitializeMarkdown first");
+        gCurrentContext->selectableTextStack.push_back(selectable);
+    }
+
+    void PopSelectableText()
+    {
+        IM_ASSERT(gCurrentContext && !gCurrentContext->selectableTextStack.empty()
+                  && "RichMd: PopSelectableText() without PushSelectableText()");
+        gCurrentContext->selectableTextStack.pop_back();
     }
 
     void RegisterFencedBlockRenderer(const std::string& language, std::function<void(const std::string& code)> renderer)
