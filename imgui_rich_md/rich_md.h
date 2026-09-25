@@ -15,6 +15,32 @@
 
 namespace RichMd
 {
+    // =================================================================================================================
+    //                                        Main API: Rendering
+    // =================================================================================================================
+    /*::md Rendering
+    `Render()` draws a markdown string where it is called, every frame: rich_md is immediate mode, like Dear ImGui.
+    It needs a context (see Contexts).
+    ::code
+    */
+
+    // Renders a markdown string. Its common indentation is removed first (so that a string written
+    // inside an indented function renders as expected; no-op on flush-left text), then its transclusions
+    // are resolved (see ResolveTransclusions; the files are read through the host's ReadAsset).
+    void Render(const std::string& markdownString);
+    // Renders a markdown string as is (no unindent, no transclusion)
+    void RenderRaw(const std::string& markdownString);
+    // ::endcode
+
+    // =================================================================================================================
+    //                                        Options and callbacks
+    // =================================================================================================================
+    /*::md Options and callbacks
+    The options of a context: its fonts, LaTeX, links, and the callbacks through which the application handles links,
+    images, HTML tags and headings.
+    ::code
+    */
+
     struct MarkdownFontOptions
     {
         std::string fontBasePath = "fonts/Roboto/Roboto";
@@ -38,15 +64,6 @@ namespace RichMd
         ImVec2	uv1;
         ImVec4	col_tint;
         ImVec4	col_border;
-    };
-
-    // Note: Since v1.92, Fonts can be displayed at any size:
-    // in order to display a font at a given size, we need to call
-    //   ImGui::PushFont(font, size) (or call separately ImGui::PushFontSize)
-    struct SizedFont
-    {
-        ImFont* font;
-        float size;
     };
 
     using VoidFunction = std::function<void(void)>;
@@ -113,7 +130,8 @@ namespace RichMd
         // When set here, it is copied into the host services when the context is created.
         MarkdownDownloadFunction OnDownloadData;
 
-        // CanUseChildWindows: callback that tells whether child windows can be used at this moment (empty by default, which means yes).
+        // CanUseChildWindows: callback that tells whether child windows can be used at this moment (empty by default,
+        // which means yes).
         // Code blocks are rendered inside a child window. Where child windows do not work (e.g. inside the canvas of
         // imgui-node-editor), return false: code blocks are then rendered as inline code.
         // ImmApp fills it when the node editor is available.
@@ -150,6 +168,15 @@ namespace RichMd
         // A newline in the source is a line break (as in GitHub comments and chat messages)
         bool hardSoftBreaks = false;
     };
+    // ::endcode
+
+    // =================================================================================================================
+    //                                      Context
+    // =================================================================================================================
+    /*::md Contexts
+    A context holds the options, the fonts and the caches (textures, formulas, diagrams). Most applications have one.
+    ::code
+    */
 
     struct Context;
     // Contexts: CreateContext makes one, any time after ImGui::CreateContext(); it becomes the current context when
@@ -162,66 +189,66 @@ namespace RichMd
     void SetCurrentContext(Context* context);
     Context* GetCurrentContext();
 
-    // The former names: InitializeMarkdown makes a default context and makes it current (a second call does
-    // nothing); DeInitializeMarkdown destroys it.
-    void InitializeMarkdown(const MarkdownOptions& options = MarkdownOptions());
-    void DeInitializeMarkdown();
 
     // The folder where the default host reads the assets (fonts, images) from the file system,
     // when they are not embedded in the binary. Default: the current directory.
     void SetAssetsFolder(const std::string& folder);
+    // ::endcode
 
-    // Legacy: the fonts now load at the first Render(). The returned function loads them right away,
-    // for hosts that build their font atlas once (no dynamic fonts).
-    VoidFunction GetFontLoaderFunction();
+    // =================================================================================================================
+    //                                      Narrative programming
+    // =================================================================================================================
+    /*::md Narrative programming
+    A program can carry its own narrative: markdown sections and code regions in its comments and strings, that
+    markdown transcludes (`![[file.cpp#Name]]`). See the
+    [presentation](https://github.com/pthom/imgui_rich_md/blob/main/docs/narrative_programming/narrative_programming.md)
+    and the
+    [specification](https://github.com/pthom/imgui_rich_md/blob/main/docs/narrative_programming/narrative_programming_spec.md).
 
-    // Renders a markdown string. Its common indentation is removed first (so that a string written
-    // inside an indented function renders as expected; no-op on flush-left text), then its transclusions
-    // are resolved (see ResolveTransclusions; the files are read through the host's ReadAsset).
-    void Render(const std::string& markdownString);
-    // Renders a markdown string as is (no unindent, no transclusion)
-    void RenderRaw(const std::string& markdownString);
-    // The former name of Render
-    void RenderUnindented(const std::string& markdownString);
+    A source file (C, C++, GLSL, JavaScript, Python) names parts of itself with annotations:
+    ```cpp
+    // ::md Area                    a markdown section, in line comments (// or #)
+    // The area of a *circle*.
+    // ::code                      its associated code
+    float Area(float r) { return 3.14159f * r * r; }
+    // ::endcode                   closes the code and the section
+
+    // ::md Intro                   a section without code is closed by ::endmd
+    // # Circles
+    // ::endmd
+
+    // ::code Main loop             a named code region (regions may nest)
+    for (int i = 0; i < n; ++i) {}
+    // ::endcode
+    ```
+    A section may also be a block comment or a Python string (triple quotes) whose first line is `::md Name` after
+    the opener: it ends with the comment or the string, or continues into the code after it when its last line is
+    `::code`.
+
+    A markdown text transcludes them with an embed alone on its line (Obsidian's syntax):
+    ```text
+    ![[circle.cpp#Area]]            the prose of a section
+    ![[circle.cpp#Area#code]]       its associated code, as a code block
+    ![[circle.cpp#Main loop]]       a code region
+    ![[#Area]]                      a section of the current file: a source file can be its own narrative
+    ![[circle.cpp]]                 a whole source file, as code
+    ![[notes.md]]                   a markdown document, whole...
+    ![[notes.md#Setup#Linux]]       ...or under a heading (Linux, under Setup)
+    ```
+    Paths are relative to the file holding the embed (a text without a file: the assets, then the file system).
+    Transclusions resolve recursively. An error (a missing file or name, a malformed annotation, a cycle)
+    renders the embed in the error color, with the reason as a tooltip.
+
+    ::code
+    */
 
     // Reads a text file for ResolveTransclusions, or returns std::nullopt when it does not exist
     using ReadTextFile = std::function<std::optional<std::string>(const std::string& path)>;
 
-    // Narrative programming: sections of source files, transcluded into markdown
-    // ---------------------------------------------------------------------------
-    // A source file (C, C++, GLSL, JavaScript, Python) names parts of itself with annotations:
-    //     // ::md Area                    a markdown section, in line comments (// or #)
-    //     // The area of a *circle*.
-    //     // ::code                      its associated code
-    //     float Area(float r) { return 3.14159f * r * r; }
-    //     // ::endcode                   closes the code and the section
-    //
-    //     // ::md Intro                   a section without code is closed by ::endmd
-    //     // # Circles
-    //     // ::endmd
-    //
-    //     // ::code Main loop             a named code region (regions may nest)
-    //     for (int i = 0; i < n; ++i) {}
-    //     // ::endcode
-    // A section may also be a block comment or a Python string (triple quotes) whose first line is "::md Name"
-    // after the opener: it ends with the comment or the string, or continues into the code after it when its
-    // last line is "::code".
-    // A markdown text transcludes them with an embed alone on its line (Obsidian's syntax):
-    //     ![[circle.cpp#Area]]            the prose of a section
-    //     ![[circle.cpp#Area#code]]       its associated code, as a code block
-    //     ![[circle.cpp#Main loop]]       a code region
-    //     ![[#Area]]                      a section of the current file: a source file can be its own narrative
-    //     ![[circle.cpp]]                 a whole source file, as code
-    //     ![[notes.md]]                   a markdown document, whole...
-    //     ![[notes.md#Setup#Linux]]       ...or under a heading (Linux, under Setup)
-    // Paths are relative to the file holding the embed (a text without a file: the assets, then the file system).
-    // Transclusions resolve recursively. An error (a missing file or name, a malformed annotation, a cycle)
-    // renders the embed in the error color, with the reason as a tooltip.
-    // Specification: docs/narrative_programming/narrative_programming_spec.md
-    //
     // ResolveTransclusions replaces the embeds of a markdown text: readFile reads a file (or returns std::nullopt);
     // currentFile is the file the text comes from, if any. Render() calls it with the host's ReadAsset.
-    std::string ResolveTransclusions(const std::string& markdown, const ReadTextFile& readFile, const std::string& currentFile = "");
+    std::string ResolveTransclusions(const std::string& markdown, const ReadTextFile& readFile,
+                                     const std::string& currentFile = "");
 
     // Renders ![[path#target]]: target is a section ("Intro"), its code ("Escape#code"), a code region, a heading
     // of a markdown document, or empty (the whole file). The path is looked up in the assets first, then on the
@@ -229,10 +256,20 @@ namespace RichMd
     // rich_md.render_this_file("Intro") (Python).
     void RenderFile(const std::string& path, const std::string& target = "");
     #define RICHMD_RENDER_THIS_FILE(target) RichMd::RenderFile(__FILE__, target)
+    // ::endcode
+
+    // =================================================================================================================
+    //                                      Extensions
+    // =================================================================================================================
+    /*::md Extensions
+    Your own renderers for fenced code blocks, Mermaid diagrams and links outside of markdown.
+    ::code
+    */
 
     // Renders the code blocks of a given language (```mermaid, ```csv, ...) with your own function,
     // instead of the code block renderer. Applies to the current context.
-    void RegisterFencedBlockRenderer(const std::string& language, std::function<void(const std::string& code)> renderer);
+    void RegisterFencedBlockRenderer(const std::string& language,
+                                     std::function<void(const std::string& code)> renderer);
 
     // Renders a Mermaid diagram (flowchart, sequence or class diagram), as ```mermaid blocks do. A diagram that
     // cannot be parsed is shown as code, with the error below it; so is any diagram when the library is built
@@ -242,6 +279,27 @@ namespace RichMd
     // themes, front matter and markdown in labels are not supported. Details: docs/mermaid.md in imgui_rich_md.
     void RenderMermaid(const std::string& source);
 
+    // Renders a link with the given text and url. Can be used outside of markdown rendering.
+    void RenderTextAsLink(const char* text, const char* url);
+    // ::endcode
+
+    // =================================================================================================================
+    //                                      Style and fonts
+    // =================================================================================================================
+    /*::md Style and fonts
+    The colors, spacing and fonts of the current context, for widgets drawn next to the markdown.
+    ::code
+    */
+
+    // Note: Since v1.92, Fonts can be displayed at any size:
+    // in order to display a font at a given size, we need to call
+    //   ImGui::PushFont(font, size) (or call separately ImGui::PushFontSize)
+    struct SizedFont
+    {
+        ImFont* font;
+        float size;
+    };
+
     // Colors and spacing. A color with a negative alpha is automatic: derived from the ImGui style
     // at render time, so theme changes are followed. Gaps and scales are relative to the font size.
     struct Style
@@ -250,7 +308,8 @@ namespace RichMd
         ImVec4 linkUnderline = ImVec4(0, 0, 0, -1);        // automatic: ImGuiCol_Button
         ImVec4 linkUnderlineHovered = ImVec4(0, 0, 0, -1); // automatic: ImGuiCol_ButtonHovered
         ImVec4 codeColor = ImVec4(0, 0, 0, -1);            // automatic: the text color, a little more blue
-        ImVec4 errorColor = ImVec4(0, 0, 0, -1);           // automatic: the Caution admonition color (invalid formula, failed transclusion: <md-error>)
+        // errorColor: an invalid formula, a failed transclusion (<md-error>)
+        ImVec4 errorColor = ImVec4(0, 0, 0, -1);           // automatic: the Caution admonition color
         ImVec4 quoteBar = ImVec4(0, 0, 0, -1);             // automatic: ImGuiCol_TextDisabled
         ImVec4 kbdBorder = ImVec4(0, 0, 0, -1);            // automatic: ImGuiCol_Border
         ImVec4 markBackground = ImVec4(245.f / 255.f, 205.f / 255.f, 60.f / 255.f, 120.f / 255.f);
@@ -287,12 +346,39 @@ namespace RichMd
     SizedFont GetFont(const MarkdownFontSpec& fontSpec);
 
     ImVec4 LinkColor();
+    // ::endcode
 
-    // What this build and its host provide (available once a context exists)
+    // =================================================================================================================
+    //                                      Capabilities
+    // =================================================================================================================
+    /*::md Capabilities
+    What this build and its host provide (available once a context exists).
+    ::code
+    */
+
     bool HasLatex();         // $...$ and $$...$$ rendered as formulas (else shown as their source)
     bool HasUrlImages();     // images downloaded from http(s) urls
     bool HasCodeEditor();    // code blocks with syntax highlighting (else plain monospaced blocks)
+    // ::endcode
 
-    // Renders a link with the given text and url. Can be used outside of markdown rendering.
-    void RenderTextAsLink(const char* text, const char* url);
+    // =================================================================================================================
+    //                                      Legacy names
+    // =================================================================================================================
+    /*::md Legacy names
+    The former names, kept for existing code.
+    ::code
+    */
+
+    // The former names: InitializeMarkdown makes a default context and makes it current (a second call does
+    // nothing); DeInitializeMarkdown destroys it.
+    void InitializeMarkdown(const MarkdownOptions& options = MarkdownOptions());
+    void DeInitializeMarkdown();
+
+    // The former name of Render
+    void RenderUnindented(const std::string& markdownString);
+
+    // Legacy: the fonts now load at the first Render(). The returned function loads them right away,
+    // for hosts that build their font atlas once (no dynamic fonts).
+    VoidFunction GetFontLoaderFunction();
+    // ::endcode
 }
