@@ -5,8 +5,6 @@
 #pragma once
 #include "imgui.h"
 
-#include <map>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -64,7 +62,7 @@ namespace RichMd::Mermaid
         // the layout keeps its size (a subgraph laid out on its own)
         bool keepSize = false;
         // filled by the layout
-        int rank = 0, order = 0;
+        int rank = 0;      // its layer (a subgraph laid out on its own has its ranks apart)
         ImVec2 pos, size;  // relative to the diagram's origin
     };
 
@@ -78,10 +76,8 @@ namespace RichMd::Mermaid
         int srcBox = -1, dstBox = -1;
         // filled by the layout, relative to the diagram's origin
         std::vector<ImVec2> points;  // the polyline, from the source to the target
-        float track = 0.f;           // where its segment across the channel runs, from the channel's middle
-        int lane = 0;                // a lane edge: its lane (1, 2...), 0 otherwise
-        // a lane edge: its approach lines after its source's layer, before its target's
-        int exitTrack = 0, entryTrack = 0;
+        // routed past the graph, on the lane 1, 2...: a back edge, or an edge that skips a layer; 0 otherwise
+        int lane = 0;
         ImVec2 labelMin, labelMax;  // the box behind the label (when there is one)
     };
 
@@ -104,11 +100,6 @@ namespace RichMd::Mermaid
         std::vector<Edge> edges;
         std::vector<Subgraph> subgraphs;
         // filled by the layout
-        std::set<std::pair<int, int>> backEdges;  // (src, dst) of the edges that close a cycle
-        int lanes = 0;                            // edges routed past the graph: back edges and edges that skip a layer
-        std::map<int, float> channels;  // along the main axis, where the edges from the layer r to the layer r + 1 run
-        // along the main axis: the first approach line of the lane edges after the layer r (past its boxes), before it
-        std::map<int, float> laneExit, laneEntry;
         ImVec2 size;
     };
 
@@ -224,8 +215,6 @@ namespace RichMd::Mermaid
     void Layout(Diagram& diagram);               // with the current font
     ImVec2 DiagramSize(const Diagram& diagram);  // once laid out, the size Draw reserves
     void Draw(const Diagram& diagram);           // at the cursor, then a Dummy of DiagramSize
-    // Back edges and edges that skip a layer travel on a lane past the graph
-    bool UsesLane(const Graph& graph, const Edge& e);
     // The outline of a node's shape, in its local coordinates (from (0, 0) to its size); curves are approximated
     std::vector<ImVec2> ShapeOutline(const Node& node, float em);
     // The italic font of the markdown (abstract members), or nullptr outside of a markdown context

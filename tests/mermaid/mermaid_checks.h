@@ -340,7 +340,9 @@ namespace MermaidChecks
                 const Edge& f = g.edges[j];
                 const auto& p = e.points;
                 const auto& q = f.points;
-                bool sameGap = !UsesLane(g, e) && !UsesLane(g, f) && g.nodes[e.src].rank == g.nodes[f.src].rank;
+                // between neighbouring layers (not an edge to a subgraph laid out on its own: its ends' ranks are apart)
+                auto neighbouring = [&](const Edge& k) { return k.lane == 0 && g.nodes[k.dst].rank == g.nodes[k.src].rank + 1; };
+                bool sameGap = neighbouring(e) && neighbouring(f) && g.nodes[e.src].rank == g.nodes[f.src].rank;
                 if (sameGap)  // two edges between the same layers (their segments may share the channel): ends in opposite orders
                 {
                     float starts = cross(p.front()) - cross(q.front()), ends = cross(p.back()) - cross(q.back());
