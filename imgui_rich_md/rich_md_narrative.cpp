@@ -188,7 +188,7 @@ namespace
     }
 
     // A string or block comment that starts the line (after its indentation): its closing delimiter, and the text
-    // after the opener. Python: """ or ''', with an optional prefix such as r. C-like: /*.
+    // after the opener. Python: """ or ''', with an optional prefix such as r. C-like: /* or /**.
     bool ContainerOpener(const std::string& line, Syntax syntax, std::string& closer, std::string& rest)
     {
         size_t b = line.find_first_not_of(" \t");
@@ -197,7 +197,7 @@ namespace
         if (syntax == Syntax::CLike && line.compare(b, 2, "/*") == 0)
         {
             closer = "*/";
-            rest = line.substr(b + 2);
+            rest = line.substr(line.compare(b, 3, "/**") == 0 ? b + 3 : b + 2);
             return true;
         }
         if (syntax == Syntax::Python)

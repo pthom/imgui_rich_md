@@ -36,11 +36,11 @@ A directive is the first token of its line, once the line's comment token (for l
 | Language | Line comments | Bounded containers |
 |---|---|---|
 | Python | `#` | strings: `"""`, `'''`, with or without a prefix such as `r` |
-| C, C++, GLSL, JavaScript | `//` | block comments: `/* */` |
+| C, C++, GLSL, JavaScript | `//` | block comments: `/* */` or `/** */` |
 
 For example, `r"""::md Intro` opens a section on the first line of a string, and `# ::code` opens a code region in a line comment. A comment that starts with a C++ global-scope name (`// ::GetTickCount() ...`) is not a directive: `::GetTickCount()` is not a directive keyword.
 
-The opening delimiter starts its line, after indentation: `r"""::md Intro` opens a section, `doc = """::md Intro` does not.
+The opening delimiter starts its line, after indentation: `r"""::md Intro` opens a section, `doc = """::md Intro` does not. `/**::md Intro` opens a section too; Doxygen or JSDoc then take it as the documentation of the declaration that follows (`/*` stays out of these tools).
 
 The language of a file is given by its extension: `.py`, `.pyi` (Python); `.c`, `.h`, `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh` (C, C++); `.glsl`, `.vert`, `.frag` (GLSL); `.js`, `.ts` (JavaScript, TypeScript); `.md` (Markdown documents, see [section 11.5](#115-headings-of-markdown-documents)). A file of another kind has no annotations: it can only be transcluded whole.
 

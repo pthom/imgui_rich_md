@@ -5,3 +5,4 @@
 ![[prog.py#In line comments]]
 ![[prog.cpp#In a block comment]]
 ![[prog.cpp#In line comments]]
+![[prog.cpp#In a doc comment]]

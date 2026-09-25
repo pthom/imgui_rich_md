@@ -18,3 +18,5 @@ The docstring's indentation is removed:
 **Bold** prose.
 
 Prose in `//` comments.
+
+A `/**` comment works too.
