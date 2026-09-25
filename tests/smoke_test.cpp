@@ -199,32 +199,35 @@ static bool CheckLiveStory()
     return ok;
 }
 
+// A markdown text drawn in a fixed window (the second frame: the first one loads the fonts)
+struct Drawn { int vertices; float height; };
+static Drawn DrawMarkdown(const char* markdown)
+{
+    Drawn drawn{};
+    for (int i = 0; i < 2; ++i)
+    {
+        ImGui_ImplNull_NewFrame();
+        ImGui::NewFrame();
+        ImGui::SetNextWindowSize(ImVec2(600.f, 400.f));
+        ImGui::Begin("Drawn");
+        RichMd::Render(markdown);
+        drawn.height = ImGui::GetCursorPosY();
+        ImGui::End();
+        ImGui::Render();
+        ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+        drawn.vertices = ImGui::GetDrawData()->TotalVtxCount;
+    }
+    return drawn;
+}
+
 // An HTML comment is not shown and takes no space: a document with comments draws as many vertices, and is as high,
 // as the same document without them
 static bool CheckHtmlComments()
 {
     RichMd::CreateContext();
-    struct Drawn { int vertices; float height; };
-    auto draw = [](const char* markdown) {
-        Drawn drawn{};
-        for (int i = 0; i < 2; ++i)  // the first frame loads the fonts
-        {
-            ImGui_ImplNull_NewFrame();
-            ImGui::NewFrame();
-            ImGui::SetNextWindowSize(ImVec2(600.f, 400.f));
-            ImGui::Begin("Comments");
-            RichMd::Render(markdown);
-            drawn.height = ImGui::GetCursorPosY();
-            ImGui::End();
-            ImGui::Render();
-            ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
-            drawn.vertices = ImGui::GetDrawData()->TotalVtxCount;
-        }
-        return drawn;
-    };
-    Drawn withComments = draw(
-        "<!-- before the title -->\n# Title\nBefore\n\n<!-- a comment,\non two lines -->\n\nAfter <!-- inline --> the end.\n");
-    Drawn withoutComments = draw("# Title\nBefore\n\nAfter  the end.\n");
+    Drawn withComments = DrawMarkdown("<!-- before the title -->\n# Title\nBefore\n\n"
+                                      "<!-- a comment,\non two lines -->\n\nAfter <!-- inline --> the end.\n");
+    Drawn withoutComments = DrawMarkdown("# Title\nBefore\n\nAfter  the end.\n");
     RichMd::DestroyContext();
     bool ok = withComments.vertices == withoutComments.vertices && withComments.height == withoutComments.height;
     if (!ok)
@@ -233,12 +236,26 @@ static bool CheckHtmlComments()
     return ok;
 }
 
+// Two paragraphs are separated by a gap: they are higher than two lines separated by a line break
+static bool CheckParagraphGap()
+{
+    RichMd::CreateContext();
+    float paragraphs = DrawMarkdown("First\n\nSecond\n").height;
+    float lines = DrawMarkdown("First  \nSecond\n").height;
+    RichMd::DestroyContext();
+    bool ok = paragraphs > lines;
+    if (!ok)
+        printf("smoke test failed: no gap between two paragraphs (%.1f high, %.1f with a line break)\n",
+               paragraphs, lines);
+    return ok;
+}
+
 static int RunOneCycle()
 {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplNull_Init();
-    if (!CheckContexts() || !CheckLiveStory() || !CheckHtmlComments())
+    if (!CheckContexts() || !CheckLiveStory() || !CheckHtmlComments() || !CheckParagraphGap())
         return 0;
 
     RichMd::MarkdownOptions options;

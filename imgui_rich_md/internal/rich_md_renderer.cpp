@@ -29,6 +29,7 @@
  */
 
 #include "rich_md_renderer.h"
+#include "imgui_internal.h"
 
 #include <cassert>
 #include <cmath>
@@ -52,6 +53,8 @@ bool Renderer::separate_block()
 		m_skip_next_block_gap = false;
 		return false;
 	}
+	if (ImGui::GetCurrentWindow()->DC.IsSameLine)
+		ImGui::NewLine();  // ends the line of the text before (render_text() ends with SameLine), without adding one
 	add_block_gap(style.blockGap);
 	return true;
 }
