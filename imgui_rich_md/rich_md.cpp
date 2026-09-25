@@ -18,6 +18,9 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #elif defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX  // no min and max macros (they break std::numeric_limits<T>::min() and the like)
+#endif
 #include <windows.h>
 #include <shellapi.h>
 #elif defined(__APPLE__)
