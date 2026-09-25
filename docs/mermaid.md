@@ -24,8 +24,9 @@ one in the Mermaid Live Editor, to compare with Mermaid's own render.
 | Class diagram | `classDiagram` | yes |
 | All the others (state, ER, gantt, pie, git graph, mind map, timeline, ...) | | no: shown as code |
 
-Also shown as code: the variant headers (`classDiagram-v2`, `flowchart-elk`), and a YAML front matter before the
-header (`---` / `title: ...` / `---`).
+The variant headers `flowchart-elk` and `classDiagram-v2` are read as `flowchart` and `classDiagram` (the layout stays
+imgui_rich_md's own). A YAML front matter before the header (`---` / `title: ...` / `---`) is read and skipped: its
+title and configuration do not apply.
 
 ## Everywhere
 
@@ -35,7 +36,8 @@ header (`---` / `title: ...` / `---`).
   `click`, `callback`, `link`.
 - Labels are plain text: `<br>` breaks a line, and entity codes (`#quot;`, `#35;`) are decoded. Markdown in labels
   (Mermaid's `` "`**bold**`" `` strings), other HTML tags and icons (`fa:fa-car`) are shown as written.
-- `accTitle`, `accDescr` and `title` lines are not supported.
+- The accessibility lines (`accTitle: ...`, `accDescr: ...`, `accDescr { ... }`) are read and skipped, and so is a
+  sequence diagram's `title`: they are not drawn.
 
 ## Flowcharts
 
@@ -77,7 +79,7 @@ Supported:
 - `autonumber`, with an optional start and step.
 
 Not supported (the diagram is shown as code): `box` groups, `create` and `destroy`, participant types
-(`participant A@{ "type": "database" }`), `title`. `links` lines are ignored.
+(`participant A@{ "type": "database" }`). `links` lines are ignored.
 
 ## Class diagrams
 

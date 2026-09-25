@@ -46,6 +46,12 @@ namespace MermaidChecks
         std::istringstream lines(source);
         std::string line;
         bool first = true;
+        std::streampos start = lines.tellg();
+        if (std::getline(lines, line) && line == "---")  // a front matter first (Mermaid wants it at the very start)
+            while (std::getline(lines, line) && line != "---")
+            {}
+        else
+            lines.seekg(start);
         while (std::getline(lines, line) && line.rfind("%%", 0) == 0)
         {
             std::string text = line.substr(line.find_first_not_of("% "));

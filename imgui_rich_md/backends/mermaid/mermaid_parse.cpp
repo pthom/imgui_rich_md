@@ -107,6 +107,49 @@ namespace RichMd::Mermaid
             return "line " + std::to_string(number) + ": " + message;
         }
 
+        // `key: text`, or `key {` (a block up to a line `}`), with spaces allowed before the colon or the brace
+        bool IsKeyLine(string_view text, string_view key, char* opener)
+        {
+            if (!StartsWith(text, key))
+                return false;
+            string_view rest = Trim(text.substr(key.size()));
+            *opener = rest.empty() ? '\0' : rest.front();
+            return *opener == ':' || *opener == '{';
+        }
+
+        // The lines Mermaid reads but that are not drawn here: a YAML front matter at the start (--- ... ---: a title,
+        // a configuration), and the accessibility lines (accTitle: ..., accDescr: ..., accDescr { ... })
+        bool SkipUndrawnLines(std::vector<SourceLine>& lines, std::string* error)
+        {
+            if (!lines.empty() && lines[0].text == "---")
+            {
+                size_t close = 1;
+                while (close < lines.size() && lines[close].text != "---")
+                    ++close;
+                if (close == lines.size())
+                {
+                    *error = LineError(lines[0].number, "the front matter is not closed (---)");
+                    return false;
+                }
+                lines.erase(lines.begin(), lines.begin() + (long)close + 1);
+            }
+            std::vector<SourceLine> kept;
+            for (size_t i = 0; i < lines.size(); ++i)
+            {
+                char opener = 0;
+                if (IsKeyLine(lines[i].text, "accTitle", &opener) || IsKeyLine(lines[i].text, "accDescr", &opener))
+                {
+                    if (opener == '{' && lines[i].text.back() != '}')  // a block: up to its closing brace
+                        while (i + 1 < lines.size() && lines[i].text.back() != '}')
+                            ++i;
+                    continue;
+                }
+                kept.push_back(lines[i]);
+            }
+            lines = kept;
+            return true;
+        }
+
         bool IsStylingLine(string_view word)
         {
             for (string_view w : {"classDef", "class", "cssClass", "style", "linkStyle", "click", "callback", "link"})
@@ -426,7 +469,7 @@ namespace RichMd::Mermaid
             {
                 const int subgraph = open.empty() ? -1 : open.back();
                 string_view word = FirstWord(line.text);
-                if (word == "graph" || word == "flowchart")
+                if (word == "graph" || word == "flowchart" || word == "flowchart-elk")
                 {
                     string_view direction = AfterFirstWord(line.text);
                     if (direction.empty() || direction == "TD" || direction == "TB" || direction == "BT")
@@ -726,7 +769,7 @@ namespace RichMd::Mermaid
             {
                 string_view word = FirstWord(line.text);
                 string_view rest = AfterFirstWord(line.text);
-                if (word == "sequenceDiagram")
+                if (word == "sequenceDiagram" || word == "title" || StartsWith(word, "title:"))  // a title: not drawn
                     continue;
                 if (word == "participant" || word == "actor")
                 {
@@ -1086,7 +1129,7 @@ namespace RichMd::Mermaid
                         AddMember(d.graph.nodes[current], line.text);
                     continue;
                 }
-                if (word == "classDiagram")
+                if (word == "classDiagram" || word == "classDiagram-v2")
                     continue;
                 if (word == "direction")
                 {
@@ -1187,13 +1230,16 @@ namespace RichMd::Mermaid
     {
         Diagram d;
         std::vector<SourceLine> lines = Lines(source);
+        if (!SkipUndrawnLines(lines, &d.error))
+            return d;
         if (lines.empty())
         {
             d.error = "line 1: empty diagram";
             return d;
         }
+        // the variant headers (another layout engine, a renderer version) are read as the plain ones
         string_view type = FirstWord(lines[0].text);
-        if (type == "graph" || type == "flowchart")
+        if (type == "graph" || type == "flowchart" || type == "flowchart-elk")
         {
             d.kind = DiagramKind::Flowchart;
             ParseFlowchart(lines, d);
@@ -1203,7 +1249,7 @@ namespace RichMd::Mermaid
             d.kind = DiagramKind::Sequence;
             ParseSequence(lines, d);
         }
-        else if (type == "classDiagram")
+        else if (type == "classDiagram" || type == "classDiagram-v2")
         {
             d.kind = DiagramKind::Class;
             ParseClass(lines, d);

@@ -47,12 +47,7 @@ static std::string HtmlEscape(const std::string& s)
 }
 
 // The comment lines at the top of a corpus file: the first one describes the diagram
-static std::string Description(const std::string& source)
-{
-    if (source.rfind("%% ", 0) != 0)
-        return "";
-    return source.substr(3, source.find('\n') - 3);
-}
+static std::string Description(const std::string& source) { return MermaidChecks::ReadExpectation(source).description; }
 
 // The rect [p0, p1] of the window (in points) as a PNG, read from the back buffer
 static bool WritePng(GLFWwindow* window, ImVec2 p0, ImVec2 p1, const std::string& path, int* width)
