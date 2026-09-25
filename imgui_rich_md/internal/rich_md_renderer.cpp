@@ -433,22 +433,24 @@ static void begin_aligned_cell(MD_ALIGN align, int& vtx_start, float& cell_width
 	ImGui::BeginGroup();
 }
 
-static void end_aligned_cell(MD_ALIGN align, int vtx_start, float cell_width)
+// Returns the horizontal shift of the content
+static float end_aligned_cell(MD_ALIGN align, int vtx_start, float cell_width)
 {
 	if (align == MD_ALIGN_DEFAULT || align == MD_ALIGN_LEFT)
-		return;
+		return 0.0f;
 	ImGui::EndGroup();
 	float content_w = ImGui::GetItemRectSize().x;
 	if (content_w >= cell_width)
-		return;
+		return 0.0f;
 	float offset = (align == MD_ALIGN_CENTER)
 		? (cell_width - content_w) * 0.5f
 		: (cell_width - content_w);
 	if (offset <= 0.0f)
-		return;
+		return 0.0f;
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 	for (int i = vtx_start; i < dl->VtxBuffer.Size; ++i)
 		dl->VtxBuffer[i].pos.x += offset;
+	return offset;
 }
 
 void Renderer::BLOCK_TH(const MD_BLOCK_TD_DETAIL* d, bool e)
@@ -458,8 +460,9 @@ void Renderer::BLOCK_TH(const MD_BLOCK_TD_DETAIL* d, bool e)
 		ImGui::TableNextColumn();
 		m_cell_align = d->align;
 		begin_aligned_cell(m_cell_align, m_cell_vtx_start, m_cell_width);
+		m_cell_run_start = m_runs.size();
 	} else {
-		end_aligned_cell(m_cell_align, m_cell_vtx_start, m_cell_width);
+		shift_runs(m_cell_run_start, end_aligned_cell(m_cell_align, m_cell_vtx_start, m_cell_width));
 		m_cell_align = MD_ALIGN_DEFAULT;
 	}
 }
@@ -471,8 +474,9 @@ void Renderer::BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e)
 		ImGui::TableNextColumn();
 		m_cell_align = d->align;
 		begin_aligned_cell(m_cell_align, m_cell_vtx_start, m_cell_width);
+		m_cell_run_start = m_runs.size();
 	} else {
-		end_aligned_cell(m_cell_align, m_cell_vtx_start, m_cell_width);
+		shift_runs(m_cell_run_start, end_aligned_cell(m_cell_align, m_cell_vtx_start, m_cell_width));
 		m_cell_align = MD_ALIGN_DEFAULT;
 	}
 }
@@ -638,6 +642,7 @@ void Renderer::SPAN_LATEXMATH(bool e)
 	if (e) {
 		m_is_latex_inline = true;
 		m_latex_buffer.clear();
+		m_latex_source_begin = m_latex_source_end = nullptr;
 	} else {
 		m_is_latex_inline = false;
 		render_latex_span(false);
@@ -649,6 +654,7 @@ void Renderer::SPAN_LATEXMATH_DISPLAY(bool e)
 	if (e) {
 		m_is_latex_display = true;
 		m_latex_buffer.clear();
+		m_latex_source_begin = m_latex_source_end = nullptr;
 	} else {
 		m_is_latex_display = false;
 		render_latex_span(true);
@@ -669,6 +675,8 @@ void Renderer::render_latex_span(bool display)
 		pixel_scale = 1.0f;
 	float logical_font_size = ImGui::GetFontSize();
 	ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+	const std::string delimiter = display ? "$$" : "$";
+	const std::string source = delimiter + m_latex_buffer + delimiter;  // shown when it cannot be drawn, and copied
 
 	latex_texture tex;
 	if (!get_latex_texture(m_latex_buffer, logical_font_size * pixel_scale, color, display, tex)) {
@@ -677,14 +685,10 @@ void Renderer::render_latex_span(bool display)
 		bool invalid = !tex.error.empty();
 		if (invalid)
 			ImGui::PushStyleColor(ImGuiCol_Text, resolve_color(style.errorColor, admonition_color(AdmonitionKind::Caution)));
-		if (display) {
+		if (display)
 			ImGui::NewLine();
-			std::string fallback = "$$" + m_latex_buffer + "$$";
-			ImGui::TextUnformatted(fallback.c_str());
-		} else {
-			std::string fallback = "$" + m_latex_buffer + "$";
-			ImGui::TextUnformatted(fallback.c_str());
-		}
+		ImGui::TextUnformatted(source.c_str());
+		record_run(m_latex_source_begin, m_latex_source_end, source);
 		if (invalid) {
 			ImGui::PopStyleColor();
 			if (ImGui::IsItemHovered())
@@ -709,6 +713,7 @@ void Renderer::render_latex_span(bool display)
 		if (pad_x > 0.0f)
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad_x);
 		ImGui::Image(tex.texture, ImVec2(logical_w, logical_h));
+		record_run(m_latex_source_begin, m_latex_source_end, source);
 		ImGui::NewLine();
 	} else {
 		// An inline formula that does not fit on the rest of the line starts a new one, like a word
@@ -724,6 +729,7 @@ void Renderer::render_latex_span(bool display)
 		float saved_y = ImGui::GetCursorPosY();
 		ImGui::SetCursorPosY(saved_y + text_ascent - logical_baseline);
 		ImGui::Image(tex.texture, ImVec2(logical_w, logical_h));
+		record_run(m_latex_source_begin, m_latex_source_end, source);
 		ImGui::SameLine(0.0f, 0.0f);
 		// Restore Y so the following inline content lands on the original line
 		ImGui::SetCursorPosY(saved_y);
@@ -838,6 +844,7 @@ void Renderer::render_text(const char* str, const char* str_end)
 		if (m_is_error)
 			ImGui::PushStyleColor(ImGuiCol_Text, resolve_color(style.errorColor, admonition_color(AdmonitionKind::Caution)));
 		ImGui::TextUnformatted(str, te);
+		record_run(str, te);
 		if (m_is_error) {
 			ImGui::PopStyleColor();
 			if (!m_error_title.empty() && ImGui::IsItemHovered())
@@ -1302,6 +1309,7 @@ bool Renderer::check_html(const char* str, const char* str_end)
 		if (!m_in_center) {
 			m_in_center = true;
 			begin_aligned_cell(MD_ALIGN_CENTER, m_center_vtx_start, m_center_width);
+			m_center_run_start = m_runs.size();
 		}
 		return true;
 	}
@@ -1310,7 +1318,7 @@ bool Renderer::check_html(const char* str, const char* str_end)
 			return true;
 		if (m_in_center) {
 			m_in_center = false;
-			end_aligned_cell(MD_ALIGN_CENTER, m_center_vtx_start, m_center_width);
+			shift_runs(m_center_run_start, end_aligned_cell(MD_ALIGN_CENTER, m_center_vtx_start, m_center_width));
 		}
 		return true;
 	}
@@ -1439,6 +1447,8 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 		break;
 	case MD_TEXT_BR:
 		ImGui::NewLine();
+		record_run(nullptr, nullptr, "\n");  // a hard line break, copied as a newline
+		m_runs.back().min.x = m_runs.back().max.x;  // it has no width (its rectangle is the one of the text before)
 		break;
 	case MD_TEXT_SOFTBR:
 		if (m_admonition_skip_next_softbr) {
@@ -1477,6 +1487,9 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 		break;
 	case MD_TEXT_LATEXMATH:
 		if (m_is_latex_inline || m_is_latex_display) {
+			if (m_latex_buffer.empty())
+				m_latex_source_begin = str;
+			m_latex_source_end = str_end;
 			m_latex_buffer.append(str, str_end - str);
 		} else {
 			render_text(str, str_end);
@@ -1500,6 +1513,8 @@ int Renderer::block(MD_BLOCKTYPE type, void* d, bool e)
 	// drop any other block work here.
 	if (details_hidden(m_details_open_stack))
 		return 0;
+	if (e)
+		++m_block_number;
 
 	// Centralized inter-block spacing: on enter of any top-level
 	// "paragraph-class" block, call add_block_gap() -- unless the flag
@@ -1660,10 +1675,32 @@ int Renderer::print(const char* str, const char* str_end)
     m_details_id_counter = 0;
     m_in_pre = false;
     m_pre_buffer.clear();
+    m_runs.clear();
+    m_fragment_begin = str;
+    m_fragment_end = str_end;
+    m_block_number = 0;
+
+    // The fragment's selection is drawn behind its text: the text goes to channel 1, the highlight to channel 0
+    ImGuiID selectionId = ImGui::GetID("##rich_md_selection");
+    if (m_selection_fragment == selectionId && ImHashStr(str, (size_t)(str_end - str)) != m_selection_text_hash)
+        m_selection_fragment = 0;  // the fragment shows another text: its offsets mean nothing anymore
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    bool drawSelection = m_selection_fragment == selectionId && m_selection_anchor != m_selection_focus;
+    if (drawSelection) {
+        m_selection_splitter.Split(drawList, 2);
+        m_selection_splitter.SetCurrentChannel(drawList, 1);
+    }
 
 	if (style.fragmentGapTop > 0.0f)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapTop));
 	int result = md_parse(str, (MD_SIZE)(str_end - str), &m_md, this);
+
+    update_selection(selectionId);
+    if (drawSelection) {
+        m_selection_splitter.SetCurrentChannel(drawList, 0);
+        draw_selection();
+        m_selection_splitter.Merge(drawList);
+    }
 	if (style.fragmentGapBottom < 0.0f)
 		ImGui::NewLine();
 	else if (style.fragmentGapBottom > 0.0f)
@@ -1782,10 +1819,196 @@ void Renderer::open_url() const
 #endif
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Selectable text: the runs of text drawn by the fragment, and the selection over them
+
+// Records the item just drawn: its rectangle, its font, and the bytes of the fragment's text it shows. A run that does
+// not come from the text (a soft or hard line break) takes the byte after the run before.
+void Renderer::record_run(const char* str, const char* str_end, const std::string& replacement)
+{
+	if (replacement.empty()) {  // a newline alone (between raw HTML tags) shows nothing
+		bool newlines = true;
+		for (const char* s = str; s < str_end && newlines; ++s)
+			newlines = *s == '\n' || *s == '\r';
+		if (newlines)
+			return;
+	}
+	TextRun run;
+	run.min = ImGui::GetItemRectMin();
+	run.max = ImGui::GetItemRectMax();
+	run.font = ImGui::GetFont();
+	run.fontSize = ImGui::GetFontSize();
+	run.block = m_block_number;
+	run.isLink = !m_href.empty();
+	run.replacement = replacement;
+	if (str != nullptr && str >= m_fragment_begin && str < str_end && str_end <= m_fragment_end) {
+		run.begin = (size_t)(str - m_fragment_begin);
+		run.end = (size_t)(str_end - m_fragment_begin);
+	} else {
+		run.begin = m_runs.empty() ? 0 : m_runs.back().end;
+		run.end = run.begin + 1;
+		if (run.replacement.empty() && str != nullptr)
+			run.replacement.assign(str, str_end);
+	}
+	m_runs.push_back(std::move(run));
+}
+
+// Content that moved after it was drawn (an aligned table cell, <center>): its runs move with it
+void Renderer::shift_runs(size_t first, float dx)
+{
+	if (dx == 0.0f)
+		return;
+	for (size_t i = first; i < m_runs.size(); ++i) {
+		m_runs[i].min.x += dx;
+		m_runs[i].max.x += dx;
+	}
+}
+
+// The character boundary nearest to a position: in the run under it, else on its line, else in the first run below
+size_t Renderer::offset_at(ImVec2 pos) const
+{
+	if (m_runs.empty())
+		return 0;
+	auto offsetInRun = [&](const TextRun& run) -> size_t {
+		if (!run.replacement.empty())  // a formula or a soft break is selected whole
+			return pos.x < (run.min.x + run.max.x) * 0.5f ? run.begin : run.end;
+		const char* textEnd = m_fragment_begin + run.end;
+		float x = run.min.x;
+		for (const char* s = m_fragment_begin + run.begin; s < textEnd;) {
+			unsigned int c;
+			int n = ImTextCharFromUtf8(&c, s, textEnd);
+			float w = run.font->CalcTextSizeA(run.fontSize, FLT_MAX, 0.0f, s, s + n).x;
+			if (pos.x < x + w * 0.5f)
+				return (size_t)(s - m_fragment_begin);
+			x += w;
+			s += n;
+		}
+		return run.end;
+	};
+	const TextRun* left = nullptr;   // the runs of the line, left and right of the position
+	const TextRun* right = nullptr;
+	for (const TextRun& run : m_runs) {
+		if (pos.y < run.min.y || pos.y >= run.max.y)
+			continue;
+		if (pos.x >= run.min.x && pos.x < run.max.x)
+			return offsetInRun(run);
+		if (run.max.x <= pos.x && (!left || run.max.x > left->max.x))
+			left = &run;
+		if (run.min.x > pos.x && (!right || run.min.x < right->min.x))
+			right = &run;
+	}
+	if (left)
+		return left->end;
+	if (right)
+		return right->begin;
+	for (const TextRun& run : m_runs)
+		if (run.min.y > pos.y)
+			return run.begin;
+	return m_runs.back().end;
+}
+
+// The selected parts of the runs; between two runs of a block, a space where the text between them is blank (a
+// wrapped line) and nothing where it is markup (**, ](url)); a newline between two blocks
+std::string Renderer::selected_text() const
+{
+	size_t b = ImMin(m_selection_anchor, m_selection_focus);
+	size_t e = ImMax(m_selection_anchor, m_selection_focus);
+	std::string out;
+	const TextRun* previous = nullptr;
+	for (const TextRun& run : m_runs) {
+		if (run.end <= b || run.begin >= e)
+			continue;
+		std::string piece = !run.replacement.empty()
+			? run.replacement
+			: std::string(m_fragment_begin + ImMax(b, run.begin), m_fragment_begin + ImMin(e, run.end));
+		if (previous != nullptr) {
+			if (run.block != previous->block)
+				out += "\n";
+			else if (run.begin > previous->end && !out.empty() && out.back() != ' ' && out.back() != '\n'
+			         && !piece.empty() && piece[0] != ' ') {
+				bool blank = true;
+				for (size_t i = previous->end; i < run.begin && blank; ++i)
+					blank = m_fragment_begin[i] == ' ' || m_fragment_begin[i] == '\t' || m_fragment_begin[i] == '\n';
+				if (blank)
+					out += " ";
+			}
+		}
+		out += piece;
+		previous = &run;
+	}
+	return out;
+}
+
+// A click on a line of text starts a selection (and takes the active id, so that the window does not move), a drag
+// extends it, a click away from the text clears it, Ctrl+C (Cmd+C on macOS) copies it
+void Renderer::update_selection(ImGuiID fragmentId)
+{
+	ImGuiContext& g = *GImGui;
+	ImVec2 mouse = ImGui::GetMousePos();
+	const TextRun* hovered = nullptr;
+	bool onTextLine = false;
+	for (const TextRun& run : m_runs)
+		if (mouse.y >= run.min.y && mouse.y < run.max.y) {
+			onTextLine = true;
+			if (mouse.x >= run.min.x && mouse.x < run.max.x) {
+				hovered = &run;
+				break;
+			}
+		}
+	bool mouseFree = ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && g.ActiveId == 0;
+	if (hovered && mouseFree && !hovered->isLink)
+		ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+	if (mouseFree && ImGui::IsMouseClicked(0)) {
+		if (onTextLine) {
+			ImGui::SetActiveID(fragmentId, g.CurrentWindow);
+			ImGui::FocusWindow(g.CurrentWindow);
+			m_selection_fragment = fragmentId;
+			m_selection_text_hash = ImHashStr(m_fragment_begin, (size_t)(m_fragment_end - m_fragment_begin));
+			m_selection_anchor = m_selection_focus = offset_at(mouse);
+		} else if (m_selection_fragment == fragmentId) {
+			m_selection_fragment = 0;
+		}
+	}
+	if (g.ActiveId == fragmentId) {
+		ImGui::KeepAliveID(fragmentId);
+		if (ImGui::IsMouseDown(0))
+			m_selection_focus = offset_at(mouse);
+		else
+			ImGui::ClearActiveID();
+	}
+	bool hasSelection = m_selection_fragment == fragmentId && m_selection_anchor != m_selection_focus;
+	if (hasSelection && ImGui::IsWindowFocused() && !g.IO.WantTextInput
+		&& ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_None))
+		ImGui::SetClipboardText(selected_text().c_str());
+}
+
+// The highlight of the selected parts of the runs
+void Renderer::draw_selection() const
+{
+	size_t b = ImMin(m_selection_anchor, m_selection_focus);
+	size_t e = ImMax(m_selection_anchor, m_selection_focus);
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	ImU32 color = ImGui::GetColorU32(ImGuiCol_TextSelectedBg);
+	for (const TextRun& run : m_runs) {
+		if (run.end <= b || run.begin >= e)
+			continue;
+		float x0 = run.min.x, x1 = run.max.x;
+		if (run.replacement.empty()) {
+			const char* text = m_fragment_begin + run.begin;
+			if (b > run.begin)
+				x0 += run.font->CalcTextSizeA(run.fontSize, FLT_MAX, 0.0f, text, m_fragment_begin + b).x;
+			if (e < run.end)
+				x1 = run.min.x + run.font->CalcTextSizeA(run.fontSize, FLT_MAX, 0.0f, text, m_fragment_begin + e).x;
+		}
+		drawList->AddRectFilled(ImVec2(x0, run.min.y), ImVec2(x1, run.max.y), color);
+	}
+}
+
 void Renderer::soft_break()
 {
     // Convert a soft break (e.g. a new line inside a paragraph into a space)
     ImGui::TextUnformatted(" ");
+    record_run(nullptr, nullptr, " ");
     ImGui::SameLine(0.0f, 0.0f);
 }
 

@@ -307,6 +307,38 @@ private:
 
 	std::vector<std::string> m_div_stack;
 
+	// Selectable text: the text runs drawn by the fragment (rebuilt by print()), and the selection, a range of byte
+	// offsets in the fragment's text (so that it survives a relayout). One selection at a time, in one fragment.
+	struct TextRun
+	{
+		ImVec2 min, max;              // its rectangle, in screen coordinates
+		ImFont* font = nullptr;
+		float fontSize = 0.0f;
+		size_t begin = 0, end = 0;    // the bytes of the fragment's text it shows
+		int block = 0;                // a newline separates the runs of two blocks, in a copy
+		bool isLink = false;
+		std::string replacement;      // what it shows instead of its bytes, when not empty (a soft break, a formula)
+	};
+	std::vector<TextRun> m_runs;
+	const char* m_fragment_begin = nullptr;
+	const char* m_fragment_end = nullptr;
+	int m_block_number = 0;
+	const char* m_latex_source_begin = nullptr;  // the source of the formula being read
+	const char* m_latex_source_end = nullptr;
+	size_t m_cell_run_start = 0;                 // the first run of an aligned cell or of a <center>, shifted with it
+	size_t m_center_run_start = 0;
+	ImGuiID m_selection_fragment = 0;
+	ImGuiID m_selection_text_hash = 0;           // the text of the fragment when the selection was made
+	size_t m_selection_anchor = 0, m_selection_focus = 0;
+	ImDrawListSplitter m_selection_splitter;     // channel 0: the highlight, behind the text of channel 1
+
+	void record_run(const char* str, const char* str_end, const std::string& replacement = "");
+	void shift_runs(size_t first, float dx);
+	size_t offset_at(ImVec2 pos) const;
+	std::string selected_text() const;
+	void update_selection(ImGuiID fragmentId);
+	void draw_selection() const;
+
 	MD_PARSER m_md;
 };
 

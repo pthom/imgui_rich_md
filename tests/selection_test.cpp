@@ -1,0 +1,202 @@
+// Selection test: text is selected with the mouse and copied with Ctrl+C, through Dear ImGui's null backend (the mouse
+// and the keys are injected, the clipboard is a string of the test). Build it in Debug: a selection is drawn with a
+// draw list splitter, which asserts when it is misused.
+#include "imgui.h"
+#include "imgui_impl_null.h"
+#include "imgui_rich_md/rich_md.h"
+
+#include <cstdio>
+#include <string>
+
+static std::string gClipboard;
+
+// Where a frame drew the markdown
+struct Frame
+{
+    ImVec2 windowPos;
+    ImVec2 textOrigin;  // the top left of the markdown
+    float textEndY;     // the cursor after it
+};
+
+// One frame: the markdown in a window of the given width; a movable window is placed only once
+static Frame DrawFrame(const char* markdown, float width, bool movable = false)
+{
+    Frame frame{};
+    ImGui_ImplNull_NewFrame();
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), movable ? ImGuiCond_FirstUseEver : ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(width, 400.f));
+    ImGui::Begin("Selection", nullptr, ImGuiWindowFlags_NoTitleBar);
+    frame.windowPos = ImGui::GetWindowPos();
+    frame.textOrigin = ImGui::GetCursorScreenPos();
+    RichMd::Render(markdown);
+    frame.textEndY = ImGui::GetCursorScreenPos().y;
+    ImGui::End();
+    ImGui::Render();
+    ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+    return frame;
+}
+
+static void MouseTo(ImVec2 pos) { ImGui::GetIO().AddMousePosEvent(pos.x, pos.y); }
+static void MouseButton(bool down) { ImGui::GetIO().AddMouseButtonEvent(0, down); }
+static void CtrlC(bool down)
+{
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, down);
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_C, down);
+}
+
+// A drag from one position to another (one input change per frame), then Ctrl+C
+static Frame DragAndCopy(const char* markdown, float width, ImVec2 from, ImVec2 to, bool movable = false)
+{
+    MouseTo(from);
+    DrawFrame(markdown, width, movable);
+    MouseButton(true);
+    DrawFrame(markdown, width, movable);
+    MouseTo(to);
+    DrawFrame(markdown, width, movable);
+    MouseButton(false);
+    DrawFrame(markdown, width, movable);
+    CtrlC(true);
+    DrawFrame(markdown, width, movable);
+    CtrlC(false);
+    return DrawFrame(markdown, width, movable);
+}
+
+static float TextWidth(const char* text, bool bold = false)
+{
+    RichMd::SizedFont font = RichMd::GetFont(RichMd::MarkdownFontSpec(false, bold));
+    return font.font->CalcTextSizeA(font.size, FLT_MAX, 0.0f, text).x;
+}
+
+static float LineHeight() { return RichMd::GetFont(RichMd::MarkdownFontSpec()).size; }
+
+static bool Expect(const char* what, const std::string& actual, const std::string& expected)
+{
+    if (actual == expected)
+        return true;
+    printf("selection test failed: %s\n  expected: \"%s\"\n  actual:   \"%s\"\n", what, expected.c_str(), actual.c_str());
+    return false;
+}
+
+// From inside a line to inside the next paragraph: the markup is not copied, a newline separates the paragraphs
+static bool CheckPartialSelection()
+{
+    const char* md = "Hello **bold** world\n\nSecond paragraph\n";
+    Frame f = DrawFrame(md, 600.f);
+    float firstLineY = f.textOrigin.y + LineHeight() * 0.5f;
+    float lastLineY = f.textEndY - ImGui::GetStyle().ItemSpacing.y - LineHeight() * 0.5f;
+    gClipboard.clear();
+    DragAndCopy(md, 600.f,
+                ImVec2(f.textOrigin.x + TextWidth("Hello ") + 1.f, firstLineY),
+                ImVec2(f.textOrigin.x + TextWidth("Sec") + 1.f, lastLineY));
+    bool ok = Expect("partial selection", gClipboard, "bold world\nSec");
+    // A drag from beside the end of a line (as in a browser, it starts at the end of the line)
+    DragAndCopy(md, 600.f, ImVec2(f.textOrigin.x + 500.f, firstLineY),
+                ImVec2(f.textOrigin.x + TextWidth("Hello ") + 1.f, firstLineY));
+    return Expect("selection from beside a line", gClipboard, "bold world") && ok;
+}
+
+// Everything, in a narrow window where the paragraph wraps: a space at each wrap. The window does not move while
+// selecting, and the selection survives a change of width (it is kept as offsets in the text).
+static bool CheckWrappedSelection()
+{
+    const char* md = "one two three four five six seven eight nine ten eleven twelve\n";
+    const std::string expected = "one two three four five six seven eight nine ten eleven twelve";
+    Frame f = DrawFrame(md, 150.f, true);
+    bool ok = true;
+    if (f.textEndY - f.textOrigin.y < 3.f * LineHeight()) {
+        printf("selection test failed: the paragraph does not wrap\n");
+        ok = false;
+    }
+    gClipboard.clear();
+    Frame after = DragAndCopy(md, 150.f,
+                              ImVec2(f.textOrigin.x + 1.f, f.textOrigin.y + LineHeight() * 0.5f),
+                              ImVec2(f.textOrigin.x + 100.f, f.textEndY + 50.f), true);
+    ok = Expect("wrapped selection", gClipboard, expected) && ok;
+    if (after.windowPos.x != f.windowPos.x || after.windowPos.y != f.windowPos.y) {
+        printf("selection test failed: the window moved while selecting\n");
+        ok = false;
+    }
+    gClipboard.clear();
+    DrawFrame(md, 500.f, true);
+    CtrlC(true);
+    DrawFrame(md, 500.f, true);
+    CtrlC(false);
+    DrawFrame(md, 500.f, true);
+    return Expect("selection after a relayout", gClipboard, expected) && ok;
+}
+
+// A hard line break, marked text, an aligned table and centered text (all drawn with their own draw list splitters, or shifted after
+// being drawn) under a selection: no assertion, and they are copied
+static bool CheckSelectionOverSpecialBlocks()
+{
+    const char* md = "hard  \nbreak\n\n<mark>marked</mark> text\n\n| a | b |\n|---|--:|\n| 1 | 2 |\n\n<center>\n\ncentered\n\n</center>\n\nend\n";
+    Frame f = DrawFrame(md, 400.f);
+    gClipboard.clear();
+    DragAndCopy(md, 400.f, ImVec2(f.textOrigin.x + 1.f, f.textOrigin.y + LineHeight() * 0.5f),
+                ImVec2(f.textOrigin.x + 300.f, f.textEndY + 50.f));
+    for (int i = 0; i < 3; ++i)  // the selection is drawn during these frames
+        DrawFrame(md, 400.f);
+    return Expect("selection over special blocks", gClipboard, "hard\nbreak\nmarked text\na\nb\n1\n2\ncentered\nend");
+}
+
+// A drag on a widget drawn by a fenced block renderer moves the widget and selects nothing; a click beside the text
+// clears a selection
+static bool CheckWidgetsAndClear()
+{
+    static float value = 0.f;
+    static ImVec2 sliderCenter;
+    RichMd::RegisterFencedBlockRenderer("widget", [](const std::string&) {
+        ImGui::SliderFloat("value", &value, 0.f, 1.f);
+        sliderCenter = ImVec2((ImGui::GetItemRectMin().x + ImGui::GetItemRectMax().x) * 0.5f,
+                              (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
+    });
+    const char* md = "Before\n\n```widget\nx\n```\n\nAfter\n";
+    Frame f = DrawFrame(md, 400.f);
+    gClipboard.clear();
+    DragAndCopy(md, 400.f, sliderCenter, ImVec2(sliderCenter.x + 150.f, sliderCenter.y));
+    bool ok = Expect("drag on a widget", gClipboard, "");
+    if (value == 0.f) {
+        printf("selection test failed: the slider did not move\n");
+        ok = false;
+    }
+    // Select "Before", then click below the text: nothing is copied anymore
+    DragAndCopy(md, 400.f, ImVec2(f.textOrigin.x + 1.f, f.textOrigin.y + LineHeight() * 0.5f),
+                ImVec2(f.textOrigin.x + TextWidth("Before") + 5.f, f.textOrigin.y + LineHeight() * 0.5f));
+    ok = Expect("selection before a clear", gClipboard, "Before") && ok;
+    gClipboard.clear();
+    MouseTo(ImVec2(f.textOrigin.x + 300.f, f.textEndY + 100.f));
+    DrawFrame(md, 400.f);
+    MouseButton(true);
+    DrawFrame(md, 400.f);
+    MouseButton(false);
+    DrawFrame(md, 400.f);
+    CtrlC(true);
+    DrawFrame(md, 400.f);
+    CtrlC(false);
+    DrawFrame(md, 400.f);
+    return Expect("after a click beside the text", gClipboard, "") && ok;
+}
+
+int main(int, char**)
+{
+    ImGui::CreateContext();
+    ImGui::GetIO().IniFilename = nullptr;
+    ImGui::GetIO().ConfigMacOSXBehaviors = false;  // else the injected Ctrl becomes Cmd on macOS
+    ImGui_ImplNull_Init();
+    ImGui::GetPlatformIO().Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { gClipboard = text; };
+    ImGui::GetPlatformIO().Platform_GetClipboardTextFn = [](ImGuiContext*) { return gClipboard.c_str(); };
+    RichMd::CreateContext();
+    DrawFrame("warm up", 400.f);  // the first frame loads the fonts
+
+    bool ok = CheckPartialSelection();
+    ok = CheckWrappedSelection() && ok;
+    ok = CheckSelectionOverSpecialBlocks() && ok;
+    ok = CheckWidgetsAndClear() && ok;
+
+    RichMd::DestroyContext();
+    ImGui_ImplNull_Shutdown();
+    ImGui::DestroyContext();
+    printf(ok ? "selection test: ok\n" : "selection test: FAILED\n");
+    return ok ? 0 : 1;
+}
