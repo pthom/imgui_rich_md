@@ -32,7 +32,7 @@ option(IMGUI_RICHMD_WASM_EXCEPTIONS "Emscripten: wasm exceptions on the LaTeX ta
 # Where the optional dependencies are (a parent sets the variables before add_subdirectory, or the user sets
 # them on the command line); fetched from the pthom forks otherwise
 if(NOT DEFINED IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR)
-    set(IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR "" CACHE PATH "ImGuiColorTextEdit sources (fork pthom/ImGuiColorTextEdit, branch rich_md)")
+    set(IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR "" CACHE PATH "ImGuiColorTextEdit sources (fork pthom/ImGuiColorTextEdit, branch imgui_bundle)")
 endif()
 if(NOT DEFINED IMGUI_RICHMD_MICROTEX_DIR)
     set(IMGUI_RICHMD_MICROTEX_DIR "" CACHE PATH "MicroTeX sources (fork pthom/MicroTeX, branch imgui_bundle)")
@@ -74,7 +74,7 @@ if(IMGUI_RICHMD_WITH_CODE_EDITOR)
             include(FetchContent)
             # checked out under a folder named ImGuiColorTextEdit: the sources include "ImGuiColorTextEdit/TextEditor.h"
             # (SOURCE_SUBDIR names a folder without CMakeLists.txt: the sources are only fetched, the target is made below)
-            FetchContent_Declare(imgui_color_text_edit_src GIT_REPOSITORY https://github.com/pthom/ImGuiColorTextEdit.git GIT_TAG rich_md GIT_SHALLOW TRUE
+            FetchContent_Declare(imgui_color_text_edit_src GIT_REPOSITORY https://github.com/pthom/ImGuiColorTextEdit.git GIT_TAG imgui_bundle GIT_SHALLOW TRUE
                                  SOURCE_DIR ${CMAKE_BINARY_DIR}/_deps/ImGuiColorTextEdit SOURCE_SUBDIR not_added)
             FetchContent_MakeAvailable(imgui_color_text_edit_src)
             set(IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR ${imgui_color_text_edit_src_SOURCE_DIR})
