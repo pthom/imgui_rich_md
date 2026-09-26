@@ -769,6 +769,29 @@ void Renderer::SPAN_DEL(bool e)
 	m_is_strikethrough = e;
 }
 
+static bool is_blank(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+
+// The width of the rest of the word that goes on after str_end in the source, across the markup: "(**alignment**),"
+// is one word for the reader, drawn as three spans. 0 when the span ends a word. Measured with the current font (the
+// next spans may use another one: an estimate, enough to decide where the line breaks).
+float Renderer::glued_width(const char* str_end) const
+{
+	if (str_end <= m_fragment_begin || str_end >= m_fragment_end || is_blank(str_end[-1]))
+		return 0.0f;
+	std::string rest;
+	const char* s = str_end;
+	while (s < m_fragment_end && !is_blank(*s) && *s != '<') {
+		if (*s == ']' && s + 1 < m_fragment_end && s[1] == '(') {  // a link's target is not shown
+			while (s < m_fragment_end && *s != ')')
+				++s;
+		}
+		else if (*s != '*' && *s != '_' && *s != '`' && *s != '~' && *s != '[')
+			rest += *s;
+		++s;
+	}
+	return rest.empty() ? 0.0f : ImGui::CalcTextSize(rest.c_str()).x;
+}
+
 void Renderer::render_text(const char* str, const char* str_end)
 {
 	const ImGuiStyle& s = ImGui::GetStyle();
@@ -787,6 +810,7 @@ void Renderer::render_text(const char* str, const char* str_end)
 		sub_sup_y_offset = m_is_sup ? 0.0f : (base_font_size - small);
 	}
 	const float size = ImGui::GetFontSize();
+	const float glued = (m_is_image || m_is_table_header) ? 0.0f : glued_width(str_end);
 
 	// Mid-word break avoidance: if a new span begins mid-line and the
 	// remaining width on the current line cannot fit even its first
@@ -807,8 +831,10 @@ void Renderer::render_text(const char* str, const char* str_end)
 			++word_end;
 		}
 		if (word_end > word_start) {
-			// Width to fit = any leading blanks + first word.
+			// Width to fit = any leading blanks + first word (+ its glued rest, when it ends the span)
 			ImVec2 chunk_sz = ImGui::CalcTextSize(str, word_end);
+			if (word_end == str_end)
+				chunk_sz.x += glued;
 			if (chunk_sz.x > wl && line_is_open()) {
 				ImGui::NewLine();
 				// The leading blanks were inter-span spacing on the
@@ -829,6 +855,15 @@ void Renderer::render_text(const char* str, const char* str_end)
 			te = ImGui::GetFont()->CalcWordWrapPosition(
 				size, str, str_end, wl);
 			if (te == str) ++te;
+			// The last word of the span is glued to the next span ("... way (" + "alignment"): if both do not fit,
+			// the line breaks before the last word, which goes with the rest of its word to the next line
+			if (te == str_end && glued > 0.0f && ImGui::CalcTextSize(str, te).x + glued > wl) {
+				const char* last_word = te;
+				while (last_word > str && !is_blank(last_word[-1]))
+					--last_word;
+				if (last_word > str)
+					te = last_word;
+			}
 		}
 
 		// Vertical offset for sub/sup while keeping the surrounding

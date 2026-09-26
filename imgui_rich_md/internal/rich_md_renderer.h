@@ -274,6 +274,7 @@ private:
 	int span(MD_SPANTYPE type, void* d, bool e);
 
 	void render_text(const char* str, const char* str_end);
+	float glued_width(const char* str_end) const;
 	void render_latex_span(bool display);
     void render_inline_code(const char* str, const char* str_end);
 

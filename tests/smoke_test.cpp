@@ -7,6 +7,7 @@
 #include "imgui_rich_md/rich_md.h"
 #include "imgui_rich_md/internal/rich_md_internal.h"  // Context::resolvedTransclusions
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -293,13 +294,70 @@ static bool CheckLineState()
     return ok;
 }
 
+// The right end of the first line of a markdown text, in a window whose content is this wide (the second frame: the
+// first one loads the fonts)
+static float FirstLineEnd(const char* markdown, float contentWidth)
+{
+    float end = 0.f;
+    for (int i = 0; i < 2; ++i)
+    {
+        ImGui_ImplNull_NewFrame();
+        ImGui::NewFrame();
+        ImGui::SetNextWindowPos(ImVec2(0.f, 0.f));
+        ImGui::SetNextWindowSize(ImVec2(contentWidth + 2.f * ImGui::GetStyle().WindowPadding.x, 400.f));
+        ImGui::Begin("Wrapped", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground);
+        float firstLineBottom = ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeight();
+        RichMd::Render(markdown);
+        ImGui::End();
+        ImGui::Render();
+        ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+        end = 0.f;
+        for (const ImDrawList* drawList : ImGui::GetDrawData()->CmdLists)
+            for (const ImDrawVert& vertex : drawList->VtxBuffer)
+                if (vertex.pos.y < firstLineBottom)
+                    end = std::max(end, vertex.pos.x);
+    }
+    return end;
+}
+
+// A word drawn as several spans is not split at a span's edge: "(**cccc**)" and "[cccc](url)'s" go to the next line
+// whole, as "(cccc)" and "cccc's" do in plain text
+static bool CheckGluedWords()
+{
+    RichMd::CreateContext();
+    const float padding = ImGui::GetStyle().WindowPadding.x;
+    // A window just too narrow for the glued word: its first line ends before it
+    auto widthBetween = [padding](const char* fits, const char* doesNotFit) {
+        return (FirstLineEnd(fits, 1000.f) + FirstLineEnd(doesNotFit, 1000.f)) / 2.f - padding;
+    };
+    float boldWidth = widthBetween("aaaa bbbb (", "aaaa bbbb (cccc)");
+    float plain = FirstLineEnd("aaaa bbbb (cccc) dddd\n", boldWidth);
+    float bold = FirstLineEnd("aaaa bbbb (**cccc**) dddd\n", boldWidth);
+    float linkWidth = widthBetween("aaaa bbbb cccc", "aaaa bbbb cccc's");
+    float plainLink = FirstLineEnd("aaaa bbbb cccc's dddd\n", linkWidth);
+    float link = FirstLineEnd("aaaa bbbb [cccc](https://example.org)'s dddd\n", linkWidth);
+    RichMd::DestroyContext();
+    bool ok = true;
+    if (bold != plain) {
+        printf("smoke test failed: \"(**cccc**)\" is split (its first line ends at %.1f, %.1f in plain text)\n", bold,
+               plain);
+        ok = false;
+    }
+    if (link != plainLink) {
+        printf("smoke test failed: \"[cccc](url)'s\" is split (its first line ends at %.1f, %.1f in plain text)\n",
+               link, plainLink);
+        ok = false;
+    }
+    return ok;
+}
+
 static int RunOneCycle()
 {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplNull_Init();
     if (!CheckContexts() || !CheckLiveStory() || !CheckHtmlComments() || !CheckParagraphGap()
-        || !CheckLineState())
+        || !CheckLineState() || !CheckGluedWords())
         return 0;
 
     RichMd::MarkdownOptions options;
