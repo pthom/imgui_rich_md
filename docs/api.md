@@ -313,13 +313,14 @@ struct Style
         ImVec4(0.35f, 0.65f, 1.00f, 1.0f), ImVec4(0.25f, 0.73f, 0.32f, 1.0f), ImVec4(0.82f, 0.60f, 0.97f, 1.0f),
         ImVec4(0.95f, 0.75f, 0.22f, 1.0f), ImVec4(0.97f, 0.32f, 0.29f, 1.0f) };
     float blockGap = 0.3f;              // vertical gap between blocks
+    float listItemGap = 0.0f;           // vertical gap between list items (0: tight, as the lines of a paragraph)
     float headerGapStep = 0.12f;        // extra gap above a header: (7 - level) * headerGapStep
     float subSupScale = 0.7f;           // font size of <sub> and <sup>
     float quoteBarThickness = 2.0f;     // pixels
     float admonitionBarThickness = 3.0f;
     bool linkTooltip = true;            // show the url when hovering a link
     // Space above and below each rendered fragment (a print() call), in em: fragments stack
-    // with widgets between them. Bottom: negative = automatic (one ImGui::NewLine()).
+    // with widgets between them. Bottom: negative = automatic (the last line ends there).
     float fragmentGapTop = 0.0f;
     float fragmentGapBottom = -1.0f;
 };

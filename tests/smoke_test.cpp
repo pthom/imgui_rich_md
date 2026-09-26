@@ -200,7 +200,7 @@ static bool CheckLiveStory()
 }
 
 // A markdown text drawn in a fixed window (the second frame: the first one loads the fonts)
-struct Drawn { int vertices; float height; };
+struct Drawn { int vertices; float height; float trailing; };  // trailing: from the last item to the cursor
 static Drawn DrawMarkdown(const char* markdown)
 {
     Drawn drawn{};
@@ -212,6 +212,7 @@ static Drawn DrawMarkdown(const char* markdown)
         ImGui::Begin("Drawn");
         RichMd::Render(markdown);
         drawn.height = ImGui::GetCursorPosY();
+        drawn.trailing = ImGui::GetCursorScreenPos().y - ImGui::GetItemRectMax().y;
         ImGui::End();
         ImGui::Render();
         ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
@@ -250,12 +251,55 @@ static bool CheckParagraphGap()
     return ok;
 }
 
+// The line state: a fragment ends at the same distance from its last item whatever it is (text, a table); <br/> and
+// <br /> are line breaks, as <br>; list items are tight by default, and Style::listItemGap separates them; a code
+// block in a list item starts below the item's text
+static bool CheckLineState()
+{
+    RichMd::CreateContext();
+    float afterText = DrawMarkdown("Some text\n").trailing;
+    float afterTable = DrawMarkdown("| a |\n|---|\n| 1 |\n").trailing;
+    Drawn br = DrawMarkdown("one<br>two\n");
+    Drawn brSlash = DrawMarkdown("one<br/>two\n");
+    Drawn brSpace = DrawMarkdown("one<br />two\n");
+    float line = DrawMarkdown("a  \nb\n").height - DrawMarkdown("a\n").height;
+    float listItem = DrawMarkdown("- a\n- b\n").height - DrawMarkdown("- a\n").height;
+    float itemWithCode = DrawMarkdown("- item\n\n  ```\n  code\n  ```\n").height;
+    float codeOnly = DrawMarkdown("```\ncode\n```\n").height;
+    RichMd::GetStyle().listItemGap = 0.5f;
+    float spacedListItem = DrawMarkdown("- a\n- b\n").height - DrawMarkdown("- a\n").height;
+    RichMd::DestroyContext();
+    bool ok = true;
+    if (afterText != afterTable) {
+        printf("smoke test failed: a fragment ends %.1f below its text, %.1f below its table\n", afterText, afterTable);
+        ok = false;
+    }
+    for (const Drawn& other : { brSlash, brSpace })
+        if (other.vertices != br.vertices || other.height != br.height) {
+            printf("smoke test failed: <br/> or <br /> is not a line break (%d vertices, %.1f high; <br>: %d, %.1f)\n",
+                   other.vertices, other.height, br.vertices, br.height);
+            ok = false;
+        }
+    if (listItem != line || spacedListItem <= line) {
+        printf("smoke test failed: list items take %.1f (%.1f with listItemGap = 0.5), a line %.1f\n", listItem,
+               spacedListItem, line);
+        ok = false;
+    }
+    if (itemWithCode - codeOnly < line) {
+        printf("smoke test failed: a code block covers the text of its list item (%.1f high, %.1f the code block)\n",
+               itemWithCode, codeOnly);
+        ok = false;
+    }
+    return ok;
+}
+
 static int RunOneCycle()
 {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplNull_Init();
-    if (!CheckContexts() || !CheckLiveStory() || !CheckHtmlComments() || !CheckParagraphGap())
+    if (!CheckContexts() || !CheckLiveStory() || !CheckHtmlComments() || !CheckParagraphGap()
+        || !CheckLineState())
         return 0;
 
     RichMd::MarkdownOptions options;

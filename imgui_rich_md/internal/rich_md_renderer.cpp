@@ -39,12 +39,28 @@ namespace RichMd
 {
 
 
-// Small vertical gap between markdown blocks.
-// Unlike ImGui::NewLine() which adds a full FontSize (widget-oriented),
-// this adds a fraction of FontSize for tighter text layout.
+// Inline content (text, inline code, images, formulas) ends with SameLine(), so that the next piece continues the
+// line: a line is open. ImGui keeps that state (IsSameLine); fenced block renderers and widgets draw items the
+// renderer does not see, so it reads it there rather than keeping its own.
+static bool line_is_open()
+{
+	return ImGui::GetCurrentWindow()->DC.IsSameLine;
+}
+
+// Ends the open line, if any (adds no empty line)
+static void end_line()
+{
+	if (line_is_open())
+		ImGui::NewLine();
+}
+
+// Small vertical gap between markdown blocks (a fraction of the font size), below the open line if any. A zero gap
+// only ends the line (a Dummy would add ImGui's item spacing)
 static void add_block_gap(float gap_em)
 {
-	ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * gap_em));
+	end_line();
+	if (gap_em > 0.0f)
+		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * gap_em));
 }
 
 // The gap above a top-level block, except above the first one: true when added
@@ -54,8 +70,6 @@ bool Renderer::separate_block()
 		m_skip_next_block_gap = false;
 		return false;
 	}
-	if (ImGui::GetCurrentWindow()->DC.IsSameLine)
-		ImGui::NewLine();  // ends the line of the text before (render_text() ends with SameLine), without adding one
 	add_block_gap(style.blockGap);
 	return true;
 }
@@ -136,7 +150,7 @@ void Renderer::BLOCK_LI(const MD_BLOCK_LI_DETAIL* d, bool e)
 		m_list_stack.back().first_item_pending = false;
 		bool is_top_level = (m_list_stack.size() == 1);
 		if (!(is_first && is_top_level))
-			add_block_gap(style.blockGap);
+			add_block_gap(style.listItemGap);
 
 		list_info& nfo = m_list_stack.back();
 		if (d && d->is_task) {
@@ -218,8 +232,7 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 
 	if (!e) {
 		if (d->level <= 2) {
-			// Small gap between heading text and the underline separator.
-			add_block_gap(style.blockGap);
+			end_line();  // the underline, just below the title
 			ImGui::Separator();
 		}
 		heading((int)d->level, m_heading_text);
@@ -278,10 +291,7 @@ void Renderer::BLOCK_QUOTE(bool e)
 			float start_y = m_quote_start.back().y;
 			float indented_x = m_quote_start.back().x;
 			m_quote_start.pop_back();
-			// cursor.y at exit is the TOP of the last rendered line
-			// (render_text() ends with SameLine(0, 0)), so extend by one
-			// line height to cover that last line.
-			float end_y = ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeight();
+			float end_y = ImGui::GetItemRectMax().y;  // the bottom of the last item of the quote
 			float bar_x = indented_x - ImGui::GetStyle().IndentSpacing * 0.5f;
 			bool is_admonition = (m_admonition_kind != AdmonitionKind::None);
 			float thickness = is_admonition ? style.admonitionBarThickness : style.quoteBarThickness;
@@ -362,8 +372,10 @@ void Renderer::BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* detail, bool e)
 
     if (m_is_code_block)
         m_code_block = "";
-    else
+    else {
+        end_line();  // on its own line (in a list item, no block gap ended the line of the item's text)
         render_code_block();
+    }
 
     if (detail->lang.text == NULL)
         m_code_block_language = "";
@@ -689,7 +701,7 @@ void Renderer::render_latex_span(bool display)
 		if (invalid)
 			ImGui::PushStyleColor(ImGuiCol_Text, resolve_color(style.errorColor, admonition_color(AdmonitionKind::Caution)));
 		if (display)
-			ImGui::NewLine();
+			end_line();
 		ImGui::TextUnformatted(source.c_str());
 		record_run(m_latex_source_begin, m_latex_source_end, source);
 		if (invalid) {
@@ -697,9 +709,7 @@ void Renderer::render_latex_span(bool display)
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("%s", tex.error.c_str());
 		}
-		if (display)
-			ImGui::NewLine();
-		else
+		if (!display)
 			ImGui::SameLine(0.0f, 0.0f);
 		return;
 	}
@@ -710,18 +720,16 @@ void Renderer::render_latex_span(bool display)
 	float logical_h = tex.size_px.y / pixel_scale;
 	if (display) {
 		// Display math: centered on its own line
-		ImGui::NewLine();
+		end_line();
 		float avail = ImGui::GetContentRegionAvail().x;
 		float pad_x = (avail - logical_w) * 0.5f;
 		if (pad_x > 0.0f)
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad_x);
 		ImGui::Image(tex.texture, ImVec2(logical_w, logical_h));
 		record_run(m_latex_source_begin, m_latex_source_end, source);
-		ImGui::NewLine();
 	} else {
 		// An inline formula that does not fit on the rest of the line starts a new one, like a word
-		const bool not_at_line_start = ImGui::GetCursorPosX() > ImGui::GetCursorStartPos().x + 1.0f;
-		if (logical_w > ImGui::GetContentRegionAvail().x && not_at_line_start)
+		if (logical_w > ImGui::GetContentRegionAvail().x && line_is_open())
 			ImGui::NewLine();
 		// Inline math: the formula's baseline on the text baseline. ImGui::Text() draws from
 		// cursor.y with the baseline at cursor.y + ascent, so the image top goes at
@@ -801,9 +809,7 @@ void Renderer::render_text(const char* str, const char* str_end)
 		if (word_end > word_start) {
 			// Width to fit = any leading blanks + first word.
 			ImVec2 chunk_sz = ImGui::CalcTextSize(str, word_end);
-			const bool not_at_line_start =
-				ImGui::GetCursorPosX() > ImGui::GetCursorStartPos().x + 1.0f;
-			if (chunk_sz.x > wl && not_at_line_start) {
+			if (chunk_sz.x > wl && line_is_open()) {
 				ImGui::NewLine();
 				// The leading blanks were inter-span spacing on the
 				// previous line; drop them now that we've broken.
@@ -1044,11 +1050,12 @@ bool Renderer::check_html(const char* str, const char* str_end)
 {
 	const size_t sz = str_end - str;
 
-	if (strncmp(str, "<br>", sz) == 0) {
+	const std::string tag(str, sz);
+	if (tag == "<br>" || tag == "<br/>" || tag == "<br />") {
 		ImGui::NewLine();
 		return true;
 	}
-	if (strncmp(str, "<hr>", sz) == 0) {
+	if (tag == "<hr>" || tag == "<hr/>" || tag == "<hr />") {
 		ImGui::Separator();
 		return true;
 	}
@@ -1707,7 +1714,7 @@ int Renderer::print(const char* str, const char* str_end)
         m_selection_splitter.Merge(drawList);
     }
 	if (style.fragmentGapBottom < 0.0f)
-		ImGui::NewLine();
+		end_line();
 	else if (style.fragmentGapBottom > 0.0f)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapBottom));
 	return result;
@@ -2110,7 +2117,9 @@ void Renderer::draw_selection() const
 
 void Renderer::soft_break()
 {
-    // Convert a soft break (e.g. a new line inside a paragraph into a space)
+    // Convert a soft break (e.g. a new line inside a paragraph into a space), except at the start of a line
+    if (!line_is_open())
+        return;
     ImGui::TextUnformatted(" ");
     record_run(nullptr, nullptr, " ");
     ImGui::SameLine(0.0f, 0.0f);

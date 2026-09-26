@@ -770,7 +770,6 @@ namespace RichMd
             }
 
             ImGui::PushID(m_code_block.c_str());
-            ImGui::SetCursorPosX(0.f);
             auto& fenced = gCurrentContext->fencedBlockRenderers;
             auto it = fenced.find(_ToLower(m_code_block_language));
             if (it != fenced.end())
