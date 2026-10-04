@@ -5,8 +5,9 @@
 #include <vector>
 
 /*::md Code snippets
-Code snippets with syntax highlighting (ImGuiColorTextEdit), read-only or editable, with a copy button. The markdown
-code blocks use `ShowCodeSnippet` when built with `IMGUI_RICHMD_WITH_CODE_EDITOR`.
+Code snippets with syntax highlighting (ImGuiColorTextEdit), read-only or editable, with a copy button. A snippet whose
+lines overflow its width also shows a wrap button; the reader's choice holds for all the snippets of the session.
+The markdown code blocks use `ShowCodeSnippet` when built with `IMGUI_RICHMD_WITH_CODE_EDITOR`.
 */
 namespace Snippets
 {
@@ -72,8 +73,6 @@ namespace Snippets
                                             // so that the displayed code start at column 1
 
         bool AddFinalEmptyLine = false;     // Add an empty line at the end of the code if missing
-
-        bool WordWrap = false;              // Wrap the long lines at the editor's width (else they scroll)
     };
     // ::endcode
 

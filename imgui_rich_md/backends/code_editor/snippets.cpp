@@ -104,6 +104,30 @@ namespace Snippets
         return clicked;
     }
 
+    // The wrap button: a line of text returning under itself (drawn with the draw list, as the copy button)
+    static bool WrapButton(float lineHeight, bool active)
+    {
+        if (active)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        bool clicked = ImGui::Button("##wrap", ImVec2(lineHeight * 1.25f, 0.f));
+        if (active)
+            ImGui::PopStyleColor();
+        ImVec2 mi = ImGui::GetItemRectMin(), ma = ImGui::GetItemRectMax();
+        float h = (ma.y - mi.y) * 0.5f;
+        float cx = (mi.x + ma.x) * 0.5f, cy = (mi.y + ma.y) * 0.5f;
+        float left = cx - h * 0.5f, right = cx + h * 0.5f, thickness = h * 0.11f;
+        float y1 = cy - h * 0.3f, y2 = cy + h * 0.3f, arrowEnd = cx - h * 0.1f, a = h * 0.22f;
+        ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddLine(ImVec2(left, y1), ImVec2(right, y1), col, thickness);
+        dl->PathLineTo(ImVec2(right, y1));
+        dl->PathLineTo(ImVec2(right, y2));
+        dl->PathLineTo(ImVec2(arrowEnd, y2));
+        dl->PathStroke(col, thickness);
+        dl->AddTriangleFilled(ImVec2(arrowEnd - a, y2), ImVec2(arrowEnd, y2 - a), ImVec2(arrowEnd, y2 + a), col);
+        return clicked;
+    }
+
     static std::string AddFinalEmptyLineIfMissing(const std::string &s)
     {
         if (s.empty())
@@ -127,8 +151,28 @@ namespace Snippets
         bool changed = false;               // set by the editor's change callback
         double timeClickCopyButton = -1e9;  // ImGui::GetTime()
         double lastShown = 0.0;             // ImGui::GetTime()
+        size_t longestLine = 0;             // in characters, of the submitted code
     };
     static std::map<ImGuiID, SnippetEditor> gSnippetEditors;
+    // The reader's choice for the long lines, shared by all the snippets: an editor out of view is dropped, so a
+    // per-snippet state would be forgotten; and wrap on in one block means wrap on in the next
+    static bool gWordWrap = false;
+
+    static size_t LongestLine(const std::string& code)
+    {
+        size_t longest = 0, current = 0;
+        for (char c : code)
+        {
+            if (c == '\n')
+            {
+                longest = std::max(longest, current);
+                current = 0;
+            }
+            else if (((unsigned char)c & 0xC0) != 0x80)  // one per code point
+                ++current;
+        }
+        return std::max(longest, current);
+    }
 
     // Drops the editors not shown for 10 seconds (at most once per frame)
     static void _DropUnusedEditors()
@@ -170,7 +214,6 @@ namespace Snippets
         editor.SetReadOnlyEnabled(snippetData.ReadOnly);
         editor.SetCaretsVisible(!snippetData.ReadOnly);
         editor.SetShowWhitespacesEnabled(false);
-        editor.SetWordWrapEnabled(snippetData.WordWrap);
         _SetTheme(editor, snippetData.Palette);
         if (editor.GetText().empty() || snippetData.ReadOnly)
         {
@@ -185,6 +228,7 @@ namespace Snippets
             {
                 editor.SetText(displayedCode);
                 submitted = displayedCode;
+                state.longestLine = LongestLine(displayedCode);
             }
         }
 
@@ -195,13 +239,21 @@ namespace Snippets
 
         float lineHeight;
         float editorLineHeight;  // the editor's line pitch: it renders with ItemSpacing (0, 0)
+        float glyphWidth;
         {
             auto codeFont = RichMd::GetCodeFont();
             ImGui::PushFont(codeFont.font, codeFont.size);
             lineHeight = ImGui::GetTextLineHeightWithSpacing();
             editorLineHeight = ImGui::GetTextLineHeight() * editor.GetLineSpacing();
+            glyphWidth = ImGui::CalcTextSize("M").x;
             ImGui::PopFont();
         }
+
+        // A line wider than the editor's text area (the width less the line numbers' margin): the wrap button shows,
+        // and the reader's choice applies
+        bool hasLongLines = (float)(state.longestLine + 7) * glyphWidth > width;
+        bool wrapped = hasLongLines && gWordWrap;
+        editor.SetWordWrapEnabled(wrapped);
 
         ImVec2 editorSize;
         {
@@ -209,7 +261,15 @@ namespace Snippets
 
             int nbVisibleLines = 0;
             if ((snippetData.HeightInLines == 0) && (overrideHeightInLines==0))
+            {
                 nbVisibleLines = (int)std::count(snippetData.Code.begin(), snippetData.Code.end(), '\n') + 1;
+                if (wrapped && editor.GetLineCount() > 0)  // the visual rows, as laid out at the last render
+                {
+                    size_t lastLine = editor.GetLineCount() - 1;
+                    auto end = editor.DocPos2VisPos(TextEditor::DocPos(lastLine, editor.GetLineText(lastLine).size()));
+                    nbVisibleLines = std::max(nbVisibleLines, (int)end.row + 1);
+                }
+            }
             else if (overrideHeightInLines != 0)
                 nbVisibleLines = overrideHeightInLines;
             else
@@ -258,32 +318,55 @@ namespace Snippets
         if (snippetData.ReadOnly)
             ImGui::PopStyleColor();
 
-        if (snippetData.ShowCopyButton)
+        if (snippetData.ShowCopyButton || hasLongLines)
         {
-            // The copy button floats over the editor's top right corner, in a small child window of its own,
-            // begun after the editor (so it is drawn above it and gets the hover). The parent's cursor is
-            // restored afterwards: the overlay must not take room in the layout.
+            // The copy button (and the wrap button, when a line overflows) float over the editor's top right corner,
+            // in a small child window of their own, begun after the editor (so it is drawn above it and gets the
+            // hover). The parent's cursor is restored afterwards: the overlay must not take room in the layout.
             ImVec2 parentCursor = ImGui::GetCursorPos();
             ImVec2 editorMin = ImGui::GetItemRectMin(), editorMax = ImGui::GetItemRectMax();
             const ImGuiStyle& style = ImGui::GetStyle();
             float buttonWidth = lineHeight * 1.25f, buttonHeight = ImGui::GetFrameHeight(), pad = style.FramePadding.y;
+            int nbButtons = (snippetData.ShowCopyButton ? 1 : 0) + (hasLongLines ? 1 : 0);
+            float overlayWidth = buttonWidth * (float)nbButtons + style.ItemSpacing.x * (float)(nbButtons - 1);
             float right = editorMax.x - pad;
-            if ((float)editor.GetLineCount() * editorLineHeight > editorSize.y - style.ScrollbarSize)  // a vertical scrollbar
-                right -= style.ScrollbarSize;
-            ImGui::SetCursorScreenPos(ImVec2(right - buttonWidth, editorMin.y + pad));
-            ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav;
-            if (ImGui::BeginChild("copy_overlay", ImVec2(buttonWidth, buttonHeight), ImGuiChildFlags_None, overlayFlags))
+            // Left of the vertical scrollbar when the editor has one: the lines exceed the height, less the room of a
+            // horizontal scrollbar when the long lines are not wrapped
+            float usableHeight = editorSize.y - style.ScrollbarSize - (hasLongLines && !wrapped ? style.ScrollbarSize : 0.f);
+            int rows = editor.GetLineCount() > 0 ? (int)editor.GetLineCount() : 1;
+            if (wrapped)
             {
-                if (CopyButton(lineHeight))
+                size_t lastLine = editor.GetLineCount() - 1;
+                rows = (int)editor.DocPos2VisPos(TextEditor::DocPos(lastLine, editor.GetLineText(lastLine).size())).row + 1;
+            }
+            if ((float)rows * editorLineHeight > usableHeight)
+                right -= style.ScrollbarSize;
+            ImGui::SetCursorScreenPos(ImVec2(right - overlayWidth, editorMin.y + pad));
+            ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav;
+            if (ImGui::BeginChild("copy_overlay", ImVec2(overlayWidth, buttonHeight), ImGuiChildFlags_None, overlayFlags))
+            {
+                if (hasLongLines)
                 {
-                    state.timeClickCopyButton = ImGui::GetTime();
-                    ImGui::SetClipboardText(snippetData.Code.c_str());
+                    if (WrapButton(lineHeight, wrapped))
+                        gWordWrap = !gWordWrap;
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip(wrapped ? "Unwrap the long lines" : "Wrap the long lines");
+                    if (snippetData.ShowCopyButton)
+                        ImGui::SameLine();
                 }
-                bool wasCopiedRecently = (ImGui::GetTime() - state.timeClickCopyButton) < 0.7;
-                if (wasCopiedRecently)
-                    ImGui::SetTooltip("Copied!");
-                else if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Copy");
+                if (snippetData.ShowCopyButton)
+                {
+                    if (CopyButton(lineHeight))
+                    {
+                        state.timeClickCopyButton = ImGui::GetTime();
+                        ImGui::SetClipboardText(snippetData.Code.c_str());
+                    }
+                    bool wasCopiedRecently = (ImGui::GetTime() - state.timeClickCopyButton) < 0.7;
+                    if (wasCopiedRecently)
+                        ImGui::SetTooltip("Copied!");
+                    else if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Copy");
+                }
             }
             ImGui::EndChild();
             ImGui::SetCursorPos(parentCursor);
