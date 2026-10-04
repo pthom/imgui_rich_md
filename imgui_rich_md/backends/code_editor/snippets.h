@@ -1,6 +1,7 @@
 // Part of imgui_rich_md - MIT License - Copyright (c) 2022-2026 Pascal Thomet - https://github.com/pthom/imgui_rich_md
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -73,6 +74,12 @@ namespace Snippets
                                             // so that the displayed code start at column 1
 
         bool AddFinalEmptyLine = false;     // Add an empty line at the end of the code if missing
+
+        // Hooks for a host that knows the code (an API browser): the line under the mouse and the column in it.
+        // OnHover draws a tooltip when it has something to say (it returns false otherwise). OnContextMenu adds items
+        // to the right-click menu (it returns false when it has none: the menu closes).
+        std::function<bool(const std::string& line, size_t column)> OnHover;
+        std::function<bool(const std::string& line, size_t column)> OnContextMenu;
     };
     // ::endcode
 

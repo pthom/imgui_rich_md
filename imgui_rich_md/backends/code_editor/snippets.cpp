@@ -152,6 +152,8 @@ namespace Snippets
         double timeClickCopyButton = -1e9;  // ImGui::GetTime()
         double lastShown = 0.0;             // ImGui::GetTime()
         size_t longestLine = 0;             // in characters, of the submitted code
+        std::string contextLine;            // the line and column right-clicked (for the host's menu)
+        size_t contextColumn = 0;
     };
     static std::map<ImGuiID, SnippetEditor> gSnippetEditors;
     // The reader's choice for the long lines, shared by all the snippets: an editor out of view is dropped, so a
@@ -318,6 +320,17 @@ namespace Snippets
         if (snippetData.ReadOnly)
             ImGui::PopStyleColor();
 
+        // The host's hooks: the mouse's line and column, read now (the editor is the last item), used after the
+        // overlay, with the code font popped
+        bool hostHover = false, hostContext = false;
+        TextEditor::DocPos mousePos;
+        if ((snippetData.OnHover || snippetData.OnContextMenu) && editor.IsMousePosOverGlyph(ImGui::GetMousePos()))
+        {
+            mousePos = editor.GetDocPosAtMousePos(ImGui::GetMousePos());
+            hostHover = snippetData.OnHover && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_Stationary);
+            hostContext = snippetData.OnContextMenu && ImGui::IsItemClicked(ImGuiMouseButton_Right);
+        }
+
         if (snippetData.ShowCopyButton || hasLongLines)
         {
             // The copy button (and the wrap button, when a line overflows) float over the editor's top right corner,
@@ -382,6 +395,22 @@ namespace Snippets
 #endif
 
         ImGui::PopFont();
+
+        if (hostContext)
+        {
+            state.contextLine = editor.GetLineText(mousePos.line);
+            state.contextColumn = mousePos.index;
+            ImGui::OpenPopup("snippet_context");
+        }
+        if (hostHover && !ImGui::IsPopupOpen("snippet_context"))
+            snippetData.OnHover(editor.GetLineText(mousePos.line), mousePos.index);
+        if (snippetData.OnContextMenu && ImGui::BeginPopup("snippet_context"))
+        {
+            if (!snippetData.OnContextMenu(state.contextLine, state.contextColumn))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
         ImGui::EndGroup();
         ImGui::PopID();
 
