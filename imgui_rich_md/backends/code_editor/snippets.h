@@ -72,6 +72,8 @@ namespace Snippets
                                             // so that the displayed code start at column 1
 
         bool AddFinalEmptyLine = false;     // Add an empty line at the end of the code if missing
+
+        bool WordWrap = false;              // Wrap the long lines at the editor's width (else they scroll)
     };
     // ::endcode
 

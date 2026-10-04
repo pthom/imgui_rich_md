@@ -170,6 +170,7 @@ namespace Snippets
         editor.SetReadOnlyEnabled(snippetData.ReadOnly);
         editor.SetCaretsVisible(!snippetData.ReadOnly);
         editor.SetShowWhitespacesEnabled(false);
+        editor.SetWordWrapEnabled(snippetData.WordWrap);
         _SetTheme(editor, snippetData.Palette);
         if (editor.GetText().empty() || snippetData.ReadOnly)
         {
