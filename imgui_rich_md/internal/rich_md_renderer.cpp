@@ -2102,7 +2102,8 @@ void Renderer::update_selection(ImGuiID fragmentId)
 				select_at(fragmentId, offset_at(g.IO.MouseClickedPos[0]), 1);
 				m_selection_focus = offset_at(mouse);
 			}
-		} else if (!m_selection_by_unit || ImGui::IsMouseDragPastThreshold(0))  // a word or block waits for a drag
+		} else if ((!m_selection_by_unit || ImGui::IsMouseDragPastThreshold(0))  // a word or block waits for a drag
+		           && ImGui::IsMousePosValid())  // no position (a platform between two events): the focus stays
 			m_selection_focus = offset_at(mouse);
 	}
 	// The menu acts on the fragment it opens on (the selection of another fragment is dropped)
