@@ -6,6 +6,7 @@
 #include "imgui_impl_null.h"
 #include "imgui_rich_md/rich_md.h"
 
+#include <cfloat>
 #include <cstdio>
 #include <string>
 
@@ -367,6 +368,54 @@ static bool CheckMenu()
     return Expect("Copy Link", gClipboard, "https://example.com") && ok;
 }
 
+// A press inside the selection keeps it (a long press on a phone opens the menu on it): a release at no position
+// (a cancel) keeps it, a release at the press collapses it, a drag from inside starts a new selection
+static bool CheckPressInSelection()
+{
+    const char* md = "Hello bold world\n";
+    Frame f = DrawFrame(md, 600.f);
+    float y = f.textOrigin.y + LineHeight() * 0.5f;
+    ImVec2 from(f.textOrigin.x + TextWidth("Hello ") + 1.f, y), to(f.textOrigin.x + TextWidth("Hello bold wor") + 1.f, y);
+    ImVec2 inside(f.textOrigin.x + TextWidth("Hello bold") + 1.f, y);
+    DragAndCopy(md, 600.f, from, to);
+    bool ok = Expect("the selection", gClipboard, "bold wor");
+
+    MouseTo(inside);
+    DrawFrame(md, 600.f);
+    MouseButton(true);
+    DrawFrame(md, 600.f);
+    DrawFrame(md, 600.f);
+    MouseTo(ImVec2(-FLT_MAX, -FLT_MAX));  // a cancel: the press is taken away
+    DrawFrame(md, 600.f);
+    MouseButton(false);
+    DrawFrame(md, 600.f);
+    MouseTo(inside);
+    DrawFrame(md, 600.f);
+    gClipboard.clear();
+    CtrlC(true);
+    DrawFrame(md, 600.f);
+    CtrlC(false);
+    DrawFrame(md, 600.f);
+    ok = Expect("kept after a press inside and a cancel", gClipboard, "bold wor") && ok;
+
+    for (int i = 0; i < 20; ++i)  // more than the double-click time since the last press
+        DrawFrame(md, 600.f);
+    MouseButton(true);  // a press inside, released there: collapsed
+    DrawFrame(md, 600.f);
+    MouseButton(false);
+    DrawFrame(md, 600.f);
+    gClipboard.clear();
+    CtrlC(true);
+    DrawFrame(md, 600.f);
+    CtrlC(false);
+    DrawFrame(md, 600.f);
+    ok = Expect("collapsed after a press and a release inside", gClipboard, "") && ok;
+
+    DragAndCopy(md, 600.f, from, to);  // again, then a drag from inside: a new selection from the press
+    DragAndCopy(md, 600.f, inside, ImVec2(f.textOrigin.x + TextWidth("Hello bold worl") + 1.f, y));
+    return Expect("a drag from inside", gClipboard, " worl") && ok;
+}
+
 int main(int, char**)
 {
     ImGui::CreateContext();
@@ -389,6 +438,7 @@ int main(int, char**)
     ok = CheckUnbalancedPush() && ok;
     ok = CheckClicksAndSelectAll() && ok;
     ok = CheckMenu() && ok;
+    ok = CheckPressInSelection() && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

@@ -2055,6 +2055,9 @@ std::string Renderer::selected_text() const
 // A click on a line of text starts a selection (and takes the active id, so that the window does not move), a drag
 // extends it, a double click selects a word and a triple click a block, a click away from the text clears it. Ctrl+C
 // (Cmd+C on macOS) copies it, Ctrl+A selects the whole fragment, a right click opens a menu.
+// A press inside the selection keeps it while held (a long press on a phone opens the menu on it): a drag starts a
+// new selection from the press, a release collapses it to the press; a release at no position is a cancel (a
+// platform took the press away), the selection stays.
 void Renderer::update_selection(ImGuiID fragmentId)
 {
 	ImGuiContext& g = *GImGui;
@@ -2076,16 +2079,30 @@ void Renderer::update_selection(ImGuiID fragmentId)
 		if (onTextLine) {
 			ImGui::SetActiveID(fragmentId, g.CurrentWindow);
 			ImGui::FocusWindow(g.CurrentWindow);
-			select_at(fragmentId, offset_at(mouse), ImGui::GetMouseClickedCount(0));
+			size_t offset = offset_at(mouse);
+			m_press_in_selection = m_selection_fragment == fragmentId && ImGui::GetMouseClickedCount(0) == 1
+			                       && offset >= ImMin(m_selection_anchor, m_selection_focus)
+			                       && offset < ImMax(m_selection_anchor, m_selection_focus);
+			if (!m_press_in_selection)
+				select_at(fragmentId, offset, ImGui::GetMouseClickedCount(0));
 		} else if (m_selection_fragment == fragmentId) {
 			m_selection_fragment = 0;
 		}
 	}
 	if (g.ActiveId == fragmentId) {
 		ImGui::KeepAliveID(fragmentId);
-		if (!ImGui::IsMouseDown(0))
+		if (!ImGui::IsMouseDown(0)) {
+			if (m_press_in_selection && ImGui::IsMousePosValid())
+				select_at(fragmentId, offset_at(g.IO.MouseClickedPos[0]), 1);
+			m_press_in_selection = false;
 			ImGui::ClearActiveID();
-		else if (!m_selection_by_unit || ImGui::IsMouseDragPastThreshold(0))  // a word or block waits for a drag
+		} else if (m_press_in_selection) {
+			if (ImGui::IsMouseDragPastThreshold(0)) {
+				m_press_in_selection = false;
+				select_at(fragmentId, offset_at(g.IO.MouseClickedPos[0]), 1);
+				m_selection_focus = offset_at(mouse);
+			}
+		} else if (!m_selection_by_unit || ImGui::IsMouseDragPastThreshold(0))  // a word or block waits for a drag
 			m_selection_focus = offset_at(mouse);
 	}
 	// The menu acts on the fragment it opens on (the selection of another fragment is dropped)

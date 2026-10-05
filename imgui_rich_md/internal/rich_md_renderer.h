@@ -333,6 +333,8 @@ private:
 	ImGuiID m_selection_text_hash = 0;           // the text of the fragment when the selection was made
 	size_t m_selection_anchor = 0, m_selection_focus = 0;
 	bool m_selection_by_unit = false;            // made by a double or triple click: a drag must pass the threshold
+	bool m_press_in_selection = false;           // a press inside the selection keeps it: a drag starts a new one,
+	                                             // a release collapses it (a release at no position, a cancel, keeps it)
 	std::string m_menu_link;                     // the link under the right click that opened the menu
 	ImDrawListSplitter m_selection_splitter;     // channel 0: the highlight, behind the text of channel 1
 
