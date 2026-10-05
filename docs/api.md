@@ -591,8 +591,9 @@ RenderedFormula Render(const std::string& latex, float fontSize, const ImVec4& c
 
 ### Code snippets
 
-Code snippets with syntax highlighting (ImGuiColorTextEdit), read-only or editable, with a copy button. The markdown
-code blocks use `ShowCodeSnippet` when built with `IMGUI_RICHMD_WITH_CODE_EDITOR`.
+Code snippets with syntax highlighting (ImGuiColorTextEdit), read-only or editable, with a copy button. A snippet whose
+lines overflow its width also shows a wrap button; the reader's choice holds for all the snippets of the session.
+The markdown code blocks use `ShowCodeSnippet` when built with `IMGUI_RICHMD_WITH_CODE_EDITOR`.
 
 #### Snippet data
 
@@ -653,6 +654,12 @@ A snippet: its code, its language, its look.
                                             // so that the displayed code start at column 1
 
         bool AddFinalEmptyLine = false;     // Add an empty line at the end of the code if missing
+
+        // Hooks for a host that knows the code (an API browser): the line under the mouse and the column in it.
+        // OnHover draws a tooltip when it has something to say (it returns false otherwise). OnContextMenu adds items
+        // to the right-click menu (it returns false when it has none: the menu closes).
+        std::function<bool(const std::string& line, size_t column)> OnHover;
+        std::function<bool(const std::string& line, size_t column)> OnContextMenu;
     };
 ```
 
