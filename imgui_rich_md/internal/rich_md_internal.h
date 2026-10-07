@@ -120,6 +120,10 @@ namespace RichMd
         int step = 0;             // the find bar asked for the next (1) or the previous (-1) match
         bool jumpToFirst = false; // the query changed: the first match below the top of the view becomes current
         int matchCount = 0, currentMatch = -1;  // at the last frame, for the find bar
+        bool matchMoved = false;                // the current match changed at this frame: the lists show it
+        bool dropdownOpen = false;              // the matches with their context, under the find bar
+        std::vector<int> tickMatches;           // the matches of the ticks clicked on the scrollbar, in a small window
+        ImVec2 tickPopupPos;
         float findBarBottom = 0.f;              // the bottom of the find bar below the content's top (a jump aims below)
     };
 

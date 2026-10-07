@@ -1204,9 +1204,9 @@ namespace RichMd
             for (const DocumentMatch& m : frame.renders.matches)
                 if (m.fragment == s.matchFragment && m.begin == s.matchBegin)
                     match = &m;
-            // The match comes below the find bar, else at a third of the view
-            float top = state.findBarBottom > 0.f ? state.findBarBottom + ImGui::GetFontSize()
-                                                  : ImGui::GetWindowHeight() / 3.f;
+            // The match comes below the find bar (and its list), else at a third of the view
+            const float height = ImGui::GetWindowHeight(), em = ImGui::GetFontSize();
+            float top = state.findBarBottom > 0.f ? ImMin(state.findBarBottom + em, height - 3.f * em) : height / 3.f;
             if (match == nullptr || _ScrollToward(s, ScrollToShowAtTop(match->y - top), seconds))
                 s = DocumentScroll();
         }
@@ -1221,6 +1221,7 @@ namespace RichMd
         state.matchCount = (int)matches.size();
         if (frame.renders.query.empty() || matches.empty()) {
             state.currentMatch = -1;
+            state.matchMoved = false;
             state.step = 0;
             state.jumpToFirst = false;
             return;
@@ -1248,6 +1249,7 @@ namespace RichMd
             scroll = true;
         }
         const DocumentMatch& match = matches[(size_t)current];
+        state.matchMoved = current != state.currentMatch;
         state.currentMatch = current;
         state.currentFragment = match.fragment;
         state.currentBegin = match.begin;
@@ -1255,25 +1257,242 @@ namespace RichMd
             _ScrollToMatch(state, match.fragment, match.begin);
     }
 
-    // A square button with a cross, drawn (no glyph needed)
-    static bool _CloseButton(const char* id)
+    // The icons of the document's buttons, drawn (the fonts need no glyph)
+    enum class _Icon { Close, Find, List };
+    static bool _IconButton(const char* id, _Icon icon)
     {
-        float size = ImGui::GetFrameHeight();
-        bool clicked = ImGui::Button(id, ImVec2(size, size));
-        ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
-        ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
-        float r = size * 0.2f;
-        ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+        const float size = ImGui::GetFrameHeight();
+        const bool clicked = ImGui::Button(id, ImVec2(size, size));
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        const float r = size * 0.22f, thickness = ImMax(1.5f, size / 20.f);
+        const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddLine(ImVec2(c.x - r, c.y - r), ImVec2(c.x + r, c.y + r), color, 1.5f);
-        drawList->AddLine(ImVec2(c.x - r, c.y + r), ImVec2(c.x + r, c.y - r), color, 1.5f);
+        if (icon == _Icon::Close) {
+            drawList->AddLine(ImVec2(c.x - r, c.y - r), ImVec2(c.x + r, c.y + r), color, thickness);
+            drawList->AddLine(ImVec2(c.x - r, c.y + r), ImVec2(c.x + r, c.y - r), color, thickness);
+        } else if (icon == _Icon::Find) {  // a lens and its handle
+            const ImVec2 lens(c.x - r * 0.3f, c.y - r * 0.3f);
+            drawList->AddCircle(lens, r * 0.75f, color, 0, thickness);
+            drawList->AddLine(ImVec2(lens.x + r * 0.55f, lens.y + r * 0.55f), ImVec2(c.x + r * 1.1f, c.y + r * 1.1f),
+                              color, thickness * 1.3f);
+        } else {  // three lines
+            for (int k = -1; k <= 1; ++k) {
+                const float y = c.y + (float)k * r * 0.8f;
+                drawList->AddLine(ImVec2(c.x - r, y), ImVec2(c.x + r, y), color, thickness);
+            }
+        }
         return clicked;
     }
 
+    // What EndDocument() gathers for the table of contents and the lists of matches
+    struct _DocumentView
+    {
+        std::vector<int> listed;    // the headings in the table of contents
+        int current = -1;           // the current section: the last listed heading at or above the top of the view
+        std::vector<int> sections;  // per match: the listed heading above it (-1: none)
+        std::vector<int> counts;    // per heading: its matches, until the next listed heading
+    };
+
+    static void _OpenSearch(DocumentState& state)
+    {
+        state.searchOpen = true;
+        state.focusQuery = state.selectQuery = true;
+    }
+    static void _CloseSearch(DocumentState& state)
+    {
+        state.searchOpen = false;
+        state.focusContent = true;  // else the focus falls out of the document, and Ctrl+F no longer reaches it
+    }
+
+    static void _GoToMatch(DocumentState& state, const DocumentMatch& match)
+    {
+        state.currentFragment = match.fragment;
+        state.currentBegin = match.begin;
+        _ScrollToMatch(state, match.fragment, match.begin);
+    }
+
+    // The height of a row of the lists (the table of contents, the matches): a finger needs a taller one
+    static float _RowHeight()
+    {
+        const bool touch = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
+        return ImGui::GetTextLineHeight() * (touch ? 2.f : 1.f);
+    }
+
+    // The end of a text that fits in a width, cut at a space, with "..." in front when cut ("" when no word fits)
+    static std::string _FitLeft(const std::string& text, float width)
+    {
+        size_t start = text.find_first_not_of(' ');
+        std::string s = start == std::string::npos ? std::string() : text.substr(start);
+        if (ImGui::CalcTextSize(s.c_str()).x <= width)
+            return s;
+        for (size_t space = s.find(' '); space != std::string::npos; space = s.find(' ', space + 1)) {
+            std::string candidate = "..." + s.substr(space + 1);
+            if (ImGui::CalcTextSize(candidate.c_str()).x <= width)
+                return candidate;
+        }
+        return std::string();
+    }
+    // The start of a text that fits in a width, cut at a space, with "..." at the end when cut ("" when no word fits)
+    static std::string _FitRight(const std::string& text, float width)
+    {
+        if (ImGui::CalcTextSize(text.c_str()).x <= width)
+            return text;
+        for (size_t space = text.rfind(' '); space != std::string::npos && space > 0;
+             space = text.rfind(' ', space - 1)) {
+            std::string candidate = text.substr(0, space) + "...";
+            if (ImGui::CalcTextSize(candidate.c_str()).x <= width)
+                return candidate;
+        }
+        return std::string();
+    }
+
+    // A match with its context on one line, "before MATCH after": the context is cut to fit, the match always shows
+    static void _DrawSnippet(const DocumentMatch& match, ImVec2 pos, float width)
+    {
+        const float matchWidth = ImGui::CalcTextSize(match.text.c_str()).x;
+        const float room = ImMax(0.f, width - matchWidth);
+        const std::string before = _FitLeft(match.before, room * 0.4f);
+        const std::string after = _FitRight(match.after, room - ImGui::CalcTextSize(before.c_str()).x);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+        drawList->AddText(pos, color, before.c_str());
+        pos.x += ImGui::CalcTextSize(before.c_str()).x;
+        drawList->AddRectFilled(pos, ImVec2(pos.x + matchWidth, pos.y + ImGui::GetTextLineHeight()),
+                                ImGui::GetColorU32(_Renderer()->style.searchMatch));
+        drawList->AddText(pos, color, match.text.c_str());
+        drawList->AddText(ImVec2(pos.x + matchWidth, pos.y), color, after.c_str());
+    }
+
+    static const char* _SectionTitle(const DocumentFrame& frame, const _DocumentView& view, int match)
+    {
+        const int k = view.sections[(size_t)match];
+        return k >= 0 ? frame.renders.headings[(size_t)k].text.c_str() : "(top)";
+    }
+
+    // A row of a list of matches (width 0: the available width). Returns true when it was clicked.
+    static bool _MatchRow(const DocumentMatch& match, int i, const DocumentState& state, float width)
+    {
+        const float rowHeight = _RowHeight();
+        if (width <= 0.f)
+            width = ImGui::GetContentRegionAvail().x;
+        ImGui::PushID(i);
+        const ImVec2 pos = ImGui::GetCursorScreenPos();
+        const bool clicked = ImGui::Selectable("##match", i == state.currentMatch, 0, ImVec2(width, rowHeight));
+        if (i == state.currentMatch && (ImGui::IsWindowAppearing() || state.matchMoved))
+            ImGui::SetScrollHereY(0.5f);  // the list shows the current match
+        const float indent = ImGui::GetFontSize() * 0.5f;
+        _DrawSnippet(match, ImVec2(pos.x + indent, pos.y + (rowHeight - ImGui::GetTextLineHeight()) * 0.5f),
+                     width - indent);
+        ImGui::PopID();
+        return clicked;
+    }
+
+    // The matches with their context, under the titles of their sections: the find bar's dropdown, the Search tab of
+    // the table of contents. A click goes to a match. Returns true when one was clicked.
+    static constexpr int kListedMatchesMax = 300;
+    static bool _DrawMatchList(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
+    {
+        const std::vector<DocumentMatch>& matches = frame.renders.matches;
+        if (!state.searchOpen) {
+            if (ImGui::Button("Find in the document")) {
+                _OpenSearch(state);
+                ImGui::CloseCurrentPopup();  // the line's menu
+            }
+            return false;
+        }
+        if (frame.renders.query.empty() || matches.empty()) {
+            ImGui::TextDisabled(frame.renders.query.empty() ? "Type in the find bar." : "No match.");
+            return false;
+        }
+        bool clicked = false;
+        int section = -2;
+        const int shown = ImMin((int)matches.size(), kListedMatchesMax);
+        for (int i = 0; i < shown; ++i) {
+            if (view.sections[(size_t)i] != section) {
+                section = view.sections[(size_t)i];
+                ImGui::TextDisabled("%s", _SectionTitle(frame, view, i));
+            }
+            if (_MatchRow(matches[(size_t)i], i, state, 0.f)) {
+                _GoToMatch(state, matches[(size_t)i]);
+                clicked = true;
+            }
+        }
+        if (shown < (int)matches.size())
+            ImGui::TextDisabled("%d more matches", (int)matches.size() - shown);
+        return clicked;
+    }
+
+    // The matches as ticks on the content's scrollbar (in the content's window). A hover shows their context (not on
+    // a touch screen); a click or a tap opens a small window that lists them.
+    static void _DrawScrollbarTicks(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
+    {
+        SizedFont font = GetFont(MarkdownFontSpec());
+        ImGui::PushFont(font.font, font.size);
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        const std::vector<DocumentMatch>& matches = frame.renders.matches;
+        const float em = ImGui::GetFontSize();
+        const float width = em * 24.f;  // the width of the context
+        if (window->ScrollbarY && !matches.empty()) {
+            const ImRect bar = ImGui::GetWindowScrollbarRect(window, ImGuiAxis_Y);
+            const float contentHeight = window->ScrollMax.y + window->Size.y;
+            const float half = ImMax(2.f, em * 0.15f);
+            const Style& style = _Renderer()->style;
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(bar.Min, bar.Max);
+            std::vector<int> hovered;
+            for (int i = 0; i < (int)matches.size(); ++i) {
+                const bool current = i == state.currentMatch;
+                if (!current && !state.highlightAll)
+                    continue;
+                const float y = bar.Min.y + matches[(size_t)i].y / contentHeight * bar.GetHeight();
+                ImVec4 color = current ? style.searchMatchCurrent : style.searchMatch;
+                color.w = 1.f;  // opaque, on the scrollbar
+                drawList->AddRectFilled(ImVec2(bar.Min.x + 1.f, y - half), ImVec2(bar.Max.x - 1.f, y + half),
+                                        ImGui::GetColorU32(color));
+                const ImVec2 hoverMin(bar.Min.x, y - 2.f * half), hoverMax(bar.Max.x, y + 2.f * half);
+                if (ImGui::IsMouseHoveringRect(hoverMin, hoverMax, false))  // the scrollbar is outside the clip rect
+                    hovered.push_back(i);
+            }
+            drawList->PopClipRect();
+            if (!hovered.empty() && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
+                const ImVec2 at(bar.Min.x - em * 0.5f, ImGui::GetMousePos().y);
+                if (!(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen)) {
+                    ImGui::SetNextWindowPos(at, ImGuiCond_Always, ImVec2(1.f, 0.5f));
+                    ImGui::BeginTooltip();
+                    for (size_t k = 0; k < hovered.size() && k < 5; ++k) {
+                        ImGui::TextDisabled("%s", _SectionTitle(frame, view, hovered[k]));
+                        const ImVec2 pos = ImGui::GetCursorScreenPos();
+                        ImGui::Dummy(ImVec2(width, ImGui::GetTextLineHeight()));
+                        _DrawSnippet(matches[(size_t)hovered[k]], pos, width);
+                    }
+                    ImGui::EndTooltip();
+                }
+                const ImGuiMouseButton left = ImGuiMouseButton_Left;
+                if (ImGui::IsMouseReleased(left) && !ImGui::IsMouseDragPastThreshold(left)) {  // a click, not a drag
+                    state.tickMatches = hovered;
+                    state.tickPopupPos = at;
+                    ImGui::OpenPopup("##ticks");
+                }
+            }
+        }
+        ImGui::SetNextWindowPos(state.tickPopupPos, ImGuiCond_Appearing, ImVec2(1.f, 0.5f));
+        if (ImGui::BeginPopup("##ticks")) {
+            const int n = (int)state.tickMatches.size();
+            ImGui::TextDisabled(n == 1 ? "1 match here" : "%d matches here", n);
+            for (int i : state.tickMatches)
+                if (i < (int)matches.size() && _MatchRow(matches[(size_t)i], i, state, width))
+                    _GoToMatch(state, matches[(size_t)i]);  // the selectable closes the window
+            ImGui::EndPopup();
+        }
+        ImGui::PopFont();
+    }
+
     // The find bar, over the top right of the content (its whole width when the document is narrow): the query, the
-    // count, the previous and the next match, the options. Enter goes to the next match, Shift+Enter to the previous,
-    // Escape closes it.
-    static void _DrawFindBar(const DocumentFrame& frame, DocumentState& state, ImVec2 contentMin, ImVec2 contentMax)
+    // count, the previous and the next match, the list of the matches, the options. Enter goes to the next match,
+    // Shift+Enter to the previous, Escape closes it.
+    static void _DrawFindBar(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view,
+                             ImVec2 contentMin, ImVec2 contentMax)
     {
         SizedFont font = GetFont(MarkdownFontSpec());
         ImGui::PushFont(font.font, font.size);
@@ -1298,7 +1517,7 @@ namespace RichMd
             snprintf(count, sizeof(count), "%d/%d", state.currentMatch + 1, state.matchCount);
         else if (state.query[0] != '\0')
             snprintf(count, sizeof(count), "0/0");
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 3.f * (button + style.ItemSpacing.x) - countWidth
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 4.f * (button + style.ItemSpacing.x) - countWidth
                                 - style.ItemSpacing.x);
         if (state.focusQuery) {
             ImGui::SetKeyboardFocusHere();
@@ -1307,9 +1526,11 @@ namespace RichMd
         std::string query = state.query;
         auto callback = [](ImGuiInputTextCallbackData* data) {
             DocumentState& state = *(DocumentState*)data->UserData;
-            if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory)  // the arrows: the previous, the next match
+            if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {  // the arrows: the previous, the next match
                 state.step = (data->EventKey == ImGuiKey_UpArrow) ? -1 : 1;
-            else if (state.selectQuery) {
+                if (data->EventKey == ImGuiKey_DownArrow)
+                    state.dropdownOpen = true;  // the list shows them with their context
+            } else if (state.selectQuery) {
                 data->SelectAll();
                 state.selectQuery = false;
             }
@@ -1327,8 +1548,7 @@ namespace RichMd
         if (typing && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             // Escape reverts the field to its text at its activation: the query stays for the next search
             ImStrncpy(state.query, query.c_str(), sizeof(state.query));
-            state.searchOpen = false;
-            state.focusContent = true;
+            _CloseSearch(state);
         }
         ImGui::SameLine();
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + countWidth - ImGui::CalcTextSize(count).x);
@@ -1341,10 +1561,11 @@ namespace RichMd
         if (ImGui::ArrowButton("##next", ImGuiDir_Down))
             state.step = 1;
         ImGui::SameLine();
-        if (_CloseButton("##close")) {
-            state.searchOpen = false;
-            state.focusContent = true;
-        }
+        if (_IconButton("##list", _Icon::List))
+            state.dropdownOpen = !state.dropdownOpen;
+        ImGui::SameLine();
+        if (_IconButton("##close", _Icon::Close))
+            _CloseSearch(state);
 
         ImGui::Checkbox("Match case", &state.searchOptions.matchCase);
         ImGui::SameLine();
@@ -1354,6 +1575,16 @@ namespace RichMd
         ImGui::Checkbox("Diacritics", &state.searchOptions.matchDiacritics);
         ImGui::SameLine();
         ImGui::Checkbox("Highlight all", &state.highlightAll);
+
+        if (state.dropdownOpen && !frame.renders.query.empty()) {  // the matches with their context, under the bar
+            ImGui::Separator();
+            const float rows = (float)ImMin(ImMax((int)frame.renders.matches.size(), 1), 10) + 1.f;
+            float height = rows * (_RowHeight() + style.ItemSpacing.y);
+            height = ImMin(height, contentMax.y - ImGui::GetCursorScreenPos().y - style.WindowPadding.y - 2.f * pad);
+            ImGui::BeginChild("##matches", ImVec2(0.f, ImMax(height, ImGui::GetFrameHeight())));
+            _DrawMatchList(frame, state, view);
+            ImGui::EndChild();
+        }
         ImGui::EndChild();
         state.findBarBottom = ImGui::GetItemRectMax().y - contentMin.y;
         ImGui::PopFont();
@@ -1361,18 +1592,18 @@ namespace RichMd
 
     // The entries of the table of contents (the panel's, or the menu's): a click scrolls to the entry's heading.
     // Returns true when an entry was clicked.
-    static bool _DrawTocEntries(const DocumentFrame& frame, DocumentState& state, const std::vector<int>& listed,
-                                int current)
+    static bool _DrawTocEntries(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
     {
         const std::vector<Heading>& headings = frame.renders.headings;
+        const int current = view.current;
         int minLevel = 6;
-        for (int k : listed)
+        for (int k : view.listed)
             minLevel = ImMin(minLevel, headings[k].level);
-        const bool touch = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
         const float lineHeight = ImGui::GetTextLineHeight();
-        const float rowHeight = touch ? lineHeight * 2.f : lineHeight;  // a finger needs a taller row
+        const float rowHeight = _RowHeight();
+        const bool searching = !frame.renders.query.empty();
         bool clicked = false;
-        for (int k : listed) {
+        for (int k : view.listed) {
             const Heading& heading = headings[k];
             ImGui::PushID(k);
             if (ImGui::Selectable("##entry", k == current, 0, ImVec2(0.f, rowHeight))) {
@@ -1384,17 +1615,47 @@ namespace RichMd
             ImVec2 pos = ImGui::GetItemRectMin();
             pos.x += ImGui::GetStyle().FramePadding.x + (float)(heading.level - minLevel) * ImGui::GetFontSize();
             pos.y += (rowHeight - lineHeight) * 0.5f;
-            // A heading that a collapsed section hides is dimmed: a click opens the section
-            ImU32 color = ImGui::GetColorU32(heading.hidden ? ImGuiCol_TextDisabled : ImGuiCol_Text);
-            ImGui::GetWindowDrawList()->AddText(pos, color, heading.text.c_str());
+            // A heading that a collapsed section hides is dimmed (a click opens the section), and while searching, a
+            // section without matches; the others show their count
+            const int count = searching ? view.counts[(size_t)k] : 0;
+            const bool dim = heading.hidden || (searching && count == 0);
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImU32 color = ImGui::GetColorU32(dim ? ImGuiCol_TextDisabled : ImGuiCol_Text);
+            drawList->AddText(pos, color, heading.text.c_str());
+            if (count > 0) {
+                char label[32];
+                snprintf(label, sizeof(label), "  (%d)", count);
+                pos.x += ImGui::CalcTextSize(heading.text.c_str()).x;
+                drawList->AddText(pos, ImGui::GetColorU32(ImGuiCol_TextDisabled), label);
+            }
             ImGui::PopID();
         }
         return clicked;
     }
 
+    // The table of contents, and the matches beside it in a second tab
+    static void _DrawTocTabs(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
+    {
+        if (!ImGui::BeginTabBar("##tabs"))
+            return;
+        if (ImGui::BeginTabItem("Contents")) {
+            _DrawTocEntries(frame, state, view);
+            ImGui::EndTabItem();
+        }
+        char label[48];
+        if (frame.renders.query.empty())
+            snprintf(label, sizeof(label), "Search###search");
+        else
+            snprintf(label, sizeof(label), "Search (%d)###search", (int)frame.renders.matches.size());
+        if (ImGui::BeginTabItem(label)) {
+            _DrawMatchList(frame, state, view);
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+
     // The table of contents beside the content, and its edge, dragged to resize it
-    static void _DrawTocPanel(const DocumentFrame& frame, DocumentState& state, const std::vector<int>& listed,
-                              int current)
+    static void _DrawTocPanel(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
     {
         ImGui::SetCursorPos(frame.origin);
         ImGui::BeginChild("##toc", ImVec2(frame.panelWidth, frame.size.y), ImGuiChildFlags_Borders);
@@ -1403,10 +1664,14 @@ namespace RichMd
         if (ImGui::ArrowButton("##hide", ImGuiDir_Left))
             state.panelShown = false;
         ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextDisabled("Contents");
-        ImGui::Separator();
-        _DrawTocEntries(frame, state, listed, current);
+        if (frame.options.search)
+            _DrawTocTabs(frame, state, view);
+        else {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Contents");
+            ImGui::Separator();
+            _DrawTocEntries(frame, state, view);
+        }
         ImGui::PopFont();
         ImGui::EndChild();
 
@@ -1425,10 +1690,11 @@ namespace RichMd
     }
 
     // The table of contents hidden, or a narrow document: a line above the content, with the current section, which
-    // opens the table of contents as a menu (a combo box), and a button that shows the panel again when there is room
-    static void _DrawTocLine(const DocumentFrame& frame, DocumentState& state, const std::vector<int>& listed,
-                             int current)
+    // opens the table of contents as a menu (a combo box), a button that shows the panel again when there is room, and
+    // a magnifier that opens the find bar (a touch screen has no Ctrl+F)
+    static void _DrawTocLine(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
     {
+        const int current = view.current;
         ImGui::SetCursorPos(frame.origin);
         SizedFont font = GetFont(MarkdownFontSpec());
         ImGui::PushFont(font.font, font.size);
@@ -1438,10 +1704,19 @@ namespace RichMd
             ImGui::SameLine();
         }
         const std::string& title = current >= 0 ? frame.renders.headings[current].text : std::string("Contents");
-        ImGui::SetNextItemWidth(-FLT_MIN);
+        const float findWidth = frame.options.search ? ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x : 0.f;
+        ImGui::SetNextItemWidth(-FLT_MIN - findWidth);
         if (ImGui::BeginCombo("##section", title.c_str(), ImGuiComboFlags_HeightLarge)) {
-            _DrawTocEntries(frame, state, listed, current);  // a click on an entry closes the menu
+            if (frame.options.search)  // a click on an entry or a match closes the menu
+                _DrawTocTabs(frame, state, view);
+            else
+                _DrawTocEntries(frame, state, view);
             ImGui::EndCombo();
+        }
+        if (frame.options.search) {
+            ImGui::SameLine();
+            if (_IconButton("##find", _Icon::Find))
+                _OpenSearch(state);
         }
         ImGui::PopFont();
     }
@@ -1470,34 +1745,48 @@ namespace RichMd
 
         // The entries of the table of contents, and the current section: the last shown heading at or above the top
         // of the view
-        std::vector<int> listed;
-        int current = -1;
+        _DocumentView view;
         for (int k = 0; k < (int)headings.size(); ++k) {
             if (headings[k].level > frame.options.tocMaxLevel)
                 continue;
-            listed.push_back(k);
+            view.listed.push_back(k);
             float top = ImMax(frame.scrollY, frame.renders.contentStartY) + ImGui::GetFontSize() * 0.5f;
             if (!headings[k].hidden && headings[k].y <= top)
-                current = k;
+                view.current = k;
         }
+        // The section of each match (the matches and the headings are in the order of the document)
+        view.counts.assign(headings.size(), 0);
+        size_t next = 0;
+        int section = -1;
+        for (const DocumentMatch& match : frame.renders.matches) {
+            while (next < view.listed.size() && headings[(size_t)view.listed[next]].y <= match.y + 1.f)
+                section = view.listed[next++];
+            view.sections.push_back(section);
+            if (section >= 0)
+                view.counts[(size_t)section]++;
+        }
+        if (frame.options.search)
+            _DrawScrollbarTicks(frame, state, view);
         ImGui::EndChild();  // the content
         const ImVec2 contentMin = ImGui::GetItemRectMin(), contentMax = ImGui::GetItemRectMax();
 
-        state.headingCount = (int)listed.size();
+        state.headingCount = (int)view.listed.size();
         if (frame.panel)
-            _DrawTocPanel(frame, state, listed, current);
+            _DrawTocPanel(frame, state, view);
         else if (frame.line)
-            _DrawTocLine(frame, state, listed, current);
-        state.currentSection = current;
+            _DrawTocLine(frame, state, view);
+        state.currentSection = view.current;
 
         // The search: Ctrl+F (Cmd+F on macOS) in the document opens the find bar, drawn over the content
         if (frame.options.search) {
-            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F)) {  // routed to the focused window and its parents
-                state.searchOpen = true;
-                state.focusQuery = state.selectQuery = true;
-            }
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F))  // routed to the focused window and its parents
+                _OpenSearch(state);
+            // Escape anywhere in the document closes the bar; an active widget that uses Escape (the query's field, a
+            // text field of the application) has the priority
+            if (state.searchOpen && ImGui::Shortcut(ImGuiKey_Escape))
+                _CloseSearch(state);
             if (state.searchOpen)
-                _DrawFindBar(frame, state, contentMin, contentMax);
+                _DrawFindBar(frame, state, view, contentMin, contentMax);
             else
                 state.findBarBottom = 0.f;
         }

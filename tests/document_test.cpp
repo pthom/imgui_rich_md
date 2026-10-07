@@ -3,9 +3,10 @@
 // DocumentHeading() gives a section of widgets its heading. RenderDocument() is the one-call form. The table of
 // contents: shown from tocMinHeadings headings, a click on an entry scrolls to its heading, a button hides it (a line
 // then shows a button that brings it back). The search: Ctrl+F opens the find bar, a query finds its matches in the
-// document, Enter, Shift+Enter and the arrows go through them (the scroll follows, animated), Escape closes the bar and
-// keeps the query. The user errors (a document inside a document, an EndDocument() without its BeginDocument(), a
-// document left open) are reported.
+// document, Enter, Shift+Enter and the arrows go through them (the scroll follows, animated), a click on a match of the
+// list under the find bar or of the ticks on the scrollbar goes to it, Escape closes the bar and keeps the query, the
+// magnifier of a narrow document opens the bar. The user errors (a document inside a document, an EndDocument() without
+// its BeginDocument(), a document left open) are reported.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs, ImGuiContext::ErrorCountCurrentFrame, the child windows
 #include "imgui_impl_null.h"
@@ -328,6 +329,42 @@ static bool CheckSearch()
     ok = Expect("whole words: \"Line 40\" does not match \"Line 4\"", state.matchCount == 1) && ok;
     state.searchOptions.wholeWords = false;
 
+    // The list under the find bar: the title of the section, then a row per match. A click on the third one goes to it.
+    const float lineHeight = RichMd::GetFont(RichMd::MarkdownFontSpec()).size;
+    const float pitch = lineHeight + ImGui::GetStyle().ItemSpacing.y;
+    state.dropdownOpen = true;
+    DrawFrame(content);
+    ImGuiWindow* list = ChildNamed(ChildNamed(DocumentWindow("search"), "##findbar"), "##matches");
+    ok = Expect("the list of the matches opens under the find bar", list != nullptr) && ok;
+    if (list) {
+        ClickAt(ImVec2(list->DC.CursorStartPos.x + 20.f, list->DC.CursorStartPos.y + 3.f * pitch + lineHeight * 0.5f),
+                content);
+        ok = Expect("a click on a match of the list goes to it", state.currentMatch == 2) && ok;
+    }
+
+    // The ticks on the scrollbar: a hover shows the context of their matches, a click opens a small window that lists
+    // them, and a click on one of them goes to it
+    ImGuiWindow* contentWindow = ChildNamed(DocumentWindow("search"), "##content");
+    const ImRect bar = ImGui::GetWindowScrollbarRect(contentWindow, ImGuiAxis_Y);
+    float tickY = -1.f;
+    for (float y = bar.Max.y - 2.f; y > bar.Min.y && tickY < 0.f; y -= 1.f) {  // from the bottom: the last matches
+        ImGui::GetIO().AddMousePosEvent(bar.GetCenter().x, y);
+        DrawFrame(content);
+        ImGuiWindow* tooltip = ImGui::FindWindowByName("##Tooltip_00");
+        if (tooltip && tooltip->Active)
+            tickY = y;
+    }
+    ok = Expect("a hover on a tick shows the context of its matches", tickY > 0.f) && ok;
+    ClickAt(ImVec2(bar.GetCenter().x, tickY), content);
+    ok = Expect("a click on a tick opens the list of its matches", GImGui->OpenPopupStack.Size == 1) && ok;
+    if (GImGui->OpenPopupStack.Size == 1 && !state.tickMatches.empty()) {
+        ImGuiWindow* popup = GImGui->OpenPopupStack[0].Window;
+        ClickAt(ImVec2(popup->DC.CursorStartPos.x + 20.f, popup->DC.CursorStartPos.y + pitch + lineHeight * 0.5f),
+                content);
+        ok = Expect("a click on a match of a tick goes to it",
+                    state.currentMatch == state.tickMatches[0] && state.currentMatch > 2) && ok;
+    }
+
     PressKey(ImGuiKey_Escape, content);
     ok = Expect("Escape closes the find bar", !state.searchOpen) && ok;
 
@@ -337,6 +374,19 @@ static bool CheckSearch()
     DrawFrame(content);
     PressKey(ImGuiKey_Escape, content);
     ok = Expect("the query stays for the next search", std::string(state.query) == "Line 5") && ok;
+
+    // A narrow document: the magnifier at the end of its line opens the find bar (a touch screen has no Ctrl+F)
+    auto narrow = []() {
+        RichMd::RenderDocument("narrow search", "## One\n\n## Two\n\n## Three\n",
+                               ImVec2(ImGui::GetFontSize() * 30.f, 200.f));
+    };
+    DrawFrame(narrow);
+    DrawFrame(narrow);
+    ImGuiWindow* line = DocumentWindow("narrow search");
+    const float half = ImGui::GetFrameHeight() * 0.5f;
+    ClickAt(ImVec2(line->WorkRect.Max.x - half, line->DC.CursorStartPos.y + half), narrow);
+    ok = Expect("the magnifier of a narrow document opens its find bar", DocumentStateOf("narrow search").searchOpen)
+         && ok;
     return ok;
 }
 
