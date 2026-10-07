@@ -1065,6 +1065,14 @@ namespace RichMd
         context->documentNesting = 0;
     }
 
+    // Whether the headings fold: the context's option, or the current document's
+    static void _SetFoldOptions(Context* context, MarkdownRenderer* renderer)
+    {
+        renderer->foldableHeadings = context->options.foldableHeadings
+                                     || (context->document && context->document->renders.foldable);
+        renderer->foldableHeadingsMinLevel = context->options.foldableHeadingsMinLevel;
+    }
+
     // ::md Rendering a fragment
     // Each `Render()` call renders a *fragment*: `Render()` removes its common indentation and resolves its
     // transclusions (once per text: the result is cached in the context), then `RenderRaw()` gives it its own ImGui
@@ -1094,8 +1102,7 @@ namespace RichMd
         _CheckDocumentEnded(context);
         renderer->selectableText = context->selectableTextStack.empty()
             ? context->options.selectableText : context->selectableTextStack.back();
-        renderer->foldableHeadings = context->options.foldableHeadings;
-        renderer->foldableHeadingsMinLevel = context->options.foldableHeadingsMinLevel;
+        _SetFoldOptions(context, renderer);
         renderer->Render(markdownString);
         ImGui::PopID();
         _SweepDestroyedTextures();
@@ -1184,7 +1191,8 @@ namespace RichMd
         ImGui::BeginChild("##content", contentSize, contentFlags);
         frame->scrollY = ImGui::GetScrollY();
         frame->renders.contentStartY = ImGui::GetCursorPosY();
-        if (context->options.foldableHeadings) {  // the margin of the fold arrows, at the left of all the content
+        frame->renders.foldable = context->options.foldableHeadings || options.foldableHeadings;
+        if (frame->renders.foldable) {  // the margin of the fold arrows, at the left of all the content
             frame->renders.foldMarginLeft = ImGui::GetCursorScreenPos().x;
             frame->renders.foldMargin = GetFont(MarkdownFontSpec()).size * 1.5f;
             ImGui::Indent(frame->renders.foldMargin);
@@ -1960,6 +1968,7 @@ namespace RichMd
         MarkdownRenderer* renderer = _Renderer();
         if (!context || !context->document || !renderer)
             return true;  // outside a document, there is nothing to record
+        _SetFoldOptions(context, renderer);
         return renderer->document_heading(level, text);
     }
 

@@ -4,7 +4,8 @@
 // fold; the "#" title does not fold (foldableHeadingsMinLevel). A link to a heading of a folded section unfolds it.
 // FoldAllHeadings() folds them all, and unfolds them all, also those inside a folded section. In a document, a fold
 // goes on across its renders and its sections of widgets: DocumentHeading() returns false for a hidden section, and
-// a jump of the search to a match in a folded section unfolds what hides it.
+// a jump of the search to a match in a folded section unfolds what hides it. A document folds also when it asks for it
+// (DocumentOptions::foldableHeadings), in a context whose option is off.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs
 #include "imgui_impl_null.h"
@@ -43,7 +44,8 @@ Beta text.
 Gamma text.
 )";
 
-static int gFoldAll = 0;  // FoldAllHeadings() after the render of the next frame: 1 folds, -1 unfolds
+static int gFoldAll = 0;
+static bool gDocumentFoldable = false;  // DocumentOptions::foldableHeadings of the document  // FoldAllHeadings() after the render of the next frame: 1 folds, -1 unfolds
 
 struct Frame
 {
@@ -144,6 +146,7 @@ static DocFrame DrawDocument(int foldAll = 0)
     ImGui::Begin("Document window", nullptr, ImGuiWindowFlags_NoTitleBar);
     RichMd::DocumentOptions options;
     options.toc = false;
+    options.foldableHeadings = gDocumentFoldable;
     RichMd::BeginDocument("doc", ImVec2(0.f, 0.f), options);
     frame.origin = ImGui::GetCursorScreenPos();
     frame.originY = ImGui::GetCursorPosY();
@@ -305,6 +308,15 @@ int main(int, char**)
     ok = Expect("unfold all gives the whole height back", ImAbs(f.height - open.height) <= 1.f) && ok;
 
     ok = CheckDocument() && ok;
+
+    // A context without the option: the document asks for the folds
+    RichMd::DestroyContext();
+    RichMd::CreateContext(RichMd::MarkdownOptions());
+    gDocumentFoldable = true;
+    ok = CheckDocument() && ok;
+    DrawFrame();
+    ok = Expect("without the option, a plain render does not fold", ClickArrow(DrawFrame(), "alpha").height == open.height)
+         && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

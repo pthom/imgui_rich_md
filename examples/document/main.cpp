@@ -1,6 +1,6 @@
 // imgui_rich_md documents: markdown in a scroll area of its own, with a table of contents beside it. The document is
 // made of two renders and a section of widgets between them; a link [text](#slug) reaches a heading of any of them.
-// Its headings fold (MarkdownOptions::foldableHeadings).
+// Its headings fold (DocumentOptions::foldableHeadings).
 #include "common/app_glfw_gl3.h"
 #include "imgui_rich_md/rich_md.h"
 
@@ -108,7 +108,9 @@ static void Gui()
     static const std::string kLongText = LongText();
     static float frequency = 2.f;
 
-    RichMd::BeginDocument("document");
+    RichMd::DocumentOptions options;
+    options.foldableHeadings = true;  // an arrow at the left of each heading folds its section
+    RichMd::BeginDocument("document", ImVec2(0.f, 0.f), options);
     RichMd::Render(kIntro);
 
     // A section of widgets: DocumentHeading() draws its title as a markdown heading, and gives it a slug. It returns
@@ -124,7 +126,5 @@ static void Gui()
 
 int main(int, char**)
 {
-    RichMd::MarkdownOptions options;
-    options.foldableHeadings = true;
-    return RunApp("imgui_rich_md: a document", ImVec2(900, 650), options, Gui);
+    return RunApp("imgui_rich_md: a document", ImVec2(900, 650), RichMd::MarkdownOptions(), Gui);
 }

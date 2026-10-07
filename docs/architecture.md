@@ -49,8 +49,7 @@ void RenderRaw(const std::string& markdownString)
     _CheckDocumentEnded(context);
     renderer->selectableText = context->selectableTextStack.empty()
         ? context->options.selectableText : context->selectableTextStack.back();
-    renderer->foldableHeadings = context->options.foldableHeadings;
-    renderer->foldableHeadingsMinLevel = context->options.foldableHeadingsMinLevel;
+    _SetFoldOptions(context, renderer);
     renderer->Render(markdownString);
     ImGui::PopID();
     _SweepDestroyedTextures();

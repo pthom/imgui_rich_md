@@ -83,9 +83,9 @@ namespace RichMd
     to the document, and a link `[text](#slug)` in any of them reaches a heading of any other. `DocumentHeading()`
     gives a section made of widgets its heading, as a markdown heading does.
 
-    With foldable headings, a fold goes on across the renders and the sections of widgets: `DocumentHeading()` returns
-    false when a fold hides its section, and the application skips its widgets. The table of contents folds or unfolds
-    them all.
+    With foldable headings (`DocumentOptions::foldableHeadings` for one document, or the context's option), a fold goes
+    on across the renders and the sections of widgets: `DocumentHeading()` returns false when a fold hides its section,
+    and the application skips its widgets. The table of contents folds or unfolds them all.
 
     The search: Ctrl+F (Cmd+F on macOS) in a document opens its find bar, and so does "/" when no text field is active
     (in a web page, Cmd+F also opens the browser's find bar, unless the page cancels the key while its canvas has the
@@ -121,6 +121,8 @@ namespace RichMd
         bool search = true;
         ScrollAnimation scrollAnimation = ScrollAnimation::FollowSystem;
         float scrollAnimationSeconds = 0.3f;  // the duration of an animated scroll, whatever its distance
+        // The headings of this document fold (also when the context's MarkdownOptions::foldableHeadings is off)
+        bool foldableHeadings = false;
     };
     // A document: the renders and the widgets drawn until EndDocument() share a scroll area and their headings.
     // size: as BeginChild (0: all the available space). Call EndDocument() in the same frame. The content is always

@@ -62,6 +62,7 @@ namespace RichMd
         int foldAll = 0;                      // fold all (1) or unfold all (-1), asked in this frame: done at its end
         // The margin of the fold arrows, at the left of all the content; and the fold open at the end of the last
         // render or section of widgets: it goes on in the next ones
+        bool foldable = false;  // its headings fold (its options, or the context's)
         float foldMargin = 0.f, foldMarginLeft = 0.f;
         int foldLevel = 0;
         float foldY = 0.f, foldBottom = 0.f;
