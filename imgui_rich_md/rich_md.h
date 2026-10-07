@@ -52,14 +52,14 @@ namespace RichMd
     (`<details>`) that hide it. A slug that no heading of the render has goes to `OnOpenLink`, as any link.
     ::code
     */
+
     // A heading of the last render
     struct Heading
     {
         int level = 1;          // 1 to 6
         std::string text;       // without markup
         std::string slug;       // its anchor, made from the text as GitHub does (a repeated title gets -1, -2...)
-        float y = 0.f;          // its top, in the content coordinates of the window that holds the render (as
-                                // ImGui::GetCursorPosY()): in a child window, ImGui::SetScrollY(y) shows it at the top
+        float y = 0.f;          // its top, in its window's content coordinates: SetScrollY(y) shows it at the top
         bool hidden = false;    // inside a collapsed <details>: y is the one of the section's header
     };
     // The headings of the last Render() call (valid until the next one)
@@ -75,15 +75,16 @@ namespace RichMd
     to the document, and a link `[text](#slug)` in any of them reaches a heading of any other. `DocumentHeading()`
     gives a section made of widgets its heading, as a markdown heading does.
 
-    The search: Ctrl+F (Cmd+F on macOS) in a document opens its find bar (on a touch screen: the magnifier above a narrow
-    document, or the Search tab of the table of contents). The matches are highlighted in all its renders; Enter goes
-    to the next one, Shift+Enter (or the up arrow) to the previous one, and past the last one back to the first (the bar
-    says so). Escape closes the bar, and the current match becomes the selection. The matches with their context are
-    listed under the bar and in the Search tab, the table of contents shows their count per section, and ticks on the
-    scrollbar show where they are. The search also finds the text of the collapsed sections (a jump to one of their
-    matches opens them), of the code blocks, and of the formulas (their LaTeX source: a formula is one match).
+    The search: Ctrl+F (Cmd+F on macOS) in a document opens its find bar (on a touch screen: the magnifier above a
+    narrow document, or the Search tab of the table of contents). The matches are highlighted in all its renders; Enter
+    goes to the next one, Shift+Enter (or the up arrow) to the previous one, and past the last one back to the first
+    (the bar says so). Escape closes the bar, and the current match becomes the selection. The matches with their
+    context are listed under the bar and in the Search tab, the table of contents shows their count per section, and
+    ticks on the scrollbar show where they are. The search also finds the text of the collapsed sections (a jump to one
+    of their matches opens them), of the code blocks, and of the formulas (their LaTeX source: a formula is one match).
     ::code
     */
+
     // The scroll to a match, a heading or an anchor: eased over scrollAnimationSeconds, unless reduced motion is asked
     enum class ScrollAnimation
     {
@@ -110,7 +111,8 @@ namespace RichMd
     // A document: the renders and the widgets drawn until EndDocument() share a scroll area and their headings.
     // size: as BeginChild (0: all the available space). Call EndDocument() in the same frame. The content is always
     // drawn: there is no return value to skip it. One document at a time.
-    void BeginDocument(const char* id, ImVec2 size = ImVec2(0.f, 0.f), const DocumentOptions& options = DocumentOptions());
+    void BeginDocument(const char* id, ImVec2 size = ImVec2(0.f, 0.f),
+                       const DocumentOptions& options = DocumentOptions());
     void EndDocument();
     // The one-call form: BeginDocument(id, size, options), Render(markdown), EndDocument()
     void RenderDocument(const char* id, const std::string& markdown, ImVec2 size = ImVec2(0.f, 0.f),
