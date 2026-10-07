@@ -4,8 +4,9 @@
 // contents: shown from tocMinHeadings headings, a click on an entry scrolls to its heading, a button hides it (a line
 // then shows a button that brings it back). The search: Ctrl+F opens the find bar, a query finds its matches in the
 // document, Enter, Shift+Enter and the arrows go through them (the scroll follows, animated), a click on a match of the
-// list under the find bar or of the ticks on the scrollbar goes to it, Escape closes the bar and keeps the query, the
-// magnifier of a narrow document opens the bar. The user errors (a document inside a document, an EndDocument() without
+// list under the find bar or of the ticks on the scrollbar goes to it, a step past an end wraps around and says so,
+// Escape closes the bar (its current match becomes the selection) and keeps the query. The magnifier of a narrow
+// document opens the bar, above its content. The user errors (a document inside a document, an EndDocument() without
 // its BeginDocument(), a document left open) are reported.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs, ImGuiContext::ErrorCountCurrentFrame, the child windows
@@ -21,6 +22,7 @@
 #include <vector>
 
 static std::string gOpenedLink;
+static std::string gClipboard;
 
 static std::string Lines(int from, int to)
 {
@@ -323,6 +325,7 @@ static bool CheckSearch()
     ok = Expect("the up arrow before the first match wraps to the last", state.currentMatch == 10) && ok;
     PressKey(ImGuiKey_DownArrow, content);
     ok = Expect("the down arrow after the last match wraps to the first", state.currentMatch == 0) && ok;
+    ok = Expect("the find bar says it wrapped around", state.wrapMessage != nullptr) && ok;
 
     state.searchOptions.wholeWords = true;
     DrawFrame(content);
@@ -340,6 +343,7 @@ static bool CheckSearch()
         ClickAt(ImVec2(list->DC.CursorStartPos.x + 20.f, list->DC.CursorStartPos.y + 3.f * pitch + lineHeight * 0.5f),
                 content);
         ok = Expect("a click on a match of the list goes to it", state.currentMatch == 2) && ok;
+        ok = Expect("a move within the matches clears the message", state.wrapMessage == nullptr) && ok;
     }
 
     // The ticks on the scrollbar: a hover shows the context of their matches, a click opens a small window that lists
@@ -367,6 +371,9 @@ static bool CheckSearch()
 
     PressKey(ImGuiKey_Escape, content);
     ok = Expect("Escape closes the find bar", !state.searchOpen) && ok;
+    gClipboard.clear();
+    PressKey(ImGuiMod_Ctrl | ImGuiKey_C, content);
+    ok = Expect("the current match became the selection", gClipboard == "Line 4") && ok;
 
     // Ctrl+F again: the field selects the query, a new one replaces it; Escape keeps it for the next search
     PressKey(ImGuiMod_Ctrl | ImGuiKey_F, content);
@@ -387,6 +394,12 @@ static bool CheckSearch()
     ClickAt(ImVec2(line->WorkRect.Max.x - half, line->DC.CursorStartPos.y + half), narrow);
     ok = Expect("the magnifier of a narrow document opens its find bar", DocumentStateOf("narrow search").searchOpen)
          && ok;
+    ImGuiWindow* findBar = ChildNamed(line, "##findbar");
+    ImGuiWindow* below = ChildNamed(line, "##content");
+    const float lineBottom = line->DC.CursorStartPos.y + lineHeight + 2.f * ImGui::GetStyle().FramePadding.y;
+    ok = Expect("in a narrow document, the find bar is between the line and the content",
+                findBar && below && findBar->Pos.y >= lineBottom - 1.f
+                    && below->Pos.y >= findBar->Pos.y + findBar->Size.y) && ok;
     return ok;
 }
 
@@ -435,6 +448,7 @@ int main(int, char**)
     ImGui_ImplNull_Init();
     RichMd::MarkdownOptions options;
     options.callbacks.OnOpenLink = [](const std::string& url) { gOpenedLink = url; };
+    ImGui::GetPlatformIO().Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { gClipboard = text; };
     RichMd::CreateContext(options);
     DrawFrame([]() { RichMd::Render("warm up"); });  // the first frame loads the fonts
 

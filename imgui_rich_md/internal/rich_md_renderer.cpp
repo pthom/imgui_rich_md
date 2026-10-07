@@ -1895,6 +1895,8 @@ int Renderer::print(const char* str, const char* str_end)
 	const int fragmentRank = document ? document->fragmentCount++ : -1;
 	if (!document)
 		resolve_anchor(selectionId);
+	else if (selectableText && document->selectFragment == fragmentRank)  // the find bar closed on a match of it
+		select_range(selectionId, document->selectBegin, document->selectEnd);
 
     if (selectableText)
         update_selection(selectionId);
@@ -2154,6 +2156,15 @@ void Renderer::select_at(ImGuiID fragmentId, size_t offset, int clicks)
 	}
 	m_selection_anchor = b;
 	m_selection_focus = e;
+}
+
+void Renderer::select_range(ImGuiID fragmentId, size_t b, size_t e)
+{
+	m_selection_fragment = fragmentId;
+	m_selection_text_hash = ImHashStr(m_fragment_begin, (size_t)(m_fragment_end - m_fragment_begin));
+	m_selection_anchor = b;
+	m_selection_focus = e;
+	m_selection_by_unit = false;
 }
 
 void Renderer::select_all(ImGuiID fragmentId)

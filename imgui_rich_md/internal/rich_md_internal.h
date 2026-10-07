@@ -66,6 +66,8 @@ namespace RichMd
         int currentFragment = -1;   // the current match, as of the last frame: its render and its first byte
         size_t currentBegin = 0;
         std::vector<DocumentMatch> matches;
+        int selectFragment = -1;    // the find bar closed on a match of the render of this rank: it gets selected
+        size_t selectBegin = 0, selectEnd = 0;
     };
 
     // A document being drawn: its headings, and its layout in this frame (decided by BeginDocument(), drawn by
@@ -124,6 +126,10 @@ namespace RichMd
         bool dropdownOpen = false;              // the matches with their context, under the find bar
         std::vector<int> tickMatches;           // the matches of the ticks clicked on the scrollbar, in a small window
         ImVec2 tickPopupPos;
+        const char* wrapMessage = nullptr;      // the last step went past an end: the bar says it wrapped around
+        float findBarHeight = 0.f;              // a narrow document: the room the find bar takes above the content
+        int selectFragment = -1;                // the find bar closed on a match: its render selects it
+        size_t selectBegin = 0, selectEnd = 0;
         float findBarBottom = 0.f;              // the bottom of the find bar below the content's top (a jump aims below)
     };
 

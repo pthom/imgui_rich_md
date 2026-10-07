@@ -1104,6 +1104,7 @@ namespace RichMd
             ImGui::SetNextWindowFocus();
             state.focusContent = false;
         }
+        ImVec2 contentPos = frame->origin, contentSize = frame->size;
         if (frame->panel) {
             float maxEm = ImMax(kPanelMinEm, frame->size.x / em - kContentMinEm);
             state.panelWidth = ImClamp(state.panelWidth, kPanelMinEm, maxEm);
@@ -1111,17 +1112,23 @@ namespace RichMd
             bool touch = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
             frame->splitterWidth = em * (touch ? 1.f : 0.5f);  // a finger needs a wider edge
             float left = frame->panelWidth + frame->splitterWidth;
-            ImGui::SetCursorPos(ImVec2(frame->origin.x + left, frame->origin.y));
-            ImGui::BeginChild("##content", ImVec2(frame->size.x - left, frame->size.y), contentFlags);
+            contentPos.x += left;
+            contentSize.x -= left;
         } else if (frame->line) {
             SizedFont font = GetFont(MarkdownFontSpec());  // the line is drawn in the markdown font
             ImGui::PushFont(font.font, font.size);
             float lineHeight = ImGui::GetFrameHeightWithSpacing();
             ImGui::PopFont();
-            ImGui::SetCursorPos(ImVec2(frame->origin.x, frame->origin.y + lineHeight));
-            ImGui::BeginChild("##content", ImVec2(frame->size.x, frame->size.y - lineHeight), contentFlags);
-        } else
-            ImGui::BeginChild("##content", frame->size, contentFlags);
+            contentPos.y += lineHeight;
+            contentSize.y -= lineHeight;
+        }
+        if (frame->narrow && options.search && state.searchOpen) {  // the find bar above the content, not over it
+            float room = state.findBarHeight + ImGui::GetStyle().ItemSpacing.y;
+            contentPos.y += room;
+            contentSize.y -= room;
+        }
+        ImGui::SetCursorPos(contentPos);
+        ImGui::BeginChild("##content", contentSize, contentFlags);
         frame->scrollY = ImGui::GetScrollY();
         frame->renders.contentStartY = ImGui::GetCursorPosY();
         if (options.search && state.searchOpen) {  // the renders find the matches of the query, and draw them
@@ -1131,6 +1138,10 @@ namespace RichMd
             frame->renders.currentFragment = state.currentFragment;
             frame->renders.currentBegin = state.currentBegin;
         }
+        frame->renders.selectFragment = state.selectFragment;  // once
+        frame->renders.selectBegin = state.selectBegin;
+        frame->renders.selectEnd = state.selectEnd;
+        state.selectFragment = -1;
         context->document = std::move(frame);
         context->documentFrame = ImGui::GetFrameCount();
         if (MarkdownRenderer* renderer = _Renderer())
@@ -1222,6 +1233,7 @@ namespace RichMd
         if (frame.renders.query.empty() || matches.empty()) {
             state.currentMatch = -1;
             state.matchMoved = false;
+            state.wrapMessage = nullptr;
             state.step = 0;
             state.jumpToFirst = false;
             return;
@@ -1241,10 +1253,15 @@ namespace RichMd
                     break;
                 }
             scroll = state.jumpToFirst;
+            if (state.jumpToFirst)
+                state.wrapMessage = nullptr;
             state.jumpToFirst = false;
         }
-        if (state.step != 0) {
-            current = (current + state.step + (int)matches.size()) % (int)matches.size();
+        if (state.step != 0) {  // past an end: at once to the other end, and the find bar says so
+            const int n = (int)matches.size(), next = current + state.step;
+            state.wrapMessage = next >= n ? "Reached the end, continued from the top."
+                                : next < 0 ? "Reached the top, continued from the end." : nullptr;
+            current = (next + n) % n;
             state.step = 0;
             scroll = true;
         }
@@ -1299,14 +1316,24 @@ namespace RichMd
         state.searchOpen = true;
         state.focusQuery = state.selectQuery = true;
     }
-    static void _CloseSearch(DocumentState& state)
+    // Closing the find bar: its current match becomes the selection (selected by its render at the next frame), and the
+    // content takes the focus back (else it falls out of the document, and Ctrl+F no longer reaches it)
+    static void _CloseSearch(const DocumentFrame& frame, DocumentState& state)
     {
         state.searchOpen = false;
-        state.focusContent = true;  // else the focus falls out of the document, and Ctrl+F no longer reaches it
+        state.focusContent = true;
+        state.wrapMessage = nullptr;
+        if (state.currentMatch >= 0 && state.currentMatch < (int)frame.renders.matches.size()) {
+            const DocumentMatch& match = frame.renders.matches[(size_t)state.currentMatch];
+            state.selectFragment = match.fragment;
+            state.selectBegin = match.begin;
+            state.selectEnd = match.end;
+        }
     }
 
     static void _GoToMatch(DocumentState& state, const DocumentMatch& match)
     {
+        state.wrapMessage = nullptr;
         state.currentFragment = match.fragment;
         state.currentBegin = match.begin;
         _ScrollToMatch(state, match.fragment, match.begin);
@@ -1488,9 +1515,9 @@ namespace RichMd
         ImGui::PopFont();
     }
 
-    // The find bar, over the top right of the content (its whole width when the document is narrow): the query, the
-    // count, the previous and the next match, the list of the matches, the options. Enter goes to the next match,
-    // Shift+Enter to the previous, Escape closes it.
+    // The find bar, over the top right of the content (in a narrow document, above it): the query, the count, the
+    // previous and the next match, the list of the matches, the options. Enter goes to the next match, Shift+Enter to
+    // the previous, Escape closes it.
     static void _DrawFindBar(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view,
                              ImVec2 contentMin, ImVec2 contentMax)
     {
@@ -1499,9 +1526,13 @@ namespace RichMd
         const float em = ImGui::GetFontSize();
         const ImGuiStyle& style = ImGui::GetStyle();
         const float pad = em * 0.4f;
-        const float available = contentMax.x - contentMin.x - style.ScrollbarSize - 2.f * pad;
-        const float width = frame.narrow ? available : ImMin(em * 30.f, available);
-        ImGui::SetCursorScreenPos(ImVec2(contentMax.x - style.ScrollbarSize - pad - width, contentMin.y + pad));
+        float width = contentMax.x - contentMin.x;
+        if (frame.narrow)  // BeginDocument() made its room
+            ImGui::SetCursorScreenPos(ImVec2(contentMin.x, contentMin.y - state.findBarHeight - style.ItemSpacing.y));
+        else {
+            width = ImMin(em * 30.f, width - style.ScrollbarSize - 2.f * pad);
+            ImGui::SetCursorScreenPos(ImVec2(contentMax.x - style.ScrollbarSize - pad - width, contentMin.y + pad));
+        }
         ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
         background.w = 1.f;  // opaque: the text below does not show through
         ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
@@ -1548,7 +1579,7 @@ namespace RichMd
         if (typing && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             // Escape reverts the field to its text at its activation: the query stays for the next search
             ImStrncpy(state.query, query.c_str(), sizeof(state.query));
-            _CloseSearch(state);
+            _CloseSearch(frame, state);
         }
         ImGui::SameLine();
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + countWidth - ImGui::CalcTextSize(count).x);
@@ -1565,7 +1596,7 @@ namespace RichMd
             state.dropdownOpen = !state.dropdownOpen;
         ImGui::SameLine();
         if (_IconButton("##close", _Icon::Close))
-            _CloseSearch(state);
+            _CloseSearch(frame, state);
 
         ImGui::Checkbox("Match case", &state.searchOptions.matchCase);
         ImGui::SameLine();
@@ -1575,18 +1606,24 @@ namespace RichMd
         ImGui::Checkbox("Diacritics", &state.searchOptions.matchDiacritics);
         ImGui::SameLine();
         ImGui::Checkbox("Highlight all", &state.highlightAll);
+        if (state.wrapMessage != nullptr) {
+            const ImVec4 color = _Renderer()->admonition_color(Renderer::AdmonitionKind::Warning);
+            ImGui::TextColored(color, "%s", state.wrapMessage);
+        }
 
         if (state.dropdownOpen && !frame.renders.query.empty()) {  // the matches with their context, under the bar
             ImGui::Separator();
             const float rows = (float)ImMin(ImMax((int)frame.renders.matches.size(), 1), 10) + 1.f;
             float height = rows * (_RowHeight() + style.ItemSpacing.y);
-            height = ImMin(height, contentMax.y - ImGui::GetCursorScreenPos().y - style.WindowPadding.y - 2.f * pad);
+            const float below = contentMax.y - ImGui::GetCursorScreenPos().y - style.WindowPadding.y - 2.f * pad;
+            height = ImMin(height, frame.narrow ? frame.size.y * 0.35f : below);  // narrow: the content keeps its room
             ImGui::BeginChild("##matches", ImVec2(0.f, ImMax(height, ImGui::GetFrameHeight())));
             _DrawMatchList(frame, state, view);
             ImGui::EndChild();
         }
         ImGui::EndChild();
-        state.findBarBottom = ImGui::GetItemRectMax().y - contentMin.y;
+        state.findBarHeight = ImGui::GetItemRectSize().y;
+        state.findBarBottom = frame.narrow ? 0.f : ImGui::GetItemRectMax().y - contentMin.y;  // what it covers
         ImGui::PopFont();
     }
 
@@ -1784,7 +1821,7 @@ namespace RichMd
             // Escape anywhere in the document closes the bar; an active widget that uses Escape (the query's field, a
             // text field of the application) has the priority
             if (state.searchOpen && ImGui::Shortcut(ImGuiKey_Escape))
-                _CloseSearch(state);
+                _CloseSearch(frame, state);
             if (state.searchOpen)
                 _DrawFindBar(frame, state, view, contentMin, contentMax);
             else

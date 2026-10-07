@@ -379,6 +379,7 @@ private:
 	void update_selection(ImGuiID fragmentId);
 	void show_selection_menu(ImGuiID fragmentId);
 	void draw_selection() const;
+	void select_range(ImGuiID fragmentId, size_t b, size_t e);
 	// The rectangles (on the screen) of the text between two offsets of the fragment: one per run
 	void range_rects(size_t b, size_t e, std::vector<ImRect>& out) const;
 	// The matches of the document's search in this fragment: added to the document, drawn behind the text

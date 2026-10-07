@@ -64,9 +64,10 @@ gives a section made of widgets its heading, as a markdown heading does.
 
 The search: Ctrl+F (Cmd+F on macOS) in a document opens its find bar (on a touch screen: the magnifier above a narrow
 document, or the Search tab of the table of contents). The matches are highlighted in all its renders; Enter goes
-to the next one, Shift+Enter (or the up arrow) to the previous one, Escape closes the bar. The matches with their
-context are listed under the bar and in the Search tab, the table of contents shows their count per section, and
-ticks on the scrollbar show where they are.
+to the next one, Shift+Enter (or the up arrow) to the previous one, and past the last one back to the first (the bar
+says so). Escape closes the bar, and the current match becomes the selection. The matches with their context are
+listed under the bar and in the Search tab, the table of contents shows their count per section, and ticks on the
+scrollbar show where they are.
 
 ```cpp
 // The scroll to a match, a heading or an anchor: eased over scrollAnimationSeconds, unless reduced motion is asked
