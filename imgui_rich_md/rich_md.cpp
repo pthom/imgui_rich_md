@@ -1186,7 +1186,7 @@ namespace RichMd
         frame->renders.contentStartY = ImGui::GetCursorPosY();
         if (context->options.foldableHeadings) {  // the margin of the fold arrows, at the left of all the content
             frame->renders.foldMarginLeft = ImGui::GetCursorScreenPos().x;
-            frame->renders.foldMargin = ImGui::GetFontSize();
+            frame->renders.foldMargin = GetFont(MarkdownFontSpec()).size * 1.5f;
             ImGui::Indent(frame->renders.foldMargin);
         }
         frame->renders.foldAll = state.foldAll;  // asked by the table of contents at the last frame
@@ -1339,7 +1339,7 @@ namespace RichMd
     }
 
     // The icons of the document's buttons, drawn (the fonts need no glyph)
-    enum class _Icon { Close, Find, List, FoldAll, UnfoldAll };
+    enum class _Icon { Close, Find, List };
     static bool _IconButton(const char* id, _Icon icon)
     {
         const float size = ImGui::GetFrameHeight();
@@ -1357,17 +1357,6 @@ namespace RichMd
             drawList->AddCircle(lens, r * 0.75f, color, 0, thickness);
             drawList->AddLine(ImVec2(lens.x + r * 0.55f, lens.y + r * 0.55f), ImVec2(c.x + r * 1.1f, c.y + r * 1.1f),
                               color, thickness * 1.3f);
-        } else if (icon == _Icon::FoldAll || icon == _Icon::UnfoldAll) {  // two arrows, as those of the headings
-            const float s = r * 0.45f;
-            for (int k = -1; k <= 1; k += 2) {
-                const ImVec2 p(c.x, c.y + (float)k * r * 0.55f);
-                if (icon == _Icon::FoldAll)
-                    drawList->AddTriangleFilled(ImVec2(p.x - s * 0.6f, p.y - s), ImVec2(p.x - s * 0.6f, p.y + s),
-                                                ImVec2(p.x + s * 0.9f, p.y), color);
-                else
-                    drawList->AddTriangleFilled(ImVec2(p.x - s, p.y - s * 0.6f), ImVec2(p.x + s, p.y - s * 0.6f),
-                                                ImVec2(p.x, p.y + s * 0.9f), color);
-            }
         } else {  // three lines
             for (int k = -1; k <= 1; ++k) {
                 const float y = c.y + (float)k * r * 0.8f;
@@ -1711,9 +1700,17 @@ namespace RichMd
     }
 
     // The entries of the table of contents (the panel's, or the menu's): a click scrolls to the entry's heading.
+    // Above them, when the headings fold: fold all, unfold all (done at the next frame; a menu stays open).
     // Returns true when an entry was clicked.
     static bool _DrawTocEntries(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
     {
+        if (frame.renders.foldMargin > 0.f) {
+            if (ImGui::SmallButton("Fold all"))
+                state.foldAll = 1;
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Unfold all"))
+                state.foldAll = -1;
+        }
         const std::vector<Heading>& headings = frame.renders.headings;
         const int current = view.current;
         int minLevel = 6;
@@ -1784,16 +1781,6 @@ namespace RichMd
         if (ImGui::ArrowButton("##hide", ImGuiDir_Left))
             state.panelShown = false;
         ImGui::SameLine();
-        if (frame.renders.foldMargin > 0.f) {  // the headings fold: fold all, unfold all (done at the next frame)
-            if (_IconButton("##fold_all", _Icon::FoldAll))
-                state.foldAll = 1;
-            ImGui::SetItemTooltip("Fold all");
-            ImGui::SameLine();
-            if (_IconButton("##unfold_all", _Icon::UnfoldAll))
-                state.foldAll = -1;
-            ImGui::SetItemTooltip("Unfold all");
-            ImGui::SameLine();
-        }
         if (frame.options.search)
             _DrawTocTabs(frame, state, view);
         else {
@@ -1837,13 +1824,6 @@ namespace RichMd
         const float findWidth = frame.options.search ? ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x : 0.f;
         ImGui::SetNextItemWidth(-FLT_MIN - findWidth);
         if (ImGui::BeginCombo("##section", title.c_str(), ImGuiComboFlags_HeightLarge)) {
-            if (frame.renders.foldMargin > 0.f) {  // the headings fold (done at the next frame; the menu stays open)
-                if (ImGui::SmallButton("Fold all"))
-                    state.foldAll = 1;
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Unfold all"))
-                    state.foldAll = -1;
-            }
             if (frame.options.search)  // a click on an entry or a match closes the menu
                 _DrawTocTabs(frame, state, view);
             else

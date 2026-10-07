@@ -271,9 +271,10 @@ void Renderer::fold_heading(int level, float top, ImGuiID id)
 		const bool lineHovered = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(line.Min, line.Max, false);
 		const bool touch = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
 		if (!open || touch || lineHovered || hovered) {
-			// RenderArrow draws in a box of the current font's size, scaled: centered on the arrow's box
-			const float fontSize = ImGui::GetFontSize(), scale = 0.75f * m_heading_font_size / fontSize;
-			const ImVec2 center = arrow.GetCenter();
+			// RenderArrow draws in a box of the current font's size, scaled; centered a little left of the margin's
+			// middle, away from the text
+			const float fontSize = ImGui::GetFontSize(), scale = 0.6f * m_heading_font_size / fontSize;
+			const ImVec2 center(arrow.Min.x + m_fold_margin * 0.4f, arrow.GetCenter().y);
 			const ImVec2 pos(center.x - fontSize * 0.5f, center.y - fontSize * scale * 0.5f);
 			const ImU32 color = ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled);
 			ImGui::RenderArrow(window->DrawList, pos, color, open ? ImGuiDir_Down : ImGuiDir_Right, scale);
@@ -2024,7 +2025,8 @@ int Renderer::print(const char* str, const char* str_end)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapTop));
 	// The margin of the fold arrows, at the left of the content: the document's, else this render's own
 	const bool ownMargin = foldableHeadings && !document;
-	m_fold_margin = document ? document->foldMargin : (ownMargin ? ImGui::GetFontSize() : 0.f);
+	const float em = get_font().size > 0.f ? get_font().size : ImGui::GetFontSize();  // the regular text's size
+	m_fold_margin = document ? document->foldMargin : (ownMargin ? em * 1.5f : 0.f);
 	m_fold_margin_left = document ? document->foldMarginLeft : ImGui::GetCursorScreenPos().x;
 	if (ownMargin)
 		ImGui::Indent(m_fold_margin);
