@@ -48,7 +48,7 @@ struct Heading
     std::string text;       // without markup
     std::string slug;       // its anchor, made from the text as GitHub does (a repeated title gets -1, -2...)
     float y = 0.f;          // its top, in its window's content coordinates: SetScrollY(y) shows it at the top
-    bool hidden = false;    // inside a collapsed <details>: y is the one of the section's header
+    bool hidden = false;    // inside a collapsed `<details>`: y is the one of the section's header
 };
 // The headings of the last Render() call (valid until the next one)
 const std::vector<Heading>& LastRenderHeadings();
@@ -105,7 +105,7 @@ void EndDocument();
 void RenderDocument(const char* id, const std::string& markdown, ImVec2 size = ImVec2(0.f, 0.f),
                     const DocumentOptions& options = DocumentOptions());
 // Starts a section of the document that is not markdown (widgets, a plot): a heading of the document, with its slug
-// (an anchor for [text](#slug) links). drawTitle: draws the text as a markdown heading of that level; false when
+// (an anchor for `[text](#slug)` links). drawTitle: draws the text as a markdown heading of that level; false when
 // the title is drawn by other means (an ImGui text, a plot's own title), or not at all.
 void DocumentHeading(int level, const std::string& text, bool drawTitle = true);
 ```
