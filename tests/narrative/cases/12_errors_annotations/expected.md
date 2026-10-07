@@ -33,3 +33,7 @@
 <md-error title="unnamed_md.py:1: ::md needs a name">`![[unnamed_md.py]]`</md-error>
 
 <md-error title="named_code_in_comment.cpp:2: only an unnamed ::code may appear in the prose of ::md A">`![[named_code_in_comment.cpp]]`</md-error>
+
+<md-error title="unclosed_fence_in_string.py:2: ::md A: this fenced code block of its prose is not closed">`![[unclosed_fence_in_string.py]]`</md-error>
+
+<md-error title="unclosed_fence_in_comment.py:2: ::md A: this fenced code block of its prose is not closed">`![[unclosed_fence_in_comment.py]]`</md-error>

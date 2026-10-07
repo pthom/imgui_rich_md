@@ -16,3 +16,5 @@
 ![[unnamed_code.py]]
 ![[unnamed_md.py]]
 ![[named_code_in_comment.cpp]]
+![[unclosed_fence_in_string.py]]
+![[unclosed_fence_in_comment.py]]

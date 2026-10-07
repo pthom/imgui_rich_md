@@ -149,6 +149,31 @@ namespace
         return r;
     }
 
+    // Follows the fenced code blocks of markdown lines: Update() is true for a fence line or a line inside a fence
+    struct FenceTracker
+    {
+        char fenceChar = 0;
+        size_t fenceLength = 0;
+
+        bool Update(const std::string& line)
+        {
+            std::string t = Trim(line);
+            char c = t.empty() ? 0 : t[0];
+            size_t n = (c == '`' || c == '~') ? std::min(t.size(), t.find_first_not_of(c)) : 0;
+            if (fenceChar == 0)
+            {
+                if (n < 3)
+                    return false;
+                fenceChar = c;
+                fenceLength = n;
+                return true;
+            }
+            if (c == fenceChar && n >= fenceLength && IsBlank(t.substr(n)))
+                fenceChar = 0;
+            return true;
+        }
+    };
+
     // Annotations
     // -----------
 
@@ -253,6 +278,8 @@ namespace
         int proseSection = -1;              // a section whose prose (in line comments) is open
         std::vector<std::string> prose;     // its lines, comment tokens removed
         int redundantEndmd = -1;            // a section closed by the ::endcode just above: an ::endmd may follow
+        FenceTracker proseFence;            // the fenced code blocks of that prose
+        size_t proseFenceLine = 0;          // the line of the fence that opened the current one
 
         Parser(const std::string& file_, Syntax syntax_) : file(file_), syntax(syntax_) {}
 
@@ -284,6 +311,23 @@ namespace
             Dedent(lines);
             TrimBlankLines(lines);
             section.prose = std::move(lines);
+        }
+
+        // A line of prose inside a fenced code block, or a fence: prose, never a directive (the prose can show a
+        // sample of annotations). `fenceLine` gets the line of an opening fence.
+        static bool InFence(FenceTracker& fence, size_t& fenceLine, size_t i, const std::string& text)
+        {
+            const bool wasOpen = fence.fenceChar != 0;
+            if (!fence.Update(text))
+                return false;
+            if (!wasOpen)
+                fenceLine = i;
+            return true;
+        }
+
+        bool UnclosedFence(size_t fenceLine, const std::string& name)
+        {
+            return Fail(fenceLine, "::md " + name + ": this fenced code block of its prose is not closed");
         }
 
         // `line` is the line of the ::code; the region starts at `begin`
@@ -329,14 +373,16 @@ namespace
             int section = (int)r.sections.size() - 1;
             std::vector<std::string> lines;
             size_t codeLine = npos;
+            FenceTracker fence;
+            size_t fenceLine = 0;
             size_t j = i + 1;
             for (; j < r.lines.size(); ++j)
             {
                 size_t c = r.lines[j].find(closer);
                 std::string content = r.lines[j].substr(0, c);
-                if (codeLine == npos)
+                if (codeLine == npos && (c == npos || !IsBlank(content)))
                 {
-                    Directive d = ParseDirective(content);
+                    Directive d = InFence(fence, fenceLine, j, content) ? Directive{} : ParseDirective(content);
                     if (d.kind == DirectiveKind::Code && d.name.empty())
                     {
                         codeLine = j;
@@ -344,7 +390,7 @@ namespace
                     }
                     else if (d.kind != DirectiveKind::None)
                         return Fail(j, "only an unnamed ::code may appear in the prose of ::md " + name);
-                    else if (c == npos || !IsBlank(content))
+                    else
                         lines.push_back(content);
                 }
                 if (c != npos)
@@ -352,6 +398,8 @@ namespace
             }
             if (j == r.lines.size())
                 return Fail(i, "::md " + name + ": its string or block comment is not closed");
+            if (fence.fenceChar != 0)
+                return UnclosedFence(fenceLine, name);
             SetProse(r.sections[section], lines);
             i = j;
             return codeLine == npos || OpenRegion(codeLine, "", section, j + 1);
@@ -368,7 +416,16 @@ namespace
                 return true;
             }
             if (!LineCommentText(r.lines[i], syntax, text))
+            {
+                if (proseFence.fenceChar != 0)
+                    return UnclosedFence(proseFenceLine, name);
                 return Fail(i, "::md " + name + ": its prose is interrupted by source code (missing ::endmd or ::code?)");
+            }
+            if (InFence(proseFence, proseFenceLine, i, text))
+            {
+                prose.push_back(text);
+                return true;
+            }
             Directive d = ParseDirective(text);
             if (d.kind == DirectiveKind::None)
             {
@@ -412,6 +469,7 @@ namespace
                         return false;
                     proseSection = (int)r.sections.size() - 1;
                     prose.clear();
+                    proseFence = FenceTracker();
                     return true;
                 case DirectiveKind::Code:
                     return OpenRegion(i, d.name, -1, i + 1);
@@ -442,6 +500,8 @@ namespace
             for (size_t i = 0; i < r.lines.size(); ++i)
                 if (!Line(i))
                     return false;
+            if (proseSection >= 0 && proseFence.fenceChar != 0)
+                return UnclosedFence(proseFenceLine, r.sections[proseSection].name);
             if (proseSection >= 0)
                 return Fail(r.sections[proseSection].line, "::md " + r.sections[proseSection].name + " is not closed (missing ::endmd)");
             if (!openRegions.empty())
@@ -500,31 +560,6 @@ namespace
 
     // Markdown documents
     // ------------------
-
-    // Follows the fenced code blocks of markdown lines: Update() is true for a fence line or a line inside a fence
-    struct FenceTracker
-    {
-        char fenceChar = 0;
-        size_t fenceLength = 0;
-
-        bool Update(const std::string& line)
-        {
-            std::string t = Trim(line);
-            char c = t.empty() ? 0 : t[0];
-            size_t n = (c == '`' || c == '~') ? std::min(t.size(), t.find_first_not_of(c)) : 0;
-            if (fenceChar == 0)
-            {
-                if (n < 3)
-                    return false;
-                fenceChar = c;
-                fenceLength = n;
-                return true;
-            }
-            if (c == fenceChar && n >= fenceLength && IsBlank(t.substr(n)))
-                fenceChar = 0;
-            return true;
-        }
-    };
 
     struct Heading
     {

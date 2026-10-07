@@ -103,6 +103,8 @@ Blank lines may separate the comment lines of such a section. A line of source c
 
 Inside the prose of a section, the only directive is the unnamed `::code` that opens its associated code.
 
+The lines of a fenced code block of the prose (between fences of three or more backticks or tildes) are prose: no directive is recognized there, so the prose can show a sample of annotations. Such a block is closed before the end of the prose.
+
 ## 5. Associated code
 
 An unnamed `::code` within an open Markdown section opens the code region associated with that section:
@@ -411,6 +413,7 @@ At minimum, implementations should diagnose:
 - a directive other than the unnamed `::code` inside the prose of a section;
 - a string or block comment that starts with a directive other than `::md`;
 - a line of source code inside the prose of a section written in line comments;
+- a fenced code block of the prose that is not closed before the end of the prose;
 - a reserved character in a name;
 - a target of several names in a source file (a source file has no headings).
 
