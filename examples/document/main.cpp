@@ -12,6 +12,9 @@ static const char* kIntro = R"md(
 `BeginDocument()` and `EndDocument()` frame the renders and the widgets of a document. They share a scroll area, and a
 table of contents on the left: its edge can be dragged, and the arrow at its top hides it.
 
+Between them, call `Render()` as many times as you like, and any other widget, as the slider and the curve below: they
+all belong to the document, with one table of contents and one search (see the code in "The search").
+
 Links to the sections, wherever they are: [the widgets](#a-section-of-widgets), [the collapsed
 section](#inside-a-collapsed-section), [the end](#the-end).
 
@@ -51,7 +54,14 @@ their matches opens them), and of the code blocks:
 
 ```cpp
 RichMd::BeginDocument("document");
-RichMd::Render(markdown);
+RichMd::Render(intro);  // markdown: as many renders as you like
+
+// Widgets, under a heading of the document
+RichMd::DocumentHeading(2, "A section of widgets");
+ImGui::SliderFloat("Frequency", &frequency, 0.5f, 5.f);
+DrawCurve(frequency);  // any ImGui drawing
+
+RichMd::Render(moreMarkdown);  // the same document: one table of contents, one search
 RichMd::EndDocument();
 ```
 
@@ -71,6 +81,23 @@ static std::string LongText()
     return md;
 }
 
+// A curve drawn with ImGui's draw list, the width of the window
+static void DrawCurve(float frequency)
+{
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImVec2 size(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 6.f);
+    ImGui::Dummy(size);
+    for (int i = 1; i < 200; ++i) {
+        float x0 = (float)(i - 1) / 199.f, x1 = (float)i / 199.f;
+        auto y = [&](float x) {
+            return origin.y + size.y * (0.5f - 0.4f * std::sin(frequency * 6.2832f * x));
+        };
+        drawList->AddLine(ImVec2(origin.x + x0 * size.x, y(x0)), ImVec2(origin.x + x1 * size.x, y(x1)),
+                          ImGui::GetColorU32(ImGuiCol_PlotLines), 2.f);
+    }
+}
+
 static void Gui()
 {
     static const std::string kLongText = LongText();
@@ -82,16 +109,7 @@ static void Gui()
     // A section of widgets: DocumentHeading() draws its title as a markdown heading, and gives it a slug
     RichMd::DocumentHeading(2, "A section of widgets");
     ImGui::SliderFloat("Frequency", &frequency, 0.5f, 5.f);
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    ImVec2 origin = ImGui::GetCursorScreenPos();
-    ImVec2 size(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 6.f);
-    ImGui::Dummy(size);
-    for (int i = 1; i < 200; ++i) {
-        float x0 = (float)(i - 1) / 199.f, x1 = (float)i / 199.f;
-        auto y = [&](float x) { return origin.y + size.y * (0.5f - 0.4f * std::sin(frequency * 6.2832f * x)); };
-        drawList->AddLine(ImVec2(origin.x + x0 * size.x, y(x0)), ImVec2(origin.x + x1 * size.x, y(x1)),
-                          ImGui::GetColorU32(ImGuiCol_PlotLines), 2.f);
-    }
+    DrawCurve(frequency);
 
     RichMd::Render(kLongText);
     RichMd::EndDocument();
