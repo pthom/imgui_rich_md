@@ -59,7 +59,8 @@ namespace RichMd
         ImVec2 origin;            // the top left of the document, in its window's local coordinates
         ImVec2 size;              // the size of the document
         bool panel = false;       // the table of contents beside the content
-        bool line = false;        // the line above the content (the table of contents hidden)
+        bool line = false;        // the line above the content (the table of contents hidden, or the document narrow)
+        bool narrow = false;      // narrower than options.narrowWidth: the line, which cannot show the panel
         float panelWidth = 0.f;   // pixels
         float splitterWidth = 0.f;
         float scrollY = 0.f;      // the content's scroll

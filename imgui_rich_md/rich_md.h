@@ -84,6 +84,8 @@ namespace RichMd
         bool toc = true;
         int tocMinHeadings = 3;   // with fewer headings, no table of contents
         int tocMaxLevel = 3;      // the deepest level listed
+        // A document narrower than this (in em) shows the line above the content instead of the panel (a phone)
+        float narrowWidth = 40.f;
     };
     // A document: the renders and the widgets drawn until EndDocument() share a scroll area and their headings.
     // size: as BeginChild (0: all the available space). Call EndDocument() in the same frame. The content is always

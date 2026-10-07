@@ -1093,8 +1093,9 @@ namespace RichMd
         frame->size = ImGui::GetContentRegionAvail();
         const float em = ImGui::GetFontSize();
         const bool toc = options.toc && state.headingCount >= options.tocMinHeadings;
-        frame->panel = toc && state.panelShown;
-        frame->line = toc && !state.panelShown;
+        frame->narrow = frame->size.x < options.narrowWidth * em;
+        frame->panel = toc && state.panelShown && !frame->narrow;
+        frame->line = toc && !frame->panel;
         const ImGuiChildFlags contentFlags = ImGuiChildFlags_AlwaysUseWindowPadding;
         if (frame->panel) {
             float maxEm = ImMax(kPanelMinEm, frame->size.x / em - kContentMinEm);
@@ -1188,17 +1189,19 @@ namespace RichMd
         }
     }
 
-    // The table of contents hidden: a line above the content, with a button that shows the panel again, and the current
-    // section, which opens the table of contents as a menu (a combo box)
+    // The table of contents hidden, or a narrow document: a line above the content, with the current section, which
+    // opens the table of contents as a menu (a combo box), and a button that shows the panel again when there is room
     static void _DrawTocLine(const DocumentFrame& frame, DocumentState& state, const std::vector<int>& listed,
                              int current)
     {
         ImGui::SetCursorPos(frame.origin);
         SizedFont font = GetFont(MarkdownFontSpec());
         ImGui::PushFont(font.font, font.size);
-        if (ImGui::ArrowButton("##show", ImGuiDir_Right))
-            state.panelShown = true;
-        ImGui::SameLine();
+        if (!frame.narrow) {  // the panel has no room in a narrow document
+            if (ImGui::ArrowButton("##show", ImGuiDir_Right))
+                state.panelShown = true;
+            ImGui::SameLine();
+        }
         const std::string& title = current >= 0 ? frame.headings.headings[current].text : std::string("Contents");
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::BeginCombo("##section", title.c_str(), ImGuiComboFlags_HeightLarge)) {

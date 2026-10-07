@@ -230,6 +230,25 @@ static bool CheckTableOfContents()
     ClickAt(show, DrawMainDocument);
     ok = Expect("the line's button shows it again", ChildNamed(DocumentWindow("main"), "##toc") != nullptr) && ok;
 
+    // A narrow document: the line above the content instead of the panel, without the button that shows the panel
+    auto narrowDocument = []() {
+        RichMd::RenderDocument("narrow", "## One\n\n## Two\n\n## Three\n", ImVec2(ImGui::GetFontSize() * 30.f, 200.f));
+    };
+    DrawFrame(narrowDocument);
+    DrawFrame(narrowDocument);
+    ImGuiWindow* narrow = DocumentWindow("narrow");
+    ImGuiWindow* narrowContent = ChildNamed(narrow, "##content");
+    ok = Expect("a narrow document has no panel", ChildNamed(narrow, "##toc") == nullptr) && ok;
+    ok = Expect("a narrow document has the line above its content",
+                narrowContent && narrowContent->Pos.y >= narrow->DC.CursorStartPos.y + ImGui::GetFrameHeight()) && ok;
+    // The line starts with the menu of the sections: no button to show the panel at its left
+    ImGui::GetIO().AddMousePosEvent(narrow->DC.CursorStartPos.x + half, narrow->DC.CursorStartPos.y + half);
+    DrawFrame(narrowDocument);
+    DrawFrame(narrowDocument);
+    ok = Expect("the line of a narrow document starts with the menu of the sections",
+                GImGui->HoveredIdPreviousFrame == DocumentWindow("narrow")->GetID("##section")) && ok;
+    ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+
     // Two headings (and one of level 4, beyond tocMaxLevel): no table of contents
     auto fewHeadings = []() { RichMd::RenderDocument("few", "## One\n\n## Two\n\n#### Four\n", ImVec2(0.f, 200.f)); };
     DrawFrame(fewHeadings);
