@@ -711,7 +711,9 @@ A snippet: its code, its language, its look.
         Sql,
         AngelScript,
         Lua,
-        Python
+        Python,
+        Markdown,
+        PlainText   // no highlighting
     };
 
     enum class SnippetTheme

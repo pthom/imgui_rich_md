@@ -47,6 +47,10 @@ namespace Snippets
             editor.SetLanguage(TextEditor::Language::Lua());
         else if (lang == SnippetLanguage::Python)
             editor.SetLanguage(TextEditor::Language::Python());
+        else if (lang == SnippetLanguage::Markdown)
+            editor.SetLanguage(TextEditor::Language::Markdown());
+        else if (lang == SnippetLanguage::PlainText)
+            editor.SetLanguage(nullptr);
     }
 
 #if defined(__EMSCRIPTEN__) && defined(IMGUI_RICHMD_EMSCRIPTEN_SDL2)

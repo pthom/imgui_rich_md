@@ -274,6 +274,8 @@ namespace RichMd
 #endif
 
 #ifdef IMGUI_RICHMD_WITH_CODE_EDITOR
+    // The language of a fenced block. Unknown or missing: plain text, as GitHub does (a highlighter for another
+    // language would read an apostrophe in prose as the start of a string)
     static Snippets::SnippetLanguage _SnippetLanguage(const std::string& language)
     {
         std::string lower = _ToLower(language);
@@ -285,7 +287,8 @@ namespace RichMd
         if (lower == "sql") return Snippets::SnippetLanguage::Sql;
         if (lower == "lua") return Snippets::SnippetLanguage::Lua;
         if (lower == "angelscript") return Snippets::SnippetLanguage::AngelScript;
-        return Snippets::DefaultSnippetLanguage();
+        if (lower == "markdown" || lower == "md") return Snippets::SnippetLanguage::Markdown;
+        return Snippets::SnippetLanguage::PlainText;
     }
 
     // A code block in the code editor: a read-only snippet with syntax highlighting (one editor per distinct code).

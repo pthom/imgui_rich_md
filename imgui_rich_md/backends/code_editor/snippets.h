@@ -29,7 +29,9 @@ namespace Snippets
         Sql,
         AngelScript,
         Lua,
-        Python
+        Python,
+        Markdown,
+        PlainText   // no highlighting
     };
 
     enum class SnippetTheme
