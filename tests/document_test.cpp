@@ -8,8 +8,9 @@
 // Escape closes the bar (its current match becomes the selection) and keeps the query. The magnifier of a narrow
 // document opens the bar, above its content. The search goes beyond the text: a formula is one match (in its LaTeX
 // source), a collapsed section is searched (a jump to one of its matches opens it), a code block is searched, and
-// Ctrl+F in it opens the document's find bar. The user errors (a document inside a document, an EndDocument() without
-// its BeginDocument(), a document left open) are reported.
+// Ctrl+F in it opens the document's find bar. When the system asks for reduced motion, a scroll jumps (unless
+// ScrollAnimation::Always). The user errors (a document inside a document, an EndDocument() without its
+// BeginDocument(), a document left open) are reported.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs, ImGuiContext::ErrorCountCurrentFrame, the child windows
 #include "imgui_impl_null.h"
@@ -27,6 +28,7 @@
 
 static std::string gOpenedLink;
 static std::string gClipboard;
+static bool gReducedMotion = false;  // what the host says of the system (HostServices::PrefersReducedMotion)
 
 static std::string Lines(int from, int to)
 {
@@ -83,7 +85,7 @@ static void DrawFrame(const std::function<void()>& content)
 static const int kScrollFrames = 40;
 
 // A click on the first line of a text drawn at topLeft (a link opens on the release), then the frames of the scroll
-static void ClickFirstLine(ImVec2 topLeft, const std::function<void()>& content)
+static void ClickFirstLine(ImVec2 topLeft, const std::function<void()>& content, int frames = kScrollFrames)
 {
     float lineHeight = RichMd::GetFont(RichMd::MarkdownFontSpec()).size;
     ImGui::GetIO().AddMousePosEvent(topLeft.x + 5.f, topLeft.y + lineHeight * 0.5f);
@@ -91,7 +93,7 @@ static void ClickFirstLine(ImVec2 topLeft, const std::function<void()>& content)
     ImGui::GetIO().AddMouseButtonEvent(0, true);
     DrawFrame(content);
     ImGui::GetIO().AddMouseButtonEvent(0, false);
-    for (int i = 0; i < kScrollFrames; ++i)
+    for (int i = 0; i < frames; ++i)
         DrawFrame(content);
     ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
     DrawFrame(content);
@@ -189,6 +191,39 @@ static bool CheckRenderDocument()
     ImVec2 topLeft = ChildNamed(DocumentWindow("one call"), "##content")->DC.CursorStartPos;  // inside its padding
     ClickFirstLine(topLeft, content);
     return Expect("RenderDocument(): a link scrolls to its heading", scrollY > 0.f && ImAbs(scrollY - endY) <= 1.f);
+}
+
+// When the system asks for reduced motion, a scroll jumps (ScrollAnimation::FollowSystem, the default);
+// ScrollAnimation::Always animates it anyway
+static bool CheckReducedMotion()
+{
+    const std::string md = "[to the end](#the-end)\n\n" + Lines(0, 30) + "## The end\n\n" + Lines(30, 60);
+    // The scroll a few frames after a click on the link, and where it goes
+    auto scrollSoonAfterLink = [&md](const char* id, RichMd::ScrollAnimation animation, float& target) {
+        RichMd::DocumentOptions options;
+        options.scrollAnimation = animation;
+        float scrollY = 0.f;
+        auto content = [&]() {
+            RichMd::RenderDocument(id, md, ImVec2(0.f, 200.f), options);
+            for (const RichMd::Heading& h : RichMd::LastRenderHeadings())
+                if (h.slug == "the-end")
+                    target = h.y;
+            scrollY = ChildNamed(ChildNamed(ImGui::GetCurrentWindow(), (std::string("/") + id + "_").c_str()),
+                                 "##content")->Scroll.y;
+        };
+        DrawFrame(content);
+        ImVec2 topLeft = ChildNamed(DocumentWindow(id), "##content")->DC.CursorStartPos;
+        ClickFirstLine(topLeft, content, 4);  // 0.07 s: an animation of 0.3 s is far from its end
+        return scrollY;
+    };
+    gReducedMotion = true;
+    float target = -1.f;
+    float scrollY = scrollSoonAfterLink("reduced", RichMd::ScrollAnimation::FollowSystem, target);
+    bool ok = Expect("reduced motion: the scroll jumps", target > 0.f && ImAbs(scrollY - target) <= 1.f);
+    scrollY = scrollSoonAfterLink("always", RichMd::ScrollAnimation::Always, target);
+    ok = Expect("ScrollAnimation::Always: the scroll is animated anyway", scrollY < target - 10.f) && ok;
+    gReducedMotion = false;
+    return ok;
 }
 
 // A click at a place of the screen, then the frames of the scroll
@@ -519,6 +554,7 @@ int main(int, char**)
     services.RenderLatex = [](const std::string&, float, ImU32, bool) -> std::optional<RichMd::LatexBitmap> {
         return std::nullopt;
     };
+    services.PrefersReducedMotion = []() { return gReducedMotion; };
     RichMd::SetHostServices(services);
     RichMd::MarkdownOptions options;
     options.withLatex = true;
@@ -531,6 +567,7 @@ int main(int, char**)
     ok = CheckDrawnTitle() && ok;
     ok = CheckUnknownAnchor() && ok;
     ok = CheckRenderDocument() && ok;
+    ok = CheckReducedMotion() && ok;
     ok = CheckTableOfContents() && ok;
     ok = CheckSearch() && ok;
     ok = CheckSearchEverywhere() && ok;
