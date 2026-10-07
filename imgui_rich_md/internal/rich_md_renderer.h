@@ -68,6 +68,8 @@ struct Renderer
 
 	Style style;
 	bool selectableText = true;  // the text can be selected (set by RichMd::RenderRaw for each fragment)
+	bool foldableHeadings = false;     // the headings fold (set by RichMd::RenderRaw from the context's options)
+	int foldableHeadingsMinLevel = 2;  // the first level that folds
 
 	// The headings of the last fragment, in order
 	const std::vector<Heading>& headings() const { return m_headings; }
@@ -355,11 +357,23 @@ private:
 	std::vector<Heading> m_headings;
 	std::unordered_map<std::string, int> m_slug_occurrences;
 	float m_heading_top = -1.f;          // the top of the heading being read (its first text run), in content coordinates
-	float m_collapsed_details_y = 0.f;   // the header of the outermost collapsed <details>: its hidden headings are there
-	float m_collapsed_details_bottom = 0.f;
-	ImGuiID m_collapsed_details_id = 0;  // and its id (the state of a CollapsingHeader)
-	std::vector<ImGuiID> m_heading_details;  // for each heading, the collapsed <details> that hides it (0: none)
+	// What hides the content: the outermost collapsed <details> (its header), or the folded heading. The headings and
+	// the text it hides are placed there. Its id holds its state (1: open), as a CollapsingHeader's.
+	float m_hidden_y = 0.f;
+	float m_hidden_bottom = 0.f;
+	ImGuiID m_hidden_id = 0;
+	std::vector<ImGuiID> m_heading_details;  // for each heading, the id of what hides it (0: none)
 	void add_heading(int level, float y, bool hidden);
+	// The fold: what follows a folded heading is hidden, until a heading of its level or above, at the top level (a
+	// fold never crosses a list, a quote or a <details>)
+	int m_fold_level = 0;        // the level of the folded heading (0: no fold)
+	int m_container_depth = 0;   // the lists and quotes around the current block, counted also while hidden
+	float m_fold_margin = 0.f;        // the width of the margin of the arrows, at the left of the content (0: none)
+	float m_fold_margin_left = 0.f;   // its left, on the screen
+	float m_heading_font_size = 0.f;  // the size of the heading being read (its arrow's)
+	bool top_level() const { return m_container_depth == 0 && m_details_open_stack.empty(); }
+	bool hidden() const;         // inside a collapsed <details>, or a fold
+	void fold_heading(int level, float top);
 
 	// An anchor link (#slug) clicked in a fragment: resolved at the end of the fragment, once its headings are known (in
 	// a document: by EndDocument(), once those of all its fragments are known)

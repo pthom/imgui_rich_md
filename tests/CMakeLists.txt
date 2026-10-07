@@ -34,6 +34,12 @@ target_include_directories(imgui_rich_md_headings_test PRIVATE ${IMGUI_DIR}/back
 target_link_libraries(imgui_rich_md_headings_test PRIVATE imgui_rich_md)
 add_test(NAME headings_test COMMAND imgui_rich_md_headings_test)
 
+# The fold test: the foldable headings, their arrows, what a fold hides
+add_executable(imgui_rich_md_fold_test ${CMAKE_CURRENT_LIST_DIR}/fold_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
+target_include_directories(imgui_rich_md_fold_test PRIVATE ${IMGUI_DIR}/backends)
+target_link_libraries(imgui_rich_md_fold_test PRIVATE imgui_rich_md)
+add_test(NAME fold_test COMMAND imgui_rich_md_fold_test)
+
 # The document test: BeginDocument() / EndDocument(), the headings and the anchors shared by their renders
 add_executable(imgui_rich_md_document_test ${CMAKE_CURRENT_LIST_DIR}/document_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
 target_include_directories(imgui_rich_md_document_test PRIVATE ${IMGUI_DIR}/backends)

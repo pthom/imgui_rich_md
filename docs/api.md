@@ -268,6 +268,11 @@ struct MarkdownOptions
     // The text can be selected with the mouse and copied (SetSelectableTextDefault changes it later,
     // PushSelectableText for some renders)
     bool selectableText = true;
+
+    // The headings fold: an arrow in a margin at their left hides their section, until the next heading of the
+    // same level or above. Only the headings outside lists, quotes and <details> fold.
+    bool foldableHeadings = false;
+    int foldableHeadingsMinLevel = 2;  // the first level that folds (a "#" heading often titles the whole text)
 };
 ```
 

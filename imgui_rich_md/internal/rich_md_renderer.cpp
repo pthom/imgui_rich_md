@@ -232,6 +232,8 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 	}
 
 	set_font(e);
+	if (e)
+		m_heading_font_size = ImGui::GetFontSize();
 
 	if (!e) {
 		float top = (m_heading_top >= 0.f) ? m_heading_top : ImGui::GetCursorPosY();  // an empty heading: where it ends
@@ -241,7 +243,48 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 		}
 		add_heading((int)d->level, top, false);
 		heading((int)d->level, m_heading_text);
+		if (foldableHeadings && (int)d->level >= foldableHeadingsMinLevel && top_level())
+			fold_heading((int)d->level, top);
 	}
+}
+
+// A foldable heading: its state is kept by its slug, in the fragment's id scope (1: open, the default), and its arrow
+// in the margin toggles it. The arrow shows while the mouse is over the heading's line, always when the heading is
+// folded, and always on a touch screen (no hover there). A folded heading hides what follows it, until a heading of
+// its level or above.
+void Renderer::fold_heading(int level, float top)
+{
+	const ImGuiID id = ImGui::GetID(("##fold-" + m_headings.back().slug).c_str());
+	ImGuiStorage* storage = ImGui::GetStateStorage();
+	bool open = storage->GetInt(id, 1) != 0;
+	if (m_fold_margin > 0.f) {
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		const float y = top + window->Pos.y - window->Scroll.y;
+		const ImRect arrow(ImVec2(m_fold_margin_left, y),
+		                   ImVec2(m_fold_margin_left + m_fold_margin, y + m_heading_font_size));
+		bool hovered = false, held = false;
+		if (ImGui::ItemAdd(arrow, id) && ImGui::ButtonBehavior(arrow, id, &hovered, &held)) {
+			open = !open;
+			storage->SetInt(id, open ? 1 : 0);
+		}
+		const ImRect line(ImVec2(m_fold_margin_left, y), ImVec2(window->WorkRect.Max.x, ImGui::GetCursorScreenPos().y));
+		const bool lineHovered = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(line.Min, line.Max, false);
+		const bool touch = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
+		if (!open || touch || lineHovered || hovered) {
+			// RenderArrow draws in a box of the current font's size, scaled: centered on the arrow's box
+			const float fontSize = ImGui::GetFontSize(), scale = 0.75f * m_heading_font_size / fontSize;
+			const ImVec2 center = arrow.GetCenter();
+			const ImVec2 pos(center.x - fontSize * 0.5f, center.y - fontSize * scale * 0.5f);
+			const ImU32 color = ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+			ImGui::RenderArrow(window->DrawList, pos, color, open ? ImGuiDir_Down : ImGuiDir_Right, scale);
+		}
+	}
+	if (open)
+		return;
+	m_fold_level = level;
+	m_hidden_y = top;
+	m_hidden_bottom = ImGui::GetCursorPosY();
+	m_hidden_id = id;
 }
 
 // The anchor of a heading, as GitHub makes it: lower case, the spaces as hyphens, the ASCII punctuation dropped but
@@ -280,7 +323,7 @@ void Renderer::add_heading(int level, float y, bool hidden)
 	heading.y = y;
 	heading.hidden = hidden;
 	heading.slug = UniqueSlug(m_heading_text, document ? document->slugOccurrences : m_slug_occurrences);
-	ImGuiID details = hidden ? m_collapsed_details_id : 0;
+	ImGuiID details = hidden ? m_hidden_id : 0;
 	if (document) {
 		document->headings.push_back(heading);
 		document->headingDetails.push_back(details);
@@ -1280,9 +1323,9 @@ bool Renderer::check_html(const char* str, const char* str_end)
 	auto render_pre = [&](const char* s, const char* e) {
 		// Skip one optional leading '\n' right after <pre>.
 		if (s < e && *s == '\n') ++s;
-		// When hidden by a collapsed <details>, consume but don't render.
-		for (bool open : m_details_open_stack)
-			if (!open) return;
+		// When hidden by a collapsed <details> or a fold, consume but don't render.
+		if (hidden())
+			return;
 		// m_is_code makes subclass get_font() return the monospace code font.
 		m_is_code = true;
 		auto f = get_font();
@@ -1384,10 +1427,7 @@ bool Renderer::check_html(const char* str, const char* str_end)
 		// If any ancestor <details> is collapsed, suppress this nested header
 		// entirely. Still push to the stack (as closed) so the matching
 		// </details> pops correctly.
-		bool any_ancestor_closed = false;
-		for (bool open : m_details_open_stack)
-			if (!open) { any_ancestor_closed = true; break; }
-		if (any_ancestor_closed) {
+		if (hidden()) {  // (a collapsed ancestor, or a fold)
 			m_details_id_counter++;  // consume the id anyway: the ids of the following headers must not depend on what is open
 			m_details_open_stack.push_back(false);
 			m_details_awaiting_summary = false;
@@ -1402,9 +1442,9 @@ bool Renderer::check_html(const char* str, const char* str_end)
 		bool open = ImGui::CollapsingHeader(label.c_str());
 		ImGui::PopID();
 		if (!open) {  // the outermost collapsed section: the place of the headings it hides
-			m_collapsed_details_y = ImGui::GetItemRectMin().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
-			m_collapsed_details_bottom = ImGui::GetItemRectMax().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
-			m_collapsed_details_id = ImGui::GetItemID();
+			m_hidden_y = ImGui::GetItemRectMin().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
+			m_hidden_bottom = ImGui::GetItemRectMax().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
+			m_hidden_id = ImGui::GetItemID();
 		}
 		m_details_open_stack.push_back(open);
 		if (open)
@@ -1433,9 +1473,9 @@ bool Renderer::check_html(const char* str, const char* str_end)
 
 	// <img src="..." width="..." height="...">
 	if (sz >= 4 && strncmp(str, "<img", 4) == 0) {
-		// Consume but don't render when hidden by a collapsed <details>.
-		for (bool open : m_details_open_stack)
-			if (!open) return true;
+		// Consume but don't render when hidden by a collapsed <details> or a fold.
+		if (hidden())
+			return true;
 		std::string tag(str, str_end);
 		std::string src = extract_html_attr(tag, "src");
 		if (src.empty()) return false;
@@ -1484,7 +1524,7 @@ bool Renderer::check_html(const char* str, const char* str_end)
 	}
 
 	if (strncmp(str, "<center>", sz) == 0) {
-		if (details_hidden(m_details_open_stack))
+		if (hidden())
 			return true;
 		if (!m_in_center) {
 			m_in_center = true;
@@ -1494,7 +1534,7 @@ bool Renderer::check_html(const char* str, const char* str_end)
 		return true;
 	}
 	if (strncmp(str, "</center>", sz) == 0) {
-		if (details_hidden(m_details_open_stack))
+		if (hidden())
 			return true;
 		if (m_in_center) {
 			m_in_center = false;
@@ -1585,11 +1625,16 @@ static bool details_hidden(const std::vector<bool>& stack)
 	return false;
 }
 
+bool Renderer::hidden() const
+{
+	return m_fold_level > 0 || details_hidden(m_details_open_stack);
+}
+
 int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 {
 	// Even while hidden we keep processing raw HTML so </details>
 	// can pop the stack; everything else is discarded.
-	if (details_hidden(m_details_open_stack) && type != MD_TEXT_HTML) {
+	if (hidden() && type != MD_TEXT_HTML) {
 		if (m_hlevel > 0 && (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE))
 			m_heading_text.append(str, str_end);  // a heading inside a collapsed section is listed, with its text
 		bool searched = type == MD_TEXT_NORMAL || type == MD_TEXT_CODE || type == MD_TEXT_LATEXMATH;
@@ -1666,7 +1711,7 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 			// collapsible's vertical spacing.
 			if (m_details_suppress_next_raw_html) {
 				m_details_suppress_next_raw_html = false;
-			} else if (!details_hidden(m_details_open_stack)) {
+			} else if (!hidden()) {
 				render_text(str, str_end);
 			}
 		} else {
@@ -1697,18 +1742,25 @@ int Renderer::block(MD_BLOCKTYPE type, void* d, bool e)
 	// Any block callback ends the HTML block whose gap is pending (an HTML block holds no other block)
 	m_html_gap_pending = false;
 
+	if (type == MD_BLOCK_QUOTE || type == MD_BLOCK_LI)
+		m_container_depth += e ? 1 : -1;
+	// A heading of the fold's level or above, at the top level, ends the fold: it draws
+	if (type == MD_BLOCK_H && e && m_fold_level > 0 && top_level()
+	    && (int)((MD_BLOCK_H_DETAIL*)d)->level <= m_fold_level)
+		m_fold_level = 0;
+
 	// Suppress block rendering while inside a collapsed <details>.
 	// BLOCK_HTML pairs still arrive (the tags themselves land as
 	// MD_TEXT_HTML in text(), which is allowed through), so we just
 	// drop any other block work here.
-	if (details_hidden(m_details_open_stack)) {
+	if (hidden()) {
 		if (type == MD_BLOCK_H) {  // a heading inside a collapsed section: listed, at the section's header
 			int level = (int)((MD_BLOCK_H_DETAIL*)d)->level;
 			if (e) {
 				m_hlevel = (unsigned)level;
 				m_heading_text.clear();
 			} else {
-				add_heading(level, m_collapsed_details_y, true);
+				add_heading(level, m_hidden_y, true);
 				m_hlevel = 0;
 			}
 		}
@@ -1814,7 +1866,7 @@ int Renderer::block(MD_BLOCKTYPE type, void* d, bool e)
 int Renderer::span(MD_SPANTYPE type, void* d, bool e)
 {
 	// Suppress span rendering while inside a collapsed <details>.
-	if (details_hidden(m_details_open_stack))
+	if (hidden())
 		return 0;
 	// Any span opening before the first text in a quote means this is not
 	// an admonition (the marker must be plain text).
@@ -1878,6 +1930,8 @@ int Renderer::print(const char* str, const char* str_end)
     m_html_gap_pending = false;
     m_table_id_counter = 0;
     m_details_id_counter = 0;
+    m_fold_level = 0;
+    m_container_depth = 0;
     m_in_pre = false;
     m_pre_buffer.clear();
     m_runs.clear();
@@ -1903,7 +1957,14 @@ int Renderer::print(const char* str, const char* str_end)
 
 	if (style.fragmentGapTop > 0.0f)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapTop));
+	// The margin of the fold arrows, at the left of the content
+	m_fold_margin = (foldableHeadings && !document) ? ImGui::GetFontSize() : 0.f;
+	m_fold_margin_left = ImGui::GetCursorScreenPos().x;
+	if (m_fold_margin > 0.f)
+		ImGui::Indent(m_fold_margin);
 	int result = md_parse(str, (MD_SIZE)(str_end - str), &m_md, this);
+	if (m_fold_margin > 0.f)
+		ImGui::Unindent(m_fold_margin);
 	const int fragmentRank = document ? document->fragmentCount++ : -1;
 	if (!document)
 		resolve_anchor(selectionId);
@@ -2471,11 +2532,11 @@ void Renderer::add_hidden_text(const char* str, const char* str_end)
 {
 	if (str < m_fragment_begin || str_end > m_fragment_end || str >= str_end)
 		return;  // not from the fragment's text
-	if (m_hidden_texts.empty() || m_hidden_texts.back().details != m_collapsed_details_id) {
+	if (m_hidden_texts.empty() || m_hidden_texts.back().details != m_hidden_id) {
 		HiddenText hidden;
-		hidden.details = m_collapsed_details_id;
-		hidden.y = m_collapsed_details_y;
-		hidden.bottom = m_collapsed_details_bottom;
+		hidden.details = m_hidden_id;
+		hidden.y = m_hidden_y;
+		hidden.bottom = m_hidden_bottom;
 		m_hidden_texts.push_back(std::move(hidden));
 	}
 	HiddenText& hidden = m_hidden_texts.back();

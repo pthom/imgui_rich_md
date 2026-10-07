@@ -1094,6 +1094,8 @@ namespace RichMd
         _CheckDocumentEnded(context);
         renderer->selectableText = context->selectableTextStack.empty()
             ? context->options.selectableText : context->selectableTextStack.back();
+        renderer->foldableHeadings = context->options.foldableHeadings;
+        renderer->foldableHeadingsMinLevel = context->options.foldableHeadingsMinLevel;
         renderer->Render(markdownString);
         ImGui::PopID();
         _SweepDestroyedTextures();
