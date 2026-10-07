@@ -551,6 +551,28 @@ options.callbacks.OnHeading = [&](int level, const std::string& text) {
 </details>
 </details>
 <details>
+<summary>Documents: a table of contents and a search</summary>
+
+`BeginDocument()` and `EndDocument()` frame renders and widgets as one document: a scroll area of its own, a table
+of contents beside it, links `[text](#slug)` between its sections, and a search (Ctrl+F, Cmd+F on macOS) that also
+finds the text of the code blocks and of the collapsed sections. `RenderDocument(id, markdown)` is the one-call form.
+See it in the [Document example](https://pthom.github.io/imgui_rich_md/document.html).
+
+<details>
+<summary>Show source</summary>
+
+```cpp
+RichMd::BeginDocument("doc");
+RichMd::Render(intro);                               // as many renders as you like
+RichMd::DocumentHeading(2, "A section of widgets");  // a heading for the widgets below
+ImGui::SliderFloat("Frequency", &frequency, 0.5f, 5.f);
+RichMd::Render(moreMarkdown);                        // the same document: one table of contents, one search
+RichMd::EndDocument();
+```
+
+</details>
+</details>
+<details>
 <summary>Icons, emoji and other fonts</summary>
 
 Any font can be merged into all the markdown fonts with `fontOptions.mergeFonts`: an icon
