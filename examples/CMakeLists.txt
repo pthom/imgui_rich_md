@@ -75,7 +75,7 @@ foreach(_download
 endforeach()
 
 # One folder per example, with its main.cpp; common/ holds the window shared by the examples
-set(_examples minimal tour editor custom_host mermaid)
+set(_examples minimal tour editor custom_host mermaid document)
 if(_fonts_ok)
     list(APPEND _examples fonts)
 endif()

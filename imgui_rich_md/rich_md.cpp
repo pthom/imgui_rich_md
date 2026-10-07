@@ -1062,13 +1062,20 @@ namespace RichMd
         return renderer ? renderer->headings() : kNone;
     }
 
-    // Documents: the renders between BeginDocument() and EndDocument() put their headings and the anchors clicked in
-    // them into the context's document; EndDocument() resolves the anchor, in the document's window (the state of its
-    // collapsed sections, its scroll), then closes it.
+    // ::md Documents
+    // A document is two child windows: the content, where the renders put their headings and the anchors clicked in
+    // them (into the context's document), and the table of contents beside it. `BeginDocument()` decides the layout
+    // from the state the document kept at the last frame (the number of its headings, the panel's width, whether the
+    // reader hid it), and opens the content. `EndDocument()` resolves the anchor in the content's window (the state of
+    // its collapsed sections, its scroll), closes it, then draws the table of contents from the headings of this frame,
+    // which are complete. A click in the table of contents is an anchor, reached at the next frame.
+    // ::code
+    static constexpr float kPanelMinEm = 8.f;      // the narrowest table of contents
+    static constexpr float kContentMinEm = 16.f;   // the narrowest content beside it
+
     void BeginDocument(const char* id, ImVec2 size, const DocumentOptions& options)
     {
         IM_ASSERT(gCurrentContext && "RichMd: call CreateContext first");
-        (void)options;
         Context* context = gCurrentContext;
         _CheckDocumentEnded(context);
         if (context->document) {
@@ -1077,12 +1084,128 @@ namespace RichMd
             ImGui::BeginChild(id, size);
             return;
         }
-        context->documentId = ImGui::GetID(id);
+        auto frame = std::make_unique<DocumentFrame>();
+        frame->id = ImGui::GetID(id);
+        frame->options = options;
+        DocumentState& state = context->documents[frame->id];
         ImGui::BeginChild(id, size);
-        context->document = std::make_unique<DocumentHeadings>();
+        frame->origin = ImGui::GetCursorPos();
+        frame->size = ImGui::GetContentRegionAvail();
+        const float em = ImGui::GetFontSize();
+        const bool toc = options.toc && state.headingCount >= options.tocMinHeadings;
+        frame->panel = toc && state.panelShown;
+        frame->line = toc && !state.panelShown;
+        const ImGuiChildFlags contentFlags = ImGuiChildFlags_AlwaysUseWindowPadding;
+        if (frame->panel) {
+            float maxEm = ImMax(kPanelMinEm, frame->size.x / em - kContentMinEm);
+            state.panelWidth = ImClamp(state.panelWidth, kPanelMinEm, maxEm);
+            frame->panelWidth = state.panelWidth * em;
+            bool touch = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
+            frame->splitterWidth = em * (touch ? 1.f : 0.5f);  // a finger needs a wider edge
+            float left = frame->panelWidth + frame->splitterWidth;
+            ImGui::SetCursorPos(ImVec2(frame->origin.x + left, frame->origin.y));
+            ImGui::BeginChild("##content", ImVec2(frame->size.x - left, frame->size.y), contentFlags);
+        } else if (frame->line) {
+            SizedFont font = GetFont(MarkdownFontSpec());  // the line is drawn in the markdown font
+            ImGui::PushFont(font.font, font.size);
+            float lineHeight = ImGui::GetFrameHeightWithSpacing();
+            ImGui::PopFont();
+            ImGui::SetCursorPos(ImVec2(frame->origin.x, frame->origin.y + lineHeight));
+            ImGui::BeginChild("##content", ImVec2(frame->size.x, frame->size.y - lineHeight), contentFlags);
+        } else
+            ImGui::BeginChild("##content", frame->size, contentFlags);
+        frame->scrollY = ImGui::GetScrollY();
+        frame->headings.contentStartY = ImGui::GetCursorPosY();
+        context->document = std::move(frame);
         context->documentFrame = ImGui::GetFrameCount();
         if (MarkdownRenderer* renderer = _Renderer())
-            renderer->document = context->document.get();
+            renderer->document = &context->document->headings;
+    }
+
+    // The entries of the table of contents (the panel's, or the menu's): a click sets the anchor to reach. Returns
+    // true when an entry was clicked.
+    static bool _DrawTocEntries(const DocumentFrame& frame, DocumentState& state, const std::vector<int>& listed,
+                                int current)
+    {
+        const std::vector<Heading>& headings = frame.headings.headings;
+        int minLevel = 6;
+        for (int k : listed)
+            minLevel = ImMin(minLevel, headings[k].level);
+        const bool touch = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
+        const float lineHeight = ImGui::GetTextLineHeight();
+        const float rowHeight = touch ? lineHeight * 2.f : lineHeight;  // a finger needs a taller row
+        bool clicked = false;
+        for (int k : listed) {
+            const Heading& heading = headings[k];
+            ImGui::PushID(k);
+            if (ImGui::Selectable("##entry", k == current, 0, ImVec2(0.f, rowHeight))) {
+                state.anchor = PendingAnchor();
+                state.anchor.slug = heading.slug;
+                clicked = true;
+            }
+            if (k == current && state.currentSection != current && !ImGui::IsItemVisible())
+                ImGui::SetScrollHereY(0.5f);  // the table of contents follows the reader
+            ImVec2 pos = ImGui::GetItemRectMin();
+            pos.x += ImGui::GetStyle().FramePadding.x + (float)(heading.level - minLevel) * ImGui::GetFontSize();
+            pos.y += (rowHeight - lineHeight) * 0.5f;
+            // A heading that a collapsed section hides is dimmed: a click opens the section
+            ImU32 color = ImGui::GetColorU32(heading.hidden ? ImGuiCol_TextDisabled : ImGuiCol_Text);
+            ImGui::GetWindowDrawList()->AddText(pos, color, heading.text.c_str());
+            ImGui::PopID();
+        }
+        return clicked;
+    }
+
+    // The table of contents beside the content, and its edge, dragged to resize it
+    static void _DrawTocPanel(const DocumentFrame& frame, DocumentState& state, const std::vector<int>& listed,
+                              int current)
+    {
+        ImGui::SetCursorPos(frame.origin);
+        ImGui::BeginChild("##toc", ImVec2(frame.panelWidth, frame.size.y), ImGuiChildFlags_Borders);
+        SizedFont font = GetFont(MarkdownFontSpec());
+        ImGui::PushFont(font.font, font.size);
+        if (ImGui::ArrowButton("##hide", ImGuiDir_Left))
+            state.panelShown = false;
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled("Contents");
+        ImGui::Separator();
+        _DrawTocEntries(frame, state, listed, current);
+        ImGui::PopFont();
+        ImGui::EndChild();
+
+        ImGui::SetCursorPos(ImVec2(frame.origin.x + frame.panelWidth, frame.origin.y));
+        ImGui::InvisibleButton("##edge", ImVec2(frame.splitterWidth, frame.size.y));
+        const bool active = ImGui::IsItemActive();
+        if (active)
+            state.panelWidth += ImGui::GetIO().MouseDelta.x / ImGui::GetFontSize();
+        if (active || ImGui::IsItemHovered()) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+            float x = (a.x + b.x) * 0.5f;
+            ImU32 color = ImGui::GetColorU32(active ? ImGuiCol_SeparatorActive : ImGuiCol_SeparatorHovered);
+            ImGui::GetWindowDrawList()->AddLine(ImVec2(x, a.y), ImVec2(x, b.y), color, 2.f);
+        }
+    }
+
+    // The table of contents hidden: a line above the content, with a button that shows the panel again, and the current
+    // section, which opens the table of contents as a menu (a combo box)
+    static void _DrawTocLine(const DocumentFrame& frame, DocumentState& state, const std::vector<int>& listed,
+                             int current)
+    {
+        ImGui::SetCursorPos(frame.origin);
+        SizedFont font = GetFont(MarkdownFontSpec());
+        ImGui::PushFont(font.font, font.size);
+        if (ImGui::ArrowButton("##show", ImGuiDir_Right))
+            state.panelShown = true;
+        ImGui::SameLine();
+        const std::string& title = current >= 0 ? frame.headings.headings[current].text : std::string("Contents");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::BeginCombo("##section", title.c_str(), ImGuiComboFlags_HeightLarge)) {
+            _DrawTocEntries(frame, state, listed, current);  // a click on an entry closes the menu
+            ImGui::EndCombo();
+        }
+        ImGui::PopFont();
     }
 
     void EndDocument()
@@ -1097,23 +1220,49 @@ namespace RichMd
             IM_ASSERT_USER_ERROR(false, "RichMd: EndDocument() without BeginDocument()");
             return;
         }
-        DocumentHeadings& document = *context->document;
-        PendingAnchor& anchor = context->documentAnchors[context->documentId];
-        if (!document.clickedAnchor.empty()) {
-            anchor = PendingAnchor();
-            anchor.slug = document.clickedAnchor;
+        DocumentFrame& frame = *context->document;
+        DocumentState& state = context->documents[frame.id];
+        const std::vector<Heading>& headings = frame.headings.headings;
+
+        // The anchor, in the content's window
+        if (!frame.headings.clickedAnchor.empty()) {
+            state.anchor = PendingAnchor();
+            state.anchor.slug = frame.headings.clickedAnchor;
         }
-        if (!anchor.slug.empty()) {
-            std::string slug = anchor.slug;
-            if (ResolveAnchor(anchor, document.headings, document.headingDetails) == AnchorStatus::NotFound
+        if (!state.anchor.slug.empty()) {
+            std::string slug = state.anchor.slug;
+            if (ResolveAnchor(state.anchor, headings, frame.headings.headingDetails) == AnchorStatus::NotFound
                 && context->options.callbacks.OnOpenLink)
                 context->options.callbacks.OnOpenLink("#" + slug);  // an anchor that no heading of the document has
         }
+
+        // The entries of the table of contents, and the current section: the last shown heading at or above the top
+        // of the view
+        std::vector<int> listed;
+        int current = -1;
+        for (int k = 0; k < (int)headings.size(); ++k) {
+            if (headings[k].level > frame.options.tocMaxLevel)
+                continue;
+            listed.push_back(k);
+            float top = ImMax(frame.scrollY, frame.headings.contentStartY) + ImGui::GetFontSize() * 0.5f;
+            if (!headings[k].hidden && headings[k].y <= top)
+                current = k;
+        }
+        ImGui::EndChild();  // the content
+
+        state.headingCount = (int)listed.size();
+        if (frame.panel)
+            _DrawTocPanel(frame, state, listed, current);
+        else if (frame.line)
+            _DrawTocLine(frame, state, listed, current);
+        state.currentSection = current;
+
         if (context->renderer)
             context->renderer->document = nullptr;
         context->document.reset();
-        ImGui::EndChild();
+        ImGui::EndChild();  // the document
     }
+    // ::endcode
 
     void RenderDocument(const char* id, const std::string& markdown, ImVec2 size, const DocumentOptions& options)
     {
@@ -1147,10 +1296,11 @@ namespace RichMd
         Heading heading;
         heading.level = level;
         heading.text = text;
-        heading.slug = UniqueSlug(text, context->document->slugOccurrences);
+        DocumentHeadings& document = context->document->headings;
+        heading.slug = UniqueSlug(text, document.slugOccurrences);
         heading.y = ImGui::GetCursorPosY();
-        context->document->headings.push_back(heading);
-        context->document->headingDetails.push_back(0);
+        document.headings.push_back(heading);
+        document.headingDetails.push_back(0);
     }
 
     // A text file: from the assets, else from the file system as is (a source file rendering itself)

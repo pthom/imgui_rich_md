@@ -1,7 +1,9 @@
 // Document test: BeginDocument() / EndDocument(), through Dear ImGui's null backend. The renders of a document share
 // their headings: the slugs are unique in the document, a link in one render reaches a heading of another, and
-// DocumentHeading() gives a section of widgets its heading. RenderDocument() is the one-call form. The user errors
-// (a document inside a document, an EndDocument() without its BeginDocument(), a document left open) are reported.
+// DocumentHeading() gives a section of widgets its heading. RenderDocument() is the one-call form. The table of
+// contents: shown from tocMinHeadings headings, a click on an entry scrolls to its heading, a button hides it (a line
+// then shows a button that brings it back). The user errors (a document inside a document, an EndDocument() without
+// its BeginDocument(), a document left open) are reported.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs, ImGuiContext::ErrorCountCurrentFrame, the child windows
 #include "imgui_impl_null.h"
@@ -9,6 +11,7 @@
 
 #include <cfloat>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -81,6 +84,21 @@ static void ClickFirstLine(ImVec2 topLeft, const std::function<void()>& content)
     DrawFrame(content);
 }
 
+// The windows of a document: the document's own child window (its name holds "/<id>_"), its content and its table of
+// contents (the children it drew in the last frame)
+static ImGuiWindow* ChildNamed(ImGuiWindow* parent, const char* part)
+{
+    if (parent)
+        for (ImGuiWindow* w : parent->DC.ChildWindows)
+            if (strstr(w->Name, part) && w->Active)
+                return w;
+    return nullptr;
+}
+static ImGuiWindow* DocumentWindow(const char* id)
+{
+    return ChildNamed(ImGui::FindWindowByName("Document"), (std::string("/") + id + "_").c_str());
+}
+
 static bool Expect(const char* what, bool condition)
 {
     if (!condition)
@@ -146,19 +164,78 @@ static bool CheckUnknownAnchor()
 static bool CheckRenderDocument()
 {
     const std::string md = "[to the end](#the-end)\n\n" + Lines(0, 30) + "## The end\n\n" + Lines(30, 60);
-    ImVec2 topLeft;
     float scrollY = 0.f, endY = -1.f;
     auto content = [&]() {
-        topLeft = ImGui::GetCursorScreenPos();
         RichMd::RenderDocument("one call", md, ImVec2(0.f, 200.f));
         for (const RichMd::Heading& h : RichMd::LastRenderHeadings())
             if (h.slug == "the-end")
                 endY = h.y;
-        scrollY = ImGui::GetCurrentWindow()->DC.ChildWindows.back()->Scroll.y;
+        scrollY = ChildNamed(ChildNamed(ImGui::GetCurrentWindow(), "/one call_"), "##content")->Scroll.y;
     };
     DrawFrame(content);
+    ImVec2 topLeft = ChildNamed(DocumentWindow("one call"), "##content")->DC.CursorStartPos;  // inside its padding
     ClickFirstLine(topLeft, content);
     return Expect("RenderDocument(): a link scrolls to its heading", scrollY > 0.f && ImAbs(scrollY - endY) <= 1.f);
+}
+
+// Clicks at the center of a rectangle of the screen, then a few frames
+static void ClickAt(ImVec2 pos, const std::function<void()>& content)
+{
+    ImGui::GetIO().AddMousePosEvent(pos.x, pos.y);
+    DrawFrame(content);
+    ImGui::GetIO().AddMouseButtonEvent(0, true);
+    DrawFrame(content);
+    ImGui::GetIO().AddMouseButtonEvent(0, false);
+    for (int i = 0; i < 8; ++i)
+        DrawFrame(content);
+    ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+    DrawFrame(content);
+}
+
+// The center of the k-th entry of n in the table of contents: the rows end at the bottom of its content
+static ImVec2 TocEntry(ImGuiWindow* toc, int k, int n)
+{
+    float lineHeight = RichMd::GetFont(RichMd::MarkdownFontSpec()).size;
+    float pitch = lineHeight + ImGui::GetStyle().ItemSpacing.y;
+    float y = toc->DC.CursorMaxPos.y - (float)(n - 1 - k) * pitch - lineHeight * 0.5f;
+    return ImVec2(toc->Pos.x + toc->Size.x * 0.5f, y);
+}
+
+static bool CheckTableOfContents()
+{
+    // The main document has three headings: its table of contents shows from the second frame (the first one counts
+    // them); a click on the second entry (the section of widgets) scrolls to it, a click on the first back to the top
+    DrawFrame(DrawMainDocument);
+    DrawFrame(DrawMainDocument);
+    ImGuiWindow* toc = ChildNamed(DocumentWindow("main"), "##toc");
+    bool ok = Expect("a document with three headings shows its table of contents", toc != nullptr);
+    if (!ok)
+        return false;
+    ClickAt(TocEntry(toc, 1, 3), DrawMainDocument);
+    ok = Expect("a click on an entry scrolls to its heading", ImAbs(gMain.scrollY - gMain.tryItY) <= 1.f) && ok;
+    ClickAt(TocEntry(toc, 2, 3), DrawMainDocument);
+    ok = Expect("a click on the last entry scrolls to it",
+                ImAbs(gMain.scrollY - gMain.headingsB[0].y) <= 1.f || gMain.scrollY == DocumentWindow("main")
+                    ->DC.ChildWindows[0]->ScrollMax.y) && ok;
+
+    // The button at the top left of the panel hides it; the line above the content then shows a button that brings
+    // it back
+    const float half = ImGui::GetFrameHeight() * 0.5f;
+    ImVec2 hide(toc->DC.CursorStartPos.x + half, toc->DC.CursorStartPos.y + half);
+    ClickAt(hide, DrawMainDocument);
+    ok = Expect("the hide button hides the table of contents", ChildNamed(DocumentWindow("main"), "##toc") == nullptr)
+         && ok;
+    ImGuiWindow* document = DocumentWindow("main");
+    ImVec2 show(document->DC.CursorStartPos.x + half, document->DC.CursorStartPos.y + half);
+    ClickAt(show, DrawMainDocument);
+    ok = Expect("the line's button shows it again", ChildNamed(DocumentWindow("main"), "##toc") != nullptr) && ok;
+
+    // Two headings (and one of level 4, beyond tocMaxLevel): no table of contents
+    auto fewHeadings = []() { RichMd::RenderDocument("few", "## One\n\n## Two\n\n#### Four\n", ImVec2(0.f, 200.f)); };
+    DrawFrame(fewHeadings);
+    DrawFrame(fewHeadings);
+    ok = Expect("two headings: no table of contents", ChildNamed(DocumentWindow("few"), "##toc") == nullptr) && ok;
+    return ok;
 }
 
 // The user errors are reported, and the next document works
@@ -212,6 +289,7 @@ int main(int, char**)
     ok = CheckDrawnTitle() && ok;
     ok = CheckUnknownAnchor() && ok;
     ok = CheckRenderDocument() && ok;
+    ok = CheckTableOfContents() && ok;
     ok = CheckUserErrors() && ok;
 
     RichMd::DestroyContext();

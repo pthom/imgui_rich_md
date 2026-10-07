@@ -1840,7 +1840,8 @@ int Renderer::print(const char* str, const char* str_end)
     // Inter-block spacing is emitted by block() before each top-level
     // separator-eligible block; set the flag so the very first one is
     // skipped (rendering starts flush at the caller's cursor).
-    m_skip_next_block_gap = true;
+    // In a document, a fragment that follows other content keeps it: the fragments read as one text.
+    m_skip_next_block_gap = !document || ImGui::GetCursorPosY() <= document->contentStartY;
     m_in_html_comment = false;
     m_html_comment_closed = false;
     m_html_gap_pending = false;

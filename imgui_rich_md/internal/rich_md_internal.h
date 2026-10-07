@@ -46,6 +46,33 @@ namespace RichMd
         std::vector<ImGuiID> headingDetails;  // the collapsed <details> that hides each heading (0: none)
         std::unordered_map<std::string, int> slugOccurrences;
         std::string clickedAnchor;
+        float contentStartY = 0.f;  // the top of the content: a fragment below it starts with the gap of a block
+    };
+
+    // A document being drawn: its headings, and its layout in this frame (decided by BeginDocument(), drawn by
+    // EndDocument())
+    struct DocumentFrame
+    {
+        ImGuiID id = 0;
+        DocumentOptions options;
+        DocumentHeadings headings;
+        ImVec2 origin;            // the top left of the document, in its window's local coordinates
+        ImVec2 size;              // the size of the document
+        bool panel = false;       // the table of contents beside the content
+        bool line = false;        // the line above the content (the table of contents hidden)
+        float panelWidth = 0.f;   // pixels
+        float splitterWidth = 0.f;
+        float scrollY = 0.f;      // the content's scroll
+    };
+
+    // The state of a document between frames, by id
+    struct DocumentState
+    {
+        PendingAnchor anchor;     // the anchor it is reaching
+        float panelWidth = 16.f;  // the table of contents' width, in em (the reader drags its edge)
+        bool panelShown = true;   // the reader can hide it
+        int headingCount = 0;     // at the last frame: the table of contents needs tocMinHeadings
+        int currentSection = -1;  // the heading at the top of the view, at the last frame
     };
 
     // ::md Context
@@ -66,13 +93,11 @@ namespace RichMd
         int fragmentCounter = 0;   // Render calls in this frame (seeds their ImGui ids)
         std::vector<bool> selectableTextStack;  // PushSelectableText()
         int selectableTextFrame = -1;            // the frame of the last PushSelectableText()
-        // Documents: the one being drawn (between BeginDocument() and EndDocument()), and the anchor each one is
-        // reaching, by id
-        std::unique_ptr<DocumentHeadings> document;
-        ImGuiID documentId = 0;
+        // Documents: the one being drawn (between BeginDocument() and EndDocument()), and the state of each, by id
+        std::unique_ptr<DocumentFrame> document;
         int documentFrame = -1;    // the frame of the last BeginDocument()
         int documentNesting = 0;   // BeginDocument() inside a document (a user error): only a child window
-        std::unordered_map<ImGuiID, PendingAnchor> documentAnchors;
+        std::unordered_map<ImGuiID, DocumentState> documents;
 #ifdef IMGUI_RICHMD_WITH_MERMAID
         Mermaid::CachePtr mermaidCache;  // created on first use
 #endif

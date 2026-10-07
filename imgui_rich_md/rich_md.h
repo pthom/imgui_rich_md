@@ -70,15 +70,20 @@ namespace RichMd
     //                                        Documents
     // =================================================================================================================
     /*::md Documents
-    A document is markdown in a scroll area of its own. `RenderDocument()` draws one markdown string.
-    `BeginDocument()` and `EndDocument()` frame several renders and widgets: their headings belong to the document, and
-    a link `[text](#slug)` in any of them reaches a heading of any other. `DocumentHeading()` gives a section made of
-    widgets its heading, as a markdown heading does.
+    A document is markdown in a scroll area of its own, with a table of contents beside it. `RenderDocument()` draws
+    one markdown string. `BeginDocument()` and `EndDocument()` frame several renders and widgets: their headings belong
+    to the document, and a link `[text](#slug)` in any of them reaches a heading of any other. `DocumentHeading()`
+    gives a section made of widgets its heading, as a markdown heading does.
     ::code
     */
     // The options of a document
     struct DocumentOptions
     {
+        // The table of contents: a side panel, whose edge the reader drags to resize it, and which a button hides
+        // (a line above the content then gives the current section, and the table of contents as a menu)
+        bool toc = true;
+        int tocMinHeadings = 3;   // with fewer headings, no table of contents
+        int tocMaxLevel = 3;      // the deepest level listed
     };
     // A document: the renders and the widgets drawn until EndDocument() share a scroll area and their headings.
     // size: as BeginChild (0: all the available space). Call EndDocument() in the same frame. The content is always
