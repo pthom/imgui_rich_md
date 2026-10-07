@@ -11,7 +11,7 @@ namespace RichMd
     {
         bool matchCase = false;
         bool wholeWords = false;
-        bool matchDiacritics = false;  // false: "e" finds "é" (Latin-1 and Latin Extended-A)
+        bool matchDiacritics = false;  // false: "e" finds "é" (Latin-1 and Latin Extended-A). The find bar keeps false
     };
 
     // A match: its bytes in the text

@@ -1598,14 +1598,20 @@ namespace RichMd
         if (_IconButton("##close", _Icon::Close))
             _CloseSearch(frame, state);
 
-        ImGui::Checkbox("Match case", &state.searchOptions.matchCase);
-        ImGui::SameLine();
-        ImGui::Checkbox("Whole words", &state.searchOptions.wholeWords);
-        if (!frame.narrow)
-            ImGui::SameLine();
-        ImGui::Checkbox("Diacritics", &state.searchOptions.matchDiacritics);
-        ImGui::SameLine();
-        ImGui::Checkbox("Highlight all", &state.highlightAll);
+        // The options, on one row when it fits. No option for the diacritics: the search always ignores them, as the
+        // browsers do by default ("cafe" finds "café")
+        auto option = [&style](const char* label, bool* value, bool first) {
+            if (!first) {
+                ImGui::SameLine();
+                if (ImGui::GetContentRegionAvail().x < ImGui::GetFrameHeight() + style.ItemInnerSpacing.x
+                                                           + ImGui::CalcTextSize(label).x)
+                    ImGui::NewLine();
+            }
+            ImGui::Checkbox(label, value);
+        };
+        option("Match case", &state.searchOptions.matchCase, true);
+        option("Whole words", &state.searchOptions.wholeWords, false);
+        option("Highlight all", &state.highlightAll, false);
         if (state.wrapMessage != nullptr) {
             const ImVec4 color = _Renderer()->admonition_color(Renderer::AdmonitionKind::Warning);
             ImGui::TextColored(color, "%s", state.wrapMessage);
