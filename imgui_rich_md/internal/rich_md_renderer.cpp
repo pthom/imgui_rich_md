@@ -272,6 +272,50 @@ void Renderer::add_heading(int level, float y, bool hidden)
 		heading.slug = base + "-" + std::to_string(++m_slug_occurrences[base]);
 	m_slug_occurrences[heading.slug] = 0;
 	m_headings.push_back(std::move(heading));
+	m_heading_details.push_back(hidden ? m_collapsed_details_id : 0);
+}
+
+// A click on a link: an anchor (#slug) waits for the end of the fragment, where its heading is known; any other link
+// goes to open_url()
+void Renderer::follow_link()
+{
+	if (m_href.size() > 1 && m_href[0] == '#') {
+		m_pending_anchor = m_href.substr(1);
+		m_pending_anchor_fragment = m_fragment_id;
+		m_pending_anchor_frames = 8;
+	} else
+		open_url();
+}
+
+// The anchor clicked in this fragment: the window scrolls to its heading. A heading that a collapsed <details> hides
+// opens it first, and the scroll waits for a next frame, where the heading is drawn. An anchor that no heading of the
+// fragment has goes to open_url(), as any link.
+// The heading is measured again at the frames after the scroll, which is corrected until it holds: Dear ImGui truncates
+// the cursor toward zero (ItemSize), so the content scrolled above the top of the screen grows by a pixel per item of a
+// fractional height (the gaps between blocks, the fonts of the headings).
+void Renderer::resolve_anchor(ImGuiID fragmentId)
+{
+	if (m_pending_anchor.empty() || m_pending_anchor_fragment != fragmentId)
+		return;
+	size_t i = 0;
+	while (i < m_headings.size() && m_headings[i].slug != m_pending_anchor)
+		++i;
+	if (i == m_headings.size()) {
+		m_href = "#" + m_pending_anchor;
+		open_url();
+		m_href.clear();
+		m_pending_anchor.clear();
+	} else if (m_headings[i].hidden && --m_pending_anchor_frames > 0)
+		ImGui::GetStateStorage()->SetInt(m_heading_details[i], 1);  // the section opens at the next frame
+	else {
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		float top = m_headings[i].y - window->DecoOuterSizeY1 - window->DecoInnerSizeY1;  // below a title bar, a menu bar
+		float scroll = ImClamp(ImTrunc(top), 0.f, window->ScrollMax.y);
+		if (ImFabs(window->Scroll.y - scroll) <= 1.f || --m_pending_anchor_frames <= 0)
+			m_pending_anchor.clear();  // there, or as near as it gets
+		else
+			ImGui::SetScrollY(scroll);  // applied at the next frame, where the heading is measured again
+	}
 }
 
 void Renderer::heading(int, const std::string&)
@@ -661,7 +705,7 @@ void Renderer::SPAN_IMG(const MD_SPAN_IMG_DETAIL* d, bool e)
 				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
 				if (ImGui::IsMouseClicked(0)) {
-					open_url();
+					follow_link();
 				}
 			}
 		}
@@ -966,7 +1010,7 @@ void Renderer::render_text(const char* str, const char* str_end)
 				if (m_is_wikilink)
 					open_wikilink();
 				else
-					open_url();
+					follow_link();
 			}
 		}
 		if (m_is_underline) {
@@ -1306,8 +1350,10 @@ bool Renderer::check_html(const char* str, const char* str_end)
 			ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 		bool open = ImGui::CollapsingHeader(label.c_str());
 		ImGui::PopID();
-		if (!open)  // the outermost collapsed section: the place of the headings it hides
+		if (!open) {  // the outermost collapsed section: the place of the headings it hides
 			m_collapsed_details_y = ImGui::GetItemRectMin().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
+			m_collapsed_details_id = ImGui::GetItemID();
+		}
 		m_details_open_stack.push_back(open);
 		if (open)
 			ImGui::Indent();
@@ -1760,6 +1806,7 @@ int Renderer::span(MD_SPANTYPE type, void* d, bool e)
 int Renderer::print(const char* str, const char* str_end)
 {
 	m_headings.clear();
+	m_heading_details.clear();
 	m_slug_occurrences.clear();
 	if (str >= str_end)
         return 0;
@@ -1782,6 +1829,7 @@ int Renderer::print(const char* str, const char* str_end)
 
     // The fragment's selection is drawn behind its text: the text goes to channel 1, the highlight to channel 0
     ImGuiID selectionId = ImGui::GetID("##rich_md_selection");
+    m_fragment_id = selectionId;
     if (m_selection_fragment == selectionId
         && (!selectableText || ImHashStr(str, (size_t)(str_end - str)) != m_selection_text_hash))
         m_selection_fragment = 0;  // not selectable anymore, or another text (its offsets mean nothing anymore)
@@ -1795,6 +1843,7 @@ int Renderer::print(const char* str, const char* str_end)
 	if (style.fragmentGapTop > 0.0f)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapTop));
 	int result = md_parse(str, (MD_SIZE)(str_end - str), &m_md, this);
+	resolve_anchor(selectionId);
 
     if (selectableText)
         update_selection(selectionId);

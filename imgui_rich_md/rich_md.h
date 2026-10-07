@@ -48,6 +48,8 @@ namespace RichMd
     // =================================================================================================================
     /*::md Headings
     After a `Render()`, its headings and their places: for a table of contents drawn by the application.
+    A link `[text](#slug)` scrolls to the heading of that slug in the same render, and opens the collapsed sections
+    (`<details>`) that hide it. A slug that no heading of the render has goes to `OnOpenLink`, as any link.
     ::code
     */
     // A heading of the last render
@@ -57,7 +59,7 @@ namespace RichMd
         std::string text;       // without markup
         std::string slug;       // its anchor, made from the text as GitHub does (a repeated title gets -1, -2...)
         float y = 0.f;          // its top, in the content coordinates of the window that holds the render (as
-                                // ImGui::GetCursorPosY()): ImGui::SetScrollY(y) shows it at the top
+                                // ImGui::GetCursorPosY()): in a child window, ImGui::SetScrollY(y) shows it at the top
         bool hidden = false;    // inside a collapsed <details>: y is the one of the section's header
     };
     // The headings of the last Render() call (valid until the next one)

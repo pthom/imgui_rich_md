@@ -346,7 +346,17 @@ private:
 	std::unordered_map<std::string, int> m_slug_occurrences;
 	float m_heading_top = -1.f;          // the top of the heading being read (its first text run), in content coordinates
 	float m_collapsed_details_y = 0.f;   // the header of the outermost collapsed <details>: its hidden headings are there
+	ImGuiID m_collapsed_details_id = 0;  // and its id (the state of a CollapsingHeader)
+	std::vector<ImGuiID> m_heading_details;  // for each heading, the collapsed <details> that hides it (0: none)
 	void add_heading(int level, float y, bool hidden);
+
+	// An anchor link (#slug) clicked in a fragment: resolved at the end of the fragment, once its headings are known
+	std::string m_pending_anchor;
+	ImGuiID m_fragment_id = 0;           // the fragment being drawn (its id, taken in the id scope of print())
+	ImGuiID m_pending_anchor_fragment = 0;
+	int m_pending_anchor_frames = 0;     // the frames left to reach it through collapsed sections, one level per frame
+	void follow_link();
+	void resolve_anchor(ImGuiID fragmentId);
 	ImDrawListSplitter m_selection_splitter;     // channel 0: the highlight, behind the text of channel 1
 
 	void record_run(const char* str, const char* str_end, const std::string& replacement = "");
