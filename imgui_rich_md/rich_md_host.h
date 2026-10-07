@@ -143,6 +143,10 @@ namespace RichMd
 
         // Logs a warning. Default: stderr.
         std::function<void(const std::string& message)> Log;
+
+        // Whether the system asks for reduced motion (macOS and iOS "Reduce motion", Windows "Show animations", a
+        // browser's prefers-reduced-motion): the documents then scroll without animation. Default: none (no preference).
+        std::function<bool()> PrefersReducedMotion;
     };
 
     // Sets the host services (call before CreateContext). Empty fields keep their default.

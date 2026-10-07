@@ -62,7 +62,18 @@ one markdown string. `BeginDocument()` and `EndDocument()` frame several renders
 to the document, and a link `[text](#slug)` in any of them reaches a heading of any other. `DocumentHeading()`
 gives a section made of widgets its heading, as a markdown heading does.
 
+The search: Ctrl+F (Cmd+F on macOS) in a document opens its find bar. The matches are highlighted in all its
+renders; Enter goes to the next one, Shift+Enter (or the up arrow) to the previous one, Escape closes the bar.
+
 ```cpp
+// The scroll to a match, a heading or an anchor: eased over scrollAnimationSeconds, unless reduced motion is asked
+enum class ScrollAnimation
+{
+    FollowSystem,   // animated, unless the system asks for reduced motion (HostServices::PrefersReducedMotion)
+    Always,
+    Never
+};
+
 // The options of a document
 struct DocumentOptions
 {
@@ -73,6 +84,10 @@ struct DocumentOptions
     int tocMaxLevel = 3;      // the deepest level listed
     // A document narrower than this (in em) shows the line above the content instead of the panel (a phone)
     float narrowWidth = 40.f;
+    // The search: Ctrl+F (Cmd+F on macOS) in the document opens its find bar
+    bool search = true;
+    ScrollAnimation scrollAnimation = ScrollAnimation::FollowSystem;
+    float scrollAnimationSeconds = 0.3f;  // the duration of an animated scroll, whatever its distance
 };
 // A document: the renders and the widgets drawn until EndDocument() share a scroll area and their headings.
 // size: as BeginChild (0: all the available space). Call EndDocument() in the same frame. The content is always
@@ -362,6 +377,8 @@ struct Style
     ImVec4 quoteBar = ImVec4(0, 0, 0, -1);             // automatic: ImGuiCol_TextDisabled
     ImVec4 kbdBorder = ImVec4(0, 0, 0, -1);            // automatic: ImGuiCol_Border
     ImVec4 markBackground = ImVec4(245.f / 255.f, 205.f / 255.f, 60.f / 255.f, 120.f / 255.f);
+    ImVec4 searchMatch = ImVec4(245.f / 255.f, 205.f / 255.f, 60.f / 255.f, 0.45f);  // a match of the search
+    ImVec4 searchMatchCurrent = ImVec4(1.f, 0.55f, 0.1f, 0.75f);                    // the current match
     // Note, Tip, Important, Warning, Caution (label and bar)
     ImVec4 admonitionColors[5] = {
         ImVec4(0.35f, 0.65f, 1.00f, 1.0f), ImVec4(0.25f, 0.73f, 0.32f, 1.0f), ImVec4(0.82f, 0.60f, 0.97f, 1.0f),
@@ -530,6 +547,10 @@ struct HostServices
 
     // Logs a warning. Default: stderr.
     std::function<void(const std::string& message)> Log;
+
+    // Whether the system asks for reduced motion (macOS and iOS "Reduce motion", Windows "Show animations", a
+    // browser's prefers-reduced-motion): the documents then scroll without animation. Default: none (no preference).
+    std::function<bool()> PrefersReducedMotion;
 };
 
 // Sets the host services (call before CreateContext). Empty fields keep their default.

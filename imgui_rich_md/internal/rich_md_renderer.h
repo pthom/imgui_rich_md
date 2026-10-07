@@ -33,8 +33,9 @@
 
 #include "md4c.h"
 #include "imgui.h"
+#include "imgui_internal.h"  // ImRect
 #include "../rich_md.h"  // Style
-#include "rich_md_internal.h"  // PendingAnchor, DocumentHeadings
+#include "rich_md_internal.h"  // PendingAnchor, DocumentRenders
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -71,7 +72,7 @@ struct Renderer
 	// The headings of the last fragment, in order
 	const std::vector<Heading>& headings() const { return m_headings; }
 	// Set between BeginDocument() and EndDocument(): the headings and the anchors of the fragments go to the document
-	DocumentHeadings* document = nullptr;
+	DocumentRenders* document = nullptr;
 
 	// The automatic link color: the text color, shifted to blue
 	static ImVec4 default_link_color();
@@ -378,12 +379,26 @@ private:
 	void update_selection(ImGuiID fragmentId);
 	void show_selection_menu(ImGuiID fragmentId);
 	void draw_selection() const;
+	// The rectangles (on the screen) of the text between two offsets of the fragment: one per run
+	void range_rects(size_t b, size_t e, std::vector<ImRect>& out) const;
+	// The matches of the document's search in this fragment: added to the document, drawn behind the text
+	void search_fragment(int fragment);
 
 	MD_PARSER m_md;
 };
 
 // A slug made from a heading's text, unique among those given so far (a repeated one gets -1, -2...)
 std::string UniqueSlug(const std::string& text, std::unordered_map<std::string, int>& occurrences);
+
+// The heading of an anchor: a collapsed section that hides it opens first (at the next frame), and the anchor waits.
+// Returns the heading's index, -1 while waiting, -2 when no heading has the anchor's slug.
+int FindAnchorHeading(PendingAnchor& anchor, const std::vector<Heading>& headings,
+                      const std::vector<ImGuiID>& headingDetails);
+// The scroll of the current window that shows its content's y at its top (below a title bar, a menu bar)
+float ScrollToShowAtTop(float y);
+// One frame of the correction of a scroll, in the current window: set again until it holds. Returns true when it holds,
+// or when the frames run out.
+bool CorrectScroll(float scroll, int& frames);
 
 // One frame of the way to an anchor, in the current window: a collapsed section that hides its heading opens (at the
 // next frame), or the window scrolls the heading to its top (corrected at the next frames, until it holds)

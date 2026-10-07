@@ -1063,12 +1063,15 @@ namespace RichMd
     }
 
     // ::md Documents
-    // A document is two child windows: the content, where the renders put their headings and the anchors clicked in
-    // them (into the context's document), and the table of contents beside it. `BeginDocument()` decides the layout
-    // from the state the document kept at the last frame (the number of its headings, the panel's width, whether the
-    // reader hid it), and opens the content. `EndDocument()` resolves the anchor in the content's window (the state of
-    // its collapsed sections, its scroll), closes it, then draws the table of contents from the headings of this frame,
-    // which are complete. A click in the table of contents is an anchor, reached at the next frame.
+    // A document is two child windows: the content, where the renders put their headings, the anchors clicked in them
+    // and the matches of the search (into the context's document), and the table of contents beside it.
+    // `BeginDocument()` decides the layout from the state the document kept at the last frame (the number of its
+    // headings, the panel's width, whether the reader hid it), hands the query to the renders, and opens the content.
+    // `EndDocument()` works in the content's window (the state of its collapsed sections, its scroll): it finds the
+    // current match among those of this frame, and makes one frame of the scroll in progress. Then it closes the
+    // content, draws the table of contents from the headings of this frame, which are complete, and the find bar over
+    // the content. A scroll (to an anchor, an entry of the table of contents, a match) measures its target again at
+    // each frame: eased over the animation, then corrected until it holds.
     // ::code
     static constexpr float kPanelMinEm = 8.f;      // the narrowest table of contents
     static constexpr float kContentMinEm = 16.f;   // the narrowest content beside it
@@ -1097,6 +1100,10 @@ namespace RichMd
         frame->panel = toc && state.panelShown && !frame->narrow;
         frame->line = toc && !frame->panel;
         const ImGuiChildFlags contentFlags = ImGuiChildFlags_AlwaysUseWindowPadding;
+        if (state.focusContent) {
+            ImGui::SetNextWindowFocus();
+            state.focusContent = false;
+        }
         if (frame->panel) {
             float maxEm = ImMax(kPanelMinEm, frame->size.x / em - kContentMinEm);
             state.panelWidth = ImClamp(state.panelWidth, kPanelMinEm, maxEm);
@@ -1116,19 +1123,248 @@ namespace RichMd
         } else
             ImGui::BeginChild("##content", frame->size, contentFlags);
         frame->scrollY = ImGui::GetScrollY();
-        frame->headings.contentStartY = ImGui::GetCursorPosY();
+        frame->renders.contentStartY = ImGui::GetCursorPosY();
+        if (options.search && state.searchOpen) {  // the renders find the matches of the query, and draw them
+            frame->renders.query = state.query;
+            frame->renders.searchOptions = state.searchOptions;
+            frame->renders.highlightAll = state.highlightAll;
+            frame->renders.currentFragment = state.currentFragment;
+            frame->renders.currentBegin = state.currentBegin;
+        }
         context->document = std::move(frame);
         context->documentFrame = ImGui::GetFrameCount();
         if (MarkdownRenderer* renderer = _Renderer())
-            renderer->document = &context->document->headings;
+            renderer->document = &context->document->renders;
     }
 
-    // The entries of the table of contents (the panel's, or the menu's): a click sets the anchor to reach. Returns
-    // true when an entry was clicked.
+    // The scrolls of a document: to a heading (an anchor, a click in the table of contents) or to a match
+    static void _ScrollToHeading(DocumentState& state, const std::string& slug)
+    {
+        state.scroll = DocumentScroll();
+        state.scroll.anchor.slug = slug;
+        state.scroll.frames = 8;
+    }
+    static void _ScrollToMatch(DocumentState& state, int fragment, size_t begin)
+    {
+        state.scroll = DocumentScroll();
+        state.scroll.matchFragment = fragment;
+        state.scroll.matchBegin = begin;
+        state.scroll.frames = 8;
+    }
+
+    // The duration of an animated scroll: none when the options or the system ask for none
+    static float _ScrollAnimationSeconds(const DocumentOptions& options)
+    {
+        if (options.scrollAnimation == ScrollAnimation::Never)
+            return 0.f;
+        if (options.scrollAnimation == ScrollAnimation::FollowSystem && gHostServices.PrefersReducedMotion
+            && gHostServices.PrefersReducedMotion())
+            return 0.f;
+        return options.scrollAnimationSeconds;
+    }
+
+    // One frame of a scroll toward `scroll`, in the content's window: eased over the animation (fast at first, slow at
+    // the end), then corrected until it holds. The wheel stops it. Returns true when it is over.
+    static bool _ScrollToward(DocumentScroll& s, float scroll, float seconds)
+    {
+        if (ImGui::GetIO().MouseWheel != 0.f && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows))
+            return true;  // the reader took over
+        if (!s.animated) {
+            if (s.start < 0.0 && seconds > 0.f) {
+                s.from = ImGui::GetScrollY();
+                s.start = ImGui::GetTime();
+            }
+            float t = (s.start < 0.0) ? 1.f : (float)(ImGui::GetTime() - s.start) / seconds;
+            if (t < 1.f) {
+                float eased = 1.f - (1.f - t) * (1.f - t) * (1.f - t);
+                ImGui::SetScrollY(s.from + (scroll - s.from) * eased);
+                return false;
+            }
+            s.animated = true;
+        }
+        return CorrectScroll(scroll, s.frames);
+    }
+
+    // The scroll the document is making, in the content's window: its target is measured again at each frame
+    static void _UpdateScroll(Context* context, const DocumentFrame& frame, DocumentState& state)
+    {
+        DocumentScroll& s = state.scroll;
+        const float seconds = _ScrollAnimationSeconds(frame.options);
+        if (!s.anchor.slug.empty()) {
+            const DocumentRenders& renders = frame.renders;
+            int i = FindAnchorHeading(s.anchor, renders.headings, renders.headingDetails);
+            if (i == -2) {  // an anchor that no heading of the document has
+                if (context->options.callbacks.OnOpenLink)
+                    context->options.callbacks.OnOpenLink("#" + s.anchor.slug);
+                s = DocumentScroll();
+            } else if (i >= 0 && _ScrollToward(s, ScrollToShowAtTop(renders.headings[(size_t)i].y), seconds))
+                s = DocumentScroll();
+        } else if (s.matchFragment >= 0) {
+            const DocumentMatch* match = nullptr;
+            for (const DocumentMatch& m : frame.renders.matches)
+                if (m.fragment == s.matchFragment && m.begin == s.matchBegin)
+                    match = &m;
+            // The match comes below the find bar, else at a third of the view
+            float top = state.findBarBottom > 0.f ? state.findBarBottom + ImGui::GetFontSize()
+                                                  : ImGui::GetWindowHeight() / 3.f;
+            if (match == nullptr || _ScrollToward(s, ScrollToShowAtTop(match->y - top), seconds))
+                s = DocumentScroll();
+        }
+    }
+
+    // The current match, kept by its render and its first byte: found again at each frame. A new query (or a text that
+    // changed) makes the first match below the top of the view current; a step goes to the next or the previous one,
+    // and wraps around. The view scrolls to a new current match when it does not show it.
+    static void _UpdateCurrentMatch(const DocumentFrame& frame, DocumentState& state)
+    {
+        const std::vector<DocumentMatch>& matches = frame.renders.matches;
+        state.matchCount = (int)matches.size();
+        if (frame.renders.query.empty() || matches.empty()) {
+            state.currentMatch = -1;
+            state.step = 0;
+            state.jumpToFirst = false;
+            return;
+        }
+        int current = -1;
+        for (int i = 0; i < (int)matches.size(); ++i)
+            if (matches[(size_t)i].fragment == state.currentFragment && matches[(size_t)i].begin == state.currentBegin)
+                current = i;
+        const float viewTop = frame.scrollY + state.findBarBottom;
+        const float viewBottom = frame.scrollY + ImGui::GetWindowHeight();
+        bool scroll = false;
+        if (current < 0 || state.jumpToFirst) {
+            current = 0;
+            for (int i = 0; i < (int)matches.size(); ++i)
+                if (matches[(size_t)i].y >= viewTop) {
+                    current = i;
+                    break;
+                }
+            scroll = state.jumpToFirst;
+            state.jumpToFirst = false;
+        }
+        if (state.step != 0) {
+            current = (current + state.step + (int)matches.size()) % (int)matches.size();
+            state.step = 0;
+            scroll = true;
+        }
+        const DocumentMatch& match = matches[(size_t)current];
+        state.currentMatch = current;
+        state.currentFragment = match.fragment;
+        state.currentBegin = match.begin;
+        if (scroll && (match.y < viewTop || match.bottom > viewBottom))
+            _ScrollToMatch(state, match.fragment, match.begin);
+    }
+
+    // A square button with a cross, drawn (no glyph needed)
+    static bool _CloseButton(const char* id)
+    {
+        float size = ImGui::GetFrameHeight();
+        bool clicked = ImGui::Button(id, ImVec2(size, size));
+        ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        float r = size * 0.2f;
+        ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddLine(ImVec2(c.x - r, c.y - r), ImVec2(c.x + r, c.y + r), color, 1.5f);
+        drawList->AddLine(ImVec2(c.x - r, c.y + r), ImVec2(c.x + r, c.y - r), color, 1.5f);
+        return clicked;
+    }
+
+    // The find bar, over the top right of the content (its whole width when the document is narrow): the query, the
+    // count, the previous and the next match, the options. Enter goes to the next match, Shift+Enter to the previous,
+    // Escape closes it.
+    static void _DrawFindBar(const DocumentFrame& frame, DocumentState& state, ImVec2 contentMin, ImVec2 contentMax)
+    {
+        SizedFont font = GetFont(MarkdownFontSpec());
+        ImGui::PushFont(font.font, font.size);
+        const float em = ImGui::GetFontSize();
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const float pad = em * 0.4f;
+        const float available = contentMax.x - contentMin.x - style.ScrollbarSize - 2.f * pad;
+        const float width = frame.narrow ? available : ImMin(em * 30.f, available);
+        ImGui::SetCursorScreenPos(ImVec2(contentMax.x - style.ScrollbarSize - pad - width, contentMin.y + pad));
+        ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
+        background.w = 1.f;  // opaque: the text below does not show through
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
+        ImGuiChildFlags flags =
+            ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding;
+        ImGui::BeginChild("##findbar", ImVec2(width, 0.f), flags);
+        ImGui::PopStyleColor();
+
+        const float button = ImGui::GetFrameHeight();
+        const float countWidth = ImGui::CalcTextSize("000/000").x;
+        char count[32] = "";
+        if (state.matchCount > 0)
+            snprintf(count, sizeof(count), "%d/%d", state.currentMatch + 1, state.matchCount);
+        else if (state.query[0] != '\0')
+            snprintf(count, sizeof(count), "0/0");
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 3.f * (button + style.ItemSpacing.x) - countWidth
+                                - style.ItemSpacing.x);
+        if (state.focusQuery) {
+            ImGui::SetKeyboardFocusHere();
+            state.focusQuery = false;
+        }
+        std::string query = state.query;
+        auto callback = [](ImGuiInputTextCallbackData* data) {
+            DocumentState& state = *(DocumentState*)data->UserData;
+            if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory)  // the arrows: the previous, the next match
+                state.step = (data->EventKey == ImGuiKey_UpArrow) ? -1 : 1;
+            else if (state.selectQuery) {
+                data->SelectAll();
+                state.selectQuery = false;
+            }
+            return 0;
+        };
+        const ImGuiInputTextFlags queryFlags = ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackAlways;
+        if (ImGui::InputTextWithHint("##query", "Find in the document", state.query, sizeof(state.query), queryFlags,
+                                     callback, &state))
+            state.jumpToFirst = true;
+        const bool typing = ImGui::IsItemActive() || ImGui::IsItemDeactivated();  // Enter and Escape deactivate it
+        if (typing && (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))) {
+            state.step = ImGui::GetIO().KeyShift ? -1 : 1;
+            state.focusQuery = true;  // Enter leaves the field: the focus comes back
+        }
+        if (typing && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            // Escape reverts the field to its text at its activation: the query stays for the next search
+            ImStrncpy(state.query, query.c_str(), sizeof(state.query));
+            state.searchOpen = false;
+            state.focusContent = true;
+        }
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + countWidth - ImGui::CalcTextSize(count).x);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(count);
+        ImGui::SameLine();
+        if (ImGui::ArrowButton("##previous", ImGuiDir_Up))
+            state.step = -1;
+        ImGui::SameLine();
+        if (ImGui::ArrowButton("##next", ImGuiDir_Down))
+            state.step = 1;
+        ImGui::SameLine();
+        if (_CloseButton("##close")) {
+            state.searchOpen = false;
+            state.focusContent = true;
+        }
+
+        ImGui::Checkbox("Match case", &state.searchOptions.matchCase);
+        ImGui::SameLine();
+        ImGui::Checkbox("Whole words", &state.searchOptions.wholeWords);
+        if (!frame.narrow)
+            ImGui::SameLine();
+        ImGui::Checkbox("Diacritics", &state.searchOptions.matchDiacritics);
+        ImGui::SameLine();
+        ImGui::Checkbox("Highlight all", &state.highlightAll);
+        ImGui::EndChild();
+        state.findBarBottom = ImGui::GetItemRectMax().y - contentMin.y;
+        ImGui::PopFont();
+    }
+
+    // The entries of the table of contents (the panel's, or the menu's): a click scrolls to the entry's heading.
+    // Returns true when an entry was clicked.
     static bool _DrawTocEntries(const DocumentFrame& frame, DocumentState& state, const std::vector<int>& listed,
                                 int current)
     {
-        const std::vector<Heading>& headings = frame.headings.headings;
+        const std::vector<Heading>& headings = frame.renders.headings;
         int minLevel = 6;
         for (int k : listed)
             minLevel = ImMin(minLevel, headings[k].level);
@@ -1140,8 +1376,7 @@ namespace RichMd
             const Heading& heading = headings[k];
             ImGui::PushID(k);
             if (ImGui::Selectable("##entry", k == current, 0, ImVec2(0.f, rowHeight))) {
-                state.anchor = PendingAnchor();
-                state.anchor.slug = heading.slug;
+                _ScrollToHeading(state, heading.slug);
                 clicked = true;
             }
             if (k == current && state.currentSection != current && !ImGui::IsItemVisible())
@@ -1202,7 +1437,7 @@ namespace RichMd
                 state.panelShown = true;
             ImGui::SameLine();
         }
-        const std::string& title = current >= 0 ? frame.headings.headings[current].text : std::string("Contents");
+        const std::string& title = current >= 0 ? frame.renders.headings[current].text : std::string("Contents");
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::BeginCombo("##section", title.c_str(), ImGuiComboFlags_HeightLarge)) {
             _DrawTocEntries(frame, state, listed, current);  // a click on an entry closes the menu
@@ -1225,19 +1460,13 @@ namespace RichMd
         }
         DocumentFrame& frame = *context->document;
         DocumentState& state = context->documents[frame.id];
-        const std::vector<Heading>& headings = frame.headings.headings;
+        const std::vector<Heading>& headings = frame.renders.headings;
 
-        // The anchor, in the content's window
-        if (!frame.headings.clickedAnchor.empty()) {
-            state.anchor = PendingAnchor();
-            state.anchor.slug = frame.headings.clickedAnchor;
-        }
-        if (!state.anchor.slug.empty()) {
-            std::string slug = state.anchor.slug;
-            if (ResolveAnchor(state.anchor, headings, frame.headings.headingDetails) == AnchorStatus::NotFound
-                && context->options.callbacks.OnOpenLink)
-                context->options.callbacks.OnOpenLink("#" + slug);  // an anchor that no heading of the document has
-        }
+        // In the content's window: the anchor clicked in a render, the current match, the scroll in progress
+        if (!frame.renders.clickedAnchor.empty())
+            _ScrollToHeading(state, frame.renders.clickedAnchor);
+        _UpdateCurrentMatch(frame, state);
+        _UpdateScroll(context, frame, state);
 
         // The entries of the table of contents, and the current section: the last shown heading at or above the top
         // of the view
@@ -1247,11 +1476,12 @@ namespace RichMd
             if (headings[k].level > frame.options.tocMaxLevel)
                 continue;
             listed.push_back(k);
-            float top = ImMax(frame.scrollY, frame.headings.contentStartY) + ImGui::GetFontSize() * 0.5f;
+            float top = ImMax(frame.scrollY, frame.renders.contentStartY) + ImGui::GetFontSize() * 0.5f;
             if (!headings[k].hidden && headings[k].y <= top)
                 current = k;
         }
         ImGui::EndChild();  // the content
+        const ImVec2 contentMin = ImGui::GetItemRectMin(), contentMax = ImGui::GetItemRectMax();
 
         state.headingCount = (int)listed.size();
         if (frame.panel)
@@ -1259,6 +1489,18 @@ namespace RichMd
         else if (frame.line)
             _DrawTocLine(frame, state, listed, current);
         state.currentSection = current;
+
+        // The search: Ctrl+F (Cmd+F on macOS) in the document opens the find bar, drawn over the content
+        if (frame.options.search) {
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F)) {  // routed to the focused window and its parents
+                state.searchOpen = true;
+                state.focusQuery = state.selectQuery = true;
+            }
+            if (state.searchOpen)
+                _DrawFindBar(frame, state, contentMin, contentMax);
+            else
+                state.findBarBottom = 0.f;
+        }
 
         if (context->renderer)
             context->renderer->document = nullptr;
@@ -1299,7 +1541,7 @@ namespace RichMd
         Heading heading;
         heading.level = level;
         heading.text = text;
-        DocumentHeadings& document = context->document->headings;
+        DocumentRenders& document = context->document->renders;
         heading.slug = UniqueSlug(text, document.slugOccurrences);
         heading.y = ImGui::GetCursorPosY();
         document.headings.push_back(heading);

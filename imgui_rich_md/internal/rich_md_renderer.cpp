@@ -319,28 +319,49 @@ void Renderer::resolve_anchor(ImGuiID fragmentId)
 // The scroll is measured again at the frames after it, and corrected until it holds: Dear ImGui truncates the cursor
 // toward zero (ItemSize), so the content scrolled above the top of the screen grows by a pixel per item of a fractional
 // height (the gaps between blocks, the fonts of the headings).
-AnchorStatus ResolveAnchor(PendingAnchor& anchor, const std::vector<Heading>& headings,
-                           const std::vector<ImGuiID>& headingDetails)
+int FindAnchorHeading(PendingAnchor& anchor, const std::vector<Heading>& headings,
+                      const std::vector<ImGuiID>& headingDetails)
 {
 	size_t i = 0;
 	while (i < headings.size() && headings[i].slug != anchor.slug)
 		++i;
-	if (i == headings.size()) {
+	if (i == headings.size())
+		return -2;
+	if (headings[i].hidden && --anchor.frames > 0) {
+		ImGui::GetStateStorage()->SetInt(headingDetails[i], 1);  // the section opens at the next frame
+		return -1;
+	}
+	return (int)i;
+}
+
+float ScrollToShowAtTop(float y)
+{
+	ImGuiWindow* window = ImGui::GetCurrentWindow();
+	return ImClamp(ImTrunc(y - window->DecoOuterSizeY1 - window->DecoInnerSizeY1), 0.f, window->ScrollMax.y);
+}
+
+bool CorrectScroll(float scroll, int& frames)
+{
+	if (ImFabs(ImGui::GetScrollY() - scroll) <= 1.f || --frames <= 0)
+		return true;  // there, or as near as it gets
+	ImGui::SetScrollY(scroll);  // applied at the next frame, where the target is measured again
+	return false;
+}
+
+AnchorStatus ResolveAnchor(PendingAnchor& anchor, const std::vector<Heading>& headings,
+                           const std::vector<ImGuiID>& headingDetails)
+{
+	int i = FindAnchorHeading(anchor, headings, headingDetails);
+	if (i == -2) {
 		anchor.slug.clear();
 		return AnchorStatus::NotFound;
 	}
-	if (headings[i].hidden && --anchor.frames > 0) {
-		ImGui::GetStateStorage()->SetInt(headingDetails[i], 1);  // the section opens at the next frame
+	if (i == -1)
 		return AnchorStatus::Waiting;
-	}
-	ImGuiWindow* window = ImGui::GetCurrentWindow();
-	float top = headings[i].y - window->DecoOuterSizeY1 - window->DecoInnerSizeY1;  // below a title bar, a menu bar
-	float scroll = ImClamp(ImTrunc(top), 0.f, window->ScrollMax.y);
-	if (ImFabs(window->Scroll.y - scroll) <= 1.f || --anchor.frames <= 0) {
-		anchor.slug.clear();  // there, or as near as it gets
+	if (CorrectScroll(ScrollToShowAtTop(headings[(size_t)i].y), anchor.frames)) {
+		anchor.slug.clear();
 		return AnchorStatus::Reached;
 	}
-	ImGui::SetScrollY(scroll);  // applied at the next frame, where the heading is measured again
 	return AnchorStatus::Waiting;
 }
 
@@ -1862,7 +1883,8 @@ int Renderer::print(const char* str, const char* str_end)
         m_selection_fragment = 0;  // not selectable anymore, or another text (its offsets mean nothing anymore)
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     bool drawSelection = m_selection_fragment == selectionId && m_selection_anchor != m_selection_focus;
-    if (drawSelection) {
+    const bool drawSearch = document && !document->query.empty();  // the matches of the search, behind the text too
+    if (drawSelection || drawSearch) {
         m_selection_splitter.Split(drawList, 2);
         m_selection_splitter.SetCurrentChannel(drawList, 1);
     }
@@ -1870,14 +1892,18 @@ int Renderer::print(const char* str, const char* str_end)
 	if (style.fragmentGapTop > 0.0f)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapTop));
 	int result = md_parse(str, (MD_SIZE)(str_end - str), &m_md, this);
+	const int fragmentRank = document ? document->fragmentCount++ : -1;
 	if (!document)
 		resolve_anchor(selectionId);
 
     if (selectableText)
         update_selection(selectionId);
-    if (drawSelection) {
+    if (drawSelection || drawSearch) {
         m_selection_splitter.SetCurrentChannel(drawList, 0);
-        draw_selection();
+        if (drawSearch)
+            search_fragment(fragmentRank);
+        if (drawSelection)
+            draw_selection();
         m_selection_splitter.Merge(drawList);
     }
 	if (style.fragmentGapBottom < 0.0f)
@@ -2298,24 +2324,99 @@ void Renderer::show_selection_menu(ImGuiID fragmentId)
 }
 
 // The highlight of the selected parts of the runs
-void Renderer::draw_selection() const
+void Renderer::range_rects(size_t b, size_t e, std::vector<ImRect>& out) const
 {
-	size_t b = ImMin(m_selection_anchor, m_selection_focus);
-	size_t e = ImMax(m_selection_anchor, m_selection_focus);
-	ImDrawList* drawList = ImGui::GetWindowDrawList();
-	ImU32 color = ImGui::GetColorU32(ImGuiCol_TextSelectedBg);
 	for (const TextRun& run : m_runs) {
 		if (run.end <= b || run.begin >= e)
 			continue;
 		float x0 = run.min.x, x1 = run.max.x;
-		if (run.replacement.empty()) {
+		if (run.replacement.empty()) {  // a run with a replacement (a formula) is whole
 			const char* text = m_fragment_begin + run.begin;
 			if (b > run.begin)
 				x0 += run.font->CalcTextSizeA(run.fontSize, FLT_MAX, 0.0f, text, m_fragment_begin + b).x;
 			if (e < run.end)
 				x1 = run.min.x + run.font->CalcTextSizeA(run.fontSize, FLT_MAX, 0.0f, text, m_fragment_begin + e).x;
 		}
-		drawList->AddRectFilled(ImVec2(x0, run.min.y), ImVec2(x1, run.max.y), color);
+		out.emplace_back(ImVec2(x0, run.min.y), ImVec2(x1, run.max.y));
+	}
+}
+
+void Renderer::draw_selection() const
+{
+	std::vector<ImRect> rects;
+	range_rects(ImMin(m_selection_anchor, m_selection_focus), ImMax(m_selection_anchor, m_selection_focus), rects);
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	ImU32 color = ImGui::GetColorU32(ImGuiCol_TextSelectedBg);
+	for (const ImRect& r : rects)
+		drawList->AddRectFilled(r.Min, r.Max, color);
+}
+
+// The context of a match, for the lists of matches: a few words on each side, on its line, "..." where it is cut
+static constexpr size_t kContextBytes = 40;
+static std::string context_before(const std::string& text, size_t at)
+{
+	size_t start = at > kContextBytes ? at - kContextBytes : 0;
+	for (size_t i = start; i < at; ++i)
+		if (text[i] == '\n')
+			start = i + 1;
+	bool cut = start > 0 && text[start - 1] != '\n';
+	while (start < at && ((unsigned char)text[start] & 0xC0) == 0x80)
+		++start;
+	if (cut) {
+		size_t space = text.find(' ', start);
+		if (space != std::string::npos && space < at)
+			start = space + 1;
+	}
+	return (cut ? "..." : "") + text.substr(start, at - start);
+}
+static std::string context_after(const std::string& text, size_t at)
+{
+	size_t end = ImMin(text.size(), at + kContextBytes);
+	size_t newline = text.find('\n', at);
+	if (newline != std::string::npos && newline < end)
+		end = newline;
+	bool cut = end < text.size() && text[end] != '\n';
+	while (end > at && end < text.size() && ((unsigned char)text[end] & 0xC0) == 0x80)
+		--end;
+	if (cut) {
+		size_t space = text.rfind(' ', end);
+		if (space != std::string::npos && space > at)
+			end = space;
+	}
+	return text.substr(at, end - at) + (cut ? "..." : "");
+}
+
+void Renderer::search_fragment(int fragment)
+{
+	DocumentRenders& d = *document;
+	std::string text;
+	std::vector<std::pair<size_t, size_t>> sources;
+	visible_text(0, (size_t)-1, text, &sources);
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	const float toContent = ImGui::GetScrollY() - ImGui::GetWindowPos().y;  // a screen y to the content's coordinates
+	const ImU32 matchColor = ImGui::GetColorU32(style.searchMatch);
+	const ImU32 currentColor = ImGui::GetColorU32(style.searchMatchCurrent);
+	std::vector<ImRect> rects;
+	for (const TextMatch& found : FindMatches(text, d.query, d.searchOptions)) {
+		DocumentMatch match;
+		match.fragment = fragment;
+		match.begin = sources[found.begin].first;
+		match.end = sources[found.end - 1].second;
+		rects.clear();
+		range_rects(match.begin, match.end, rects);
+		if (rects.empty())
+			continue;  // only the blank between two runs
+		match.y = rects.front().Min.y + toContent;
+		match.bottom = rects.back().Max.y + toContent;
+		match.before = context_before(text, found.begin);
+		match.text = text.substr(found.begin, found.end - found.begin);
+		match.after = context_after(text, found.end);
+		bool current = fragment == d.currentFragment && match.begin == d.currentBegin;
+		if (current || d.highlightAll)
+			for (const ImRect& r : rects)
+				if (ImGui::IsRectVisible(r.Min, r.Max))
+					drawList->AddRectFilled(r.Min, r.Max, current ? currentColor : matchColor);
+		d.matches.push_back(std::move(match));
 	}
 }
 

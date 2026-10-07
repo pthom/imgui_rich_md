@@ -2,12 +2,15 @@
 // their headings: the slugs are unique in the document, a link in one render reaches a heading of another, and
 // DocumentHeading() gives a section of widgets its heading. RenderDocument() is the one-call form. The table of
 // contents: shown from tocMinHeadings headings, a click on an entry scrolls to its heading, a button hides it (a line
-// then shows a button that brings it back). The user errors (a document inside a document, an EndDocument() without
-// its BeginDocument(), a document left open) are reported.
+// then shows a button that brings it back). The search: Ctrl+F opens the find bar, a query finds its matches in the
+// document, Enter, Shift+Enter and the arrows go through them (the scroll follows, animated), Escape closes the bar and
+// keeps the query. The user errors (a document inside a document, an EndDocument() without its BeginDocument(), a
+// document left open) are reported.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs, ImGuiContext::ErrorCountCurrentFrame, the child windows
 #include "imgui_impl_null.h"
 #include "imgui_rich_md/rich_md.h"
+#include "imgui_rich_md/internal/rich_md_internal.h"  // the state of a document
 
 #include <cfloat>
 #include <cstdio>
@@ -69,7 +72,10 @@ static void DrawFrame(const std::function<void()>& content)
     ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
 }
 
-// A click on the first line of a text drawn at topLeft (a link opens on the release), then a few frames
+// The frames a scroll of the document takes: its animation (0.3 s, at 60 frames per second), then its corrections
+static const int kScrollFrames = 40;
+
+// A click on the first line of a text drawn at topLeft (a link opens on the release), then the frames of the scroll
 static void ClickFirstLine(ImVec2 topLeft, const std::function<void()>& content)
 {
     float lineHeight = RichMd::GetFont(RichMd::MarkdownFontSpec()).size;
@@ -78,7 +84,7 @@ static void ClickFirstLine(ImVec2 topLeft, const std::function<void()>& content)
     ImGui::GetIO().AddMouseButtonEvent(0, true);
     DrawFrame(content);
     ImGui::GetIO().AddMouseButtonEvent(0, false);
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < kScrollFrames; ++i)
         DrawFrame(content);
     ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
     DrawFrame(content);
@@ -178,7 +184,7 @@ static bool CheckRenderDocument()
     return Expect("RenderDocument(): a link scrolls to its heading", scrollY > 0.f && ImAbs(scrollY - endY) <= 1.f);
 }
 
-// Clicks at the center of a rectangle of the screen, then a few frames
+// A click at a place of the screen, then the frames of the scroll
 static void ClickAt(ImVec2 pos, const std::function<void()>& content)
 {
     ImGui::GetIO().AddMousePosEvent(pos.x, pos.y);
@@ -186,7 +192,7 @@ static void ClickAt(ImVec2 pos, const std::function<void()>& content)
     ImGui::GetIO().AddMouseButtonEvent(0, true);
     DrawFrame(content);
     ImGui::GetIO().AddMouseButtonEvent(0, false);
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < kScrollFrames; ++i)
         DrawFrame(content);
     ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
     DrawFrame(content);
@@ -257,6 +263,83 @@ static bool CheckTableOfContents()
     return ok;
 }
 
+// A key pressed (with its modifiers), then a number of frames
+static void PressKey(ImGuiKeyChord chord, const std::function<void()>& content, int frames = kScrollFrames)
+{
+    ImGuiIO& io = ImGui::GetIO();
+    const ImGuiKey key = (ImGuiKey)(chord & ~ImGuiMod_Mask_);
+    const ImGuiKey mods[] = {ImGuiMod_Ctrl, ImGuiMod_Shift};
+    for (ImGuiKey mod : mods)
+        if (chord & mod)
+            io.AddKeyEvent(mod, true);
+    io.AddKeyEvent(key, true);
+    DrawFrame(content);
+    io.AddKeyEvent(key, false);
+    for (ImGuiKey mod : mods)
+        if (chord & mod)
+            io.AddKeyEvent(mod, false);
+    for (int i = 0; i < frames; ++i)
+        DrawFrame(content);
+}
+
+// The state rich_md keeps for a document of the window "Document"
+static RichMd::DocumentState& DocumentStateOf(const char* id)
+{
+    return RichMd::GetCurrentContext()->documents[ImGui::FindWindowByName("Document")->GetID(id)];
+}
+
+static bool CheckSearch()
+{
+    // "Line 4" is in "Line 4" and "Line 40" to "Line 49"
+    const std::string md = Lines(0, 60);
+    auto content = [&md]() { RichMd::RenderDocument("search", md, ImVec2(0.f, 200.f)); };
+    auto scrollY = []() { return ChildNamed(DocumentWindow("search"), "##content")->Scroll.y; };
+    DrawFrame(content);
+    DrawFrame(content);
+    RichMd::DocumentState& state = DocumentStateOf("search");
+
+    ClickAt(ChildNamed(DocumentWindow("search"), "##content")->DC.CursorStartPos, content);  // the focus
+    PressKey(ImGuiMod_Ctrl | ImGuiKey_F, content);
+    bool ok = Expect("Ctrl+F opens the find bar", state.searchOpen);
+    ImGui::GetIO().AddInputCharactersUTF8("Line 4");
+    for (int i = 0; i < 3; ++i)
+        DrawFrame(content);
+    ok = Expect("the query finds its matches in the document", state.matchCount == 11) && ok;
+    ok = Expect("the first match below the top of the view is current, and visible: no scroll",
+                state.currentMatch == 0 && scrollY() == 0.f) && ok;
+
+    // Enter: the next match ("Line 40"), out of the view: the scroll goes to it, animated
+    PressKey(ImGuiKey_Enter, content, 4);
+    const float during = scrollY();
+    for (int i = 0; i < kScrollFrames; ++i)
+        DrawFrame(content);
+    const float after = scrollY();
+    ok = Expect("Enter goes to the next match", state.currentMatch == 1) && ok;
+    ok = Expect("the scroll reaches it, animated", during > 0.f && during < after) && ok;
+    PressKey(ImGuiMod_Shift | ImGuiKey_Enter, content);
+    ok = Expect("Shift+Enter goes back to the previous match", state.currentMatch == 0 && scrollY() < after) && ok;
+    PressKey(ImGuiKey_UpArrow, content);
+    ok = Expect("the up arrow before the first match wraps to the last", state.currentMatch == 10) && ok;
+    PressKey(ImGuiKey_DownArrow, content);
+    ok = Expect("the down arrow after the last match wraps to the first", state.currentMatch == 0) && ok;
+
+    state.searchOptions.wholeWords = true;
+    DrawFrame(content);
+    ok = Expect("whole words: \"Line 40\" does not match \"Line 4\"", state.matchCount == 1) && ok;
+    state.searchOptions.wholeWords = false;
+
+    PressKey(ImGuiKey_Escape, content);
+    ok = Expect("Escape closes the find bar", !state.searchOpen) && ok;
+
+    // Ctrl+F again: the field selects the query, a new one replaces it; Escape keeps it for the next search
+    PressKey(ImGuiMod_Ctrl | ImGuiKey_F, content);
+    ImGui::GetIO().AddInputCharactersUTF8("Line 5");
+    DrawFrame(content);
+    PressKey(ImGuiKey_Escape, content);
+    ok = Expect("the query stays for the next search", std::string(state.query) == "Line 5") && ok;
+    return ok;
+}
+
 // The user errors are reported, and the next document works
 static bool CheckUserErrors()
 {
@@ -298,6 +381,7 @@ int main(int, char**)
 {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
+    ImGui::GetIO().ConfigMacOSXBehaviors = false;  // on macOS, ImGui reads the Ctrl key sent by the tests as Cmd
     ImGui_ImplNull_Init();
     RichMd::MarkdownOptions options;
     options.callbacks.OnOpenLink = [](const std::string& url) { gOpenedLink = url; };
@@ -309,6 +393,7 @@ int main(int, char**)
     ok = CheckUnknownAnchor() && ok;
     ok = CheckRenderDocument() && ok;
     ok = CheckTableOfContents() && ok;
+    ok = CheckSearch() && ok;
     ok = CheckUserErrors() && ok;
 
     RichMd::DestroyContext();

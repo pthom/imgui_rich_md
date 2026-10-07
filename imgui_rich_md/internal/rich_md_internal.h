@@ -2,6 +2,7 @@
 #pragma once
 // Helpers shared by the wrapper and its backends. Not part of the public API.
 #include "../rich_md.h"
+#include "rich_md_search.h"
 #ifdef IMGUI_RICHMD_WITH_MERMAID
 #include "../backends/mermaid/rich_md_mermaid.h"
 #endif
@@ -38,15 +39,33 @@ namespace RichMd
         ImGuiID fragment = 0;   // the fragment it was clicked in (outside a document)
     };
 
-    // The headings of the document being drawn (between BeginDocument() and EndDocument()), gathered across its
-    // fragments (their slugs unique in the document), and the anchor clicked in one of them in this frame
-    struct DocumentHeadings
+    // A match of the search, in a render of a document
+    struct DocumentMatch
+    {
+        int fragment = 0;                 // the rank of its render in the document
+        size_t begin = 0, end = 0;        // its bytes in the render's text
+        float y = 0.f, bottom = 0.f;      // its top and bottom, in the content's coordinates
+        std::string before, text, after;  // its context, for the lists of matches
+    };
+
+    // What the renders of the document being drawn (between BeginDocument() and EndDocument()) share: their headings
+    // (their slugs unique in the document), the anchor clicked in one of them in this frame, and the search (set by
+    // BeginDocument(): each render adds its matches)
+    struct DocumentRenders
     {
         std::vector<Heading> headings;
         std::vector<ImGuiID> headingDetails;  // the collapsed <details> that hides each heading (0: none)
         std::unordered_map<std::string, int> slugOccurrences;
         std::string clickedAnchor;
         float contentStartY = 0.f;  // the top of the content: a fragment below it starts with the gap of a block
+        int fragmentCount = 0;      // the renders so far: the rank of the next one
+
+        std::string query;          // empty: no search
+        SearchOptions searchOptions;
+        bool highlightAll = true;
+        int currentFragment = -1;   // the current match, as of the last frame: its render and its first byte
+        size_t currentBegin = 0;
+        std::vector<DocumentMatch> matches;
     };
 
     // A document being drawn: its headings, and its layout in this frame (decided by BeginDocument(), drawn by
@@ -55,7 +74,7 @@ namespace RichMd
     {
         ImGuiID id = 0;
         DocumentOptions options;
-        DocumentHeadings headings;
+        DocumentRenders renders;
         ImVec2 origin;            // the top left of the document, in its window's local coordinates
         ImVec2 size;              // the size of the document
         bool panel = false;       // the table of contents beside the content
@@ -66,14 +85,42 @@ namespace RichMd
         float scrollY = 0.f;      // the content's scroll
     };
 
+    // A scroll a document is making, to a heading (an anchor, a click in the table of contents) or to a match: measured
+    // again at each frame, eased over the animation's duration, then corrected until it holds
+    struct DocumentScroll
+    {
+        PendingAnchor anchor;          // a heading, when its slug is not empty
+        int matchFragment = -1;        // else a match (its render and its first byte), when matchFragment >= 0
+        size_t matchBegin = 0;
+        int frames = 0;                // the frames left for the correction
+        float from = 0.f;              // the animation: the scroll at its start, and its start time (-1: none yet)
+        double start = -1.0;
+        bool animated = false;         // the animation was done (or skipped)
+    };
+
     // The state of a document between frames, by id
     struct DocumentState
     {
-        PendingAnchor anchor;     // the anchor it is reaching
+        DocumentScroll scroll;    // the scroll it is making
         float panelWidth = 16.f;  // the table of contents' width, in em (the reader drags its edge)
         bool panelShown = true;   // the reader can hide it
         int headingCount = 0;     // at the last frame: the table of contents needs tocMinHeadings
         int currentSection = -1;  // the heading at the top of the view, at the last frame
+
+        // The search: the find bar and its options, the current match (its render and its first byte)
+        bool searchOpen = false;
+        bool focusQuery = false;  // the query's field takes the focus at the next frame
+        bool selectQuery = false;  // Ctrl+F: the field selects the query (typing replaces it)
+        bool focusContent = false;  // the find bar closed: the content takes the focus back (Ctrl+F reaches it)
+        char query[256] = "";
+        SearchOptions searchOptions;
+        bool highlightAll = true;
+        int currentFragment = -1;
+        size_t currentBegin = 0;
+        int step = 0;             // the find bar asked for the next (1) or the previous (-1) match
+        bool jumpToFirst = false; // the query changed: the first match below the top of the view becomes current
+        int matchCount = 0, currentMatch = -1;  // at the last frame, for the find bar
+        float findBarBottom = 0.f;              // the bottom of the find bar below the content's top (a jump aims below)
     };
 
     // ::md Context
