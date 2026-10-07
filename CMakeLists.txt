@@ -51,6 +51,7 @@ add_library(imgui_rich_md STATIC
     ${_richmd_dir}/rich_md_host.h
     ${_richmd_dir}/internal/rich_md_renderer.cpp ${_richmd_dir}/internal/rich_md_renderer.h
     ${_richmd_dir}/internal/rich_md_internal.h
+    ${_richmd_dir}/internal/rich_md_search.cpp ${_richmd_dir}/internal/rich_md_search.h
 )
 add_library(RichMd::RichMd ALIAS imgui_rich_md)
 target_compile_features(imgui_rich_md PUBLIC cxx_std_17)

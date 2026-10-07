@@ -367,6 +367,12 @@ private:
 	const TextRun* run_at(size_t offset) const;
 	void select_at(ImGuiID fragmentId, size_t offset, int clicks);
 	void select_all(ImGuiID fragmentId);
+	// The text the runs between two offsets of the fragment show: the replacement of a run that has one, a space at a
+	// wrap (where only blanks separate two runs of a block), a newline between two blocks. sourceOffsets, when given,
+	// gets for each byte of the text the bytes of the fragment it shows: [first, second) (a whole run for a replacement,
+	// an empty range between two runs for a separator)
+	void visible_text(size_t b, size_t e, std::string& out,
+	                  std::vector<std::pair<size_t, size_t>>* sourceOffsets = nullptr) const;
 	std::string selected_text() const;
 	std::string selected_markdown() const;
 	void update_selection(ImGuiID fragmentId);

@@ -40,6 +40,11 @@ target_include_directories(imgui_rich_md_document_test PRIVATE ${IMGUI_DIR}/back
 target_link_libraries(imgui_rich_md_document_test PRIVATE imgui_rich_md)
 add_test(NAME document_test COMMAND imgui_rich_md_document_test)
 
+# The search test: the matching of the search (no ImGui)
+add_executable(imgui_rich_md_search_test ${CMAKE_CURRENT_LIST_DIR}/search_test.cpp)
+target_link_libraries(imgui_rich_md_search_test PRIVATE imgui_rich_md)
+add_test(NAME search_test COMMAND imgui_rich_md_search_test)
+
 # The Mermaid test: the corpus of tests/mermaid, parsed, laid out and checked (the review page: tests/mermaid/mermaid_review.cpp)
 if(IMGUI_RICHMD_WITH_MERMAID)
     add_executable(imgui_rich_md_mermaid_test ${CMAKE_CURRENT_LIST_DIR}/mermaid/mermaid_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)

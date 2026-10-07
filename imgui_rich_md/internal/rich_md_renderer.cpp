@@ -2156,33 +2156,50 @@ std::string Renderer::selected_markdown() const
 
 // The selected parts of the runs; between two runs of a block, a space where the text between them is blank (a
 // wrapped line) and nothing where it is markup (**, ](url)); a newline between two blocks
-std::string Renderer::selected_text() const
+void Renderer::visible_text(size_t b, size_t e, std::string& out,
+                            std::vector<std::pair<size_t, size_t>>* sourceOffsets) const
 {
-	size_t b = ImMin(m_selection_anchor, m_selection_focus);
-	size_t e = ImMax(m_selection_anchor, m_selection_focus);
-	std::string out;
+	auto separator = [&](const char* text, size_t at) {
+		out += text;
+		if (sourceOffsets)
+			sourceOffsets->emplace_back(at, at);
+	};
 	const TextRun* previous = nullptr;
 	for (const TextRun& run : m_runs) {
 		if (run.end <= b || run.begin >= e)
 			continue;
+		size_t from = ImMax(b, run.begin), to = ImMin(e, run.end);
 		std::string piece = !run.replacement.empty()
 			? run.replacement
-			: std::string(m_fragment_begin + ImMax(b, run.begin), m_fragment_begin + ImMin(e, run.end));
+			: std::string(m_fragment_begin + from, m_fragment_begin + to);
 		if (previous != nullptr) {
 			if (run.block != previous->block)
-				out += "\n";
+				separator("\n", previous->end);
 			else if (run.begin > previous->end && !out.empty() && out.back() != ' ' && out.back() != '\n'
 			         && !piece.empty() && piece[0] != ' ') {
 				bool blank = true;
 				for (size_t i = previous->end; i < run.begin && blank; ++i)
 					blank = m_fragment_begin[i] == ' ' || m_fragment_begin[i] == '\t' || m_fragment_begin[i] == '\n';
 				if (blank)
-					out += " ";
+					separator(" ", previous->end);
 			}
 		}
 		out += piece;
+		if (sourceOffsets) {
+			if (!run.replacement.empty())
+				sourceOffsets->insert(sourceOffsets->end(), piece.size(), std::make_pair(run.begin, run.end));
+			else
+				for (size_t i = from; i < to; ++i)
+					sourceOffsets->emplace_back(i, i + 1);
+		}
 		previous = &run;
 	}
+}
+
+std::string Renderer::selected_text() const
+{
+	std::string out;
+	visible_text(ImMin(m_selection_anchor, m_selection_focus), ImMax(m_selection_anchor, m_selection_focus), out);
 	return out;
 }
 
