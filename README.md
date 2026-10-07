@@ -45,7 +45,8 @@ RichMd::DestroyContext();              // before the backends shut down
 | Images | from files or assets, from URLs with the download option, sized with `<img width=...>`, a spinner while loading |
 | LaTeX | inline `$...$` and display `$$...$$`, with the LaTeX option |
 | Mermaid | flowcharts, sequence and class diagrams in ` ```mermaid ` blocks, drawn natively with `ImDrawList` (no web view); [what is supported](docs/mermaid.md) |
-| Structure | GitHub admonitions (`> [!NOTE]`), task lists, collapsible sections (`<details>`), `<center>` |
+| Structure | GitHub admonitions (`> [!NOTE]`), task lists, collapsible sections (`<details>`), headings that fold (an option), `<center>` |
+| Documents | several renders and widgets in one scroll area: a table of contents, links between them, a search (Ctrl+F) that also finds the text of code blocks and collapsed sections |
 | Callbacks | links, wikilinks (`[[target]]`), headings (tables of contents), your own renderer for a fenced block language |
 | Narrative programming | a source file carries markdown sections and code regions (`::md Name`, `::code`) that a document transcludes (`![[file.py#Name]]`): a program can be its own narrative ([specification](docs/narrative_programming/narrative_programming_spec.md)) |
 | Fonts | Roboto and Inconsolata included; CJK, emoji or icon fonts merged into every markdown font |

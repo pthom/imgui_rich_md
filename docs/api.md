@@ -40,6 +40,11 @@ After a `Render()`, its headings and their places: for a table of contents drawn
 A link `[text](#slug)` scrolls to the heading of that slug in the same render, and opens the collapsed sections
 (`<details>`) that hide it. A slug that no heading of the render has goes to `OnOpenLink`, as any link.
 
+With `MarkdownOptions::foldableHeadings`, the headings fold: an arrow in a margin at their left (shown under the
+mouse, always on a touch screen) hides their section, until the next heading of the same level or above. The menu
+of a right click folds or unfolds them all, as `FoldAllHeadings()` does. A link or a search that reaches a folded
+section unfolds it.
+
 ```cpp
 // A heading of the last render
 struct Heading
@@ -48,7 +53,7 @@ struct Heading
     std::string text;       // without markup
     std::string slug;       // its anchor, made from the text as GitHub does (a repeated title gets -1, -2...)
     float y = 0.f;          // its top, in its window's content coordinates: SetScrollY(y) shows it at the top
-    bool hidden = false;    // inside a collapsed `<details>`: y is the one of the section's header
+    bool hidden = false;    // inside a collapsed `<details>` or a fold: y is the one of what hides it
 };
 // The headings of the last Render() call (valid until the next one)
 const std::vector<Heading>& LastRenderHeadings();
@@ -63,6 +68,10 @@ A document is markdown in a scroll area of its own, with a table of contents bes
 one markdown string. `BeginDocument()` and `EndDocument()` frame several renders and widgets: their headings belong
 to the document, and a link `[text](#slug)` in any of them reaches a heading of any other. `DocumentHeading()`
 gives a section made of widgets its heading, as a markdown heading does.
+
+With foldable headings, a fold goes on across the renders and the sections of widgets: `DocumentHeading()` returns
+false when a fold hides its section, and the application skips its widgets. The table of contents folds or unfolds
+them all.
 
 The search: Ctrl+F (Cmd+F on macOS) in a document opens its find bar, and so does "/" when no text field is active
 (in a web page, Cmd+F also opens the browser's find bar, unless the page cancels the key while its canvas has the
