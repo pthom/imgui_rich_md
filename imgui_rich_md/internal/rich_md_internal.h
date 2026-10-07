@@ -3,6 +3,7 @@
 // Helpers shared by the wrapper and its backends. Not part of the public API.
 #include "../rich_md.h"
 #include "rich_md_search.h"
+#include "imgui_internal.h"  // ImRect
 #ifdef IMGUI_RICHMD_WITH_MERMAID
 #include "../backends/mermaid/rich_md_mermaid.h"
 #endif
@@ -172,3 +173,26 @@ namespace RichMd { namespace Internal
     // empty lines. Code: trailing spaces are trimmed; markdown: they are kept (two are a hard line break).
     std::string Unindent(const std::string& text, bool isCode);
 }}
+
+namespace RichMd
+{
+    // A match of the search in a code block: its bytes in the code, its color (0: not drawn)
+    struct CodeBlockMatch
+    {
+        size_t begin = 0, end = 0;
+        ImU32 color = 0;
+        bool current = false;
+    };
+}
+
+#ifdef IMGUI_RICHMD_WITH_CODE_EDITOR
+namespace Snippets { struct SnippetData; }
+namespace RichMd { namespace Internal
+{
+    // A snippet with the matches of a document's search drawn behind its code (snippets.cpp): a long snippet scrolls to
+    // the current one. In a document, the editor's own find is off: Ctrl+F reaches the document's. Returns the matches'
+    // rectangles, on the screen.
+    std::vector<ImRect> ShowCodeSnippetWithMatches(const Snippets::SnippetData& snippet,
+                                                   const std::vector<CodeBlockMatch>& matches, bool inDocument);
+}}
+#endif

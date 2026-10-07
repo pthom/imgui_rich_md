@@ -7,9 +7,9 @@
 // list under the find bar or of the ticks on the scrollbar goes to it, a step past an end wraps around and says so,
 // Escape closes the bar (its current match becomes the selection) and keeps the query. The magnifier of a narrow
 // document opens the bar, above its content. The search goes beyond the text: a formula is one match (in its LaTeX
-// source), a collapsed section is searched (a jump to one of its matches opens it), a code block is searched. The user
-// errors (a document inside a document, an EndDocument() without its BeginDocument(), a document left open) are
-// reported.
+// source), a collapsed section is searched (a jump to one of its matches opens it), a code block is searched, and
+// Ctrl+F in it opens the document's find bar. The user errors (a document inside a document, an EndDocument() without
+// its BeginDocument(), a document left open) are reported.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs, ImGuiContext::ErrorCountCurrentFrame, the child windows
 #include "imgui_impl_null.h"
@@ -442,6 +442,20 @@ static bool CheckSearchEverywhere()
     for (int i = 0; i < kScrollFrames; ++i)
         DrawFrame(content);
     ok = Expect("the next match is in the code block", state.currentMatch == 3) && ok;
+
+    // Ctrl+F in a code block opens the document's find bar (the code editor's own find is off in a document)
+    state.searchOpen = false;
+    DrawFrame(content);
+    ImGuiWindow* code = nullptr;
+    for (ImGuiWindow* w : ChildNamed(DocumentWindow("everywhere"), "##content")->DC.ChildWindows)
+        if (w->Active && !strstr(w->Name, "copy_overlay"))
+            code = w;
+    ok = Expect("the code block is a child window", code != nullptr) && ok;
+    if (code != nullptr) {
+        ClickAt(ImVec2(code->Pos.x + code->Size.x * 0.5f, code->Pos.y + code->Size.y * 0.5f), content);
+        PressKey(ImGuiMod_Ctrl | ImGuiKey_F, content);
+        ok = Expect("Ctrl+F in a code block opens the document's find bar", state.searchOpen) && ok;
+    }
     state.searchOpen = false;
     return ok;
 }

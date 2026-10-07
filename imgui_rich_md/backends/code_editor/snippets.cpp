@@ -154,6 +154,7 @@ namespace Snippets
         size_t longestLine = 0;             // in characters, of the submitted code
         std::string contextLine;            // the line and column right-clicked (for the host's menu)
         size_t contextColumn = 0;
+        std::vector<RichMd::CodeBlockMatch> shownMatches;  // the matches of a search, shown as background squiggles
     };
     static std::map<ImGuiID, SnippetEditor> gSnippetEditors;
     // The reader's choice for the long lines, shared by all the snippets: an editor out of view is dropped, so a
@@ -193,7 +194,74 @@ namespace Snippets
         }
     }
 
-    bool ShowEditableCodeSnippet(const std::string& label_id, SnippetData* snippetDataPtr, float width, int overrideHeightInLines)
+    // The editor's position of a byte of a snippet's code: the editor shows the code unindented (its first blank lines
+    // and its common indentation removed, see RichMd::Internal::Unindent), and counts the glyphs of a line, not its
+    // bytes
+    static TextEditor::DocPos _DocPos(const std::string& code, size_t offset, bool deIndented)
+    {
+        size_t line = 0, lineStart = 0;
+        for (size_t i = 0; i < offset && i < code.size(); ++i)
+            if (code[i] == '\n')
+            {
+                ++line;
+                lineStart = i + 1;
+            }
+        size_t from = lineStart;
+        if (deIndented)
+        {
+            size_t firstLine = 0, start = 0, indent = 0;  // the first line that is not blank, and its indentation
+            while (true)
+            {
+                size_t end = code.find('\n', start);
+                std::string lineText = code.substr(start, end == std::string::npos ? std::string::npos : end - start);
+                if (lineText.find_first_not_of(" \t\r") != std::string::npos)
+                {
+                    indent = lineText.find_first_not_of(' ');
+                    break;
+                }
+                if (end == std::string::npos)
+                    break;
+                start = end + 1;
+                ++firstLine;
+            }
+            line = line >= firstLine ? line - firstLine : 0;
+            if (code.compare(lineStart, indent, std::string(indent, ' ')) == 0)
+                from = lineStart + indent;
+        }
+        size_t glyphs = 0;
+        for (size_t i = from; i < offset && i < code.size(); ++i)
+            if (((unsigned char)code[i] & 0xC0) != 0x80)
+                ++glyphs;
+        return TextEditor::DocPos(line, glyphs);
+    }
+
+    static bool _SameMatches(const std::vector<RichMd::CodeBlockMatch>& a, const std::vector<RichMd::CodeBlockMatch>& b)
+    {
+        if (a.size() != b.size())
+            return false;
+        for (size_t i = 0; i < a.size(); ++i)
+        {
+            const RichMd::CodeBlockMatch &x = a[i], &y = b[i];
+            if (x.begin != y.begin || x.end != y.end || x.color != y.color || x.current != y.current)
+                return false;
+        }
+        return true;
+    }
+
+    // The search of a document in a snippet (ShowCodeSnippetWithMatches)
+    struct SnippetSearch
+    {
+        const std::vector<RichMd::CodeBlockMatch>& matches;
+        bool inDocument;
+    };
+    struct ShownSnippet
+    {
+        bool changed = false;
+        std::vector<ImRect> matchRects;  // on the screen
+    };
+
+    static ShownSnippet _ShowSnippet(const std::string& label_id, SnippetData* snippetDataPtr, float width,
+                                     int overrideHeightInLines, const SnippetSearch* search)
     {
         SnippetData& snippetData = *snippetDataPtr;
 
@@ -228,9 +296,34 @@ namespace Snippets
             std::string& submitted = state.submittedCode;
             if (submitted != displayedCode)
             {
-                editor.SetText(displayedCode);
+                editor.SetText(displayedCode);  // which clears the squiggles
                 submitted = displayedCode;
                 state.longestLine = LongestLine(displayedCode);
+                state.shownMatches.clear();
+            }
+        }
+
+        // A document's search: its matches behind the code (set again when they change), the current one scrolled to
+        // in a long snippet. In a document, the editor's own find is off: Ctrl+F reaches the document's.
+        if (search != nullptr)
+        {
+            editor.SetFindReplaceEnabled(!search->inDocument);
+            if (!_SameMatches(search->matches, state.shownMatches))
+            {
+                editor.ClearSquiggles();
+                for (const RichMd::CodeBlockMatch& match : search->matches)
+                {
+                    TextEditor::DocPos begin = _DocPos(snippetData.Code, match.begin, snippetData.DeIndentCode);
+                    if (match.color != 0)
+                        editor.AddSquiggle(begin, _DocPos(snippetData.Code, match.end, snippetData.DeIndentCode), 0,
+                                           match.color, "", TextEditor::SquiggleStyle::background);
+                    bool wasCurrent = false;
+                    for (const RichMd::CodeBlockMatch& shown : state.shownMatches)
+                        wasCurrent = wasCurrent || (shown.current && shown.begin == match.begin);
+                    if (match.current && !wasCurrent)
+                        editor.ScrollToLine(begin.line, TextEditor::Scroll::alignMiddle);
+                }
+                state.shownMatches = search->matches;
             }
         }
 
@@ -320,6 +413,17 @@ namespace Snippets
         if (snippetData.ReadOnly)
             ImGui::PopStyleColor();
 
+        // The places of the matches: known when the editor was drawn (out of view, it is not laid out)
+        ShownSnippet shown;
+        if (search != nullptr && ImGui::IsItemVisible())
+            for (const RichMd::CodeBlockMatch& match : search->matches)
+            {
+                ImVec2 a = editor.DocPos2ScreenPos(_DocPos(snippetData.Code, match.begin, snippetData.DeIndentCode));
+                ImVec2 b = editor.DocPos2ScreenPos(_DocPos(snippetData.Code, match.end, snippetData.DeIndentCode));
+                float right = (b.y == a.y) ? b.x : a.x + editor.GetGlyphWidth();  // a match cut by the word wrap
+                shown.matchRects.emplace_back(a, ImVec2(right, a.y + editor.GetLineHeight()));
+            }
+
         // The host's hooks: the mouse's line and column, read now (the editor is the last item), used after the
         // overlay, with the code font popped
         bool hostHover = false, hostContext = false;
@@ -385,9 +489,9 @@ namespace Snippets
             ImGui::SetCursorPos(parentCursor);
         }
 
-        bool changed = state.changed;
+        shown.changed = state.changed;
         state.changed = false;
-        if (changed && !snippetData.ReadOnly)
+        if (shown.changed && !snippetData.ReadOnly)
             snippetData.Code = editor.GetText();
 
 #if defined(__EMSCRIPTEN__) && defined(IMGUI_RICHMD_EMSCRIPTEN_SDL2)
@@ -414,7 +518,13 @@ namespace Snippets
         ImGui::EndGroup();
         ImGui::PopID();
 
-        return changed;
+        return shown;
+    }
+
+    bool ShowEditableCodeSnippet(const std::string& label_id, SnippetData* snippetData, float width,
+                                 int overrideHeightInLines)
+    {
+        return _ShowSnippet(label_id, snippetData, width, overrideHeightInLines, nullptr).changed;
     }
 
     void ShowCodeSnippet(const SnippetData& snippetData, float width, int overrideHeightInLines)
@@ -425,6 +535,21 @@ namespace Snippets
         ShowEditableCodeSnippet(labelId, &nonConstSnippedData, width, overrideHeightInLines);
         nonConstSnippedData.Code = code;
     }
+}
+
+namespace RichMd { namespace Internal
+{
+    std::vector<ImRect> ShowCodeSnippetWithMatches(const Snippets::SnippetData& snippet,
+                                                   const std::vector<CodeBlockMatch>& matches, bool inDocument)
+    {
+        Snippets::SnippetData data = snippet;  // read-only: its code stays
+        Snippets::SnippetSearch search{matches, inDocument};
+        return Snippets::_ShowSnippet(snippet.Code, &data, 0.f, 0, &search).matchRects;
+    }
+}}
+
+namespace Snippets
+{
 
 
 

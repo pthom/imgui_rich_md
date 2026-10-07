@@ -288,9 +288,10 @@ namespace RichMd
         return Snippets::DefaultSnippetLanguage();
     }
 
-    // Default code block with the code editor backend: a read-only snippet with syntax highlighting
-    // (one editor per distinct code)
-    static void _RenderCodeBlockWithEditor(const std::string& code, const std::string& language)
+    // A code block in the code editor: a read-only snippet with syntax highlighting (one editor per distinct code).
+    // In a document, with the matches of its search; returns their rectangles.
+    static std::vector<ImRect> _RenderCodeBlockInEditor(const std::string& code, const std::string& language,
+                                                        const std::vector<CodeBlockMatch>& matches, bool inDocument)
     {
         // Nothing to keep between frames: the snippet's editor (keyed by the code) holds its state
         Snippets::SnippetData snippet;
@@ -298,7 +299,13 @@ namespace RichMd
         snippet.Language = _SnippetLanguage(language);
         snippet.ShowCursorPosition = false;
         snippet.ReadOnly = true;
-        Snippets::ShowCodeSnippet(snippet);
+        return Internal::ShowCodeSnippetWithMatches(snippet, matches, inDocument);
+    }
+
+    // The default code block renderer (HostServices::RenderCodeBlock)
+    static void _RenderCodeBlockWithEditor(const std::string& code, const std::string& language)
+    {
+        _RenderCodeBlockInEditor(code, language, {}, false);
     }
 #endif
 
@@ -795,11 +802,18 @@ namespace RichMd
             if (it != fenced.end())
                 it->second(code);  // a diagram, a widget: its source is not shown, nor searched
             else {
-                // In a document's search: the plain code block draws its matches; the code editor (or another
-                // host's renderer) does not, and they are at the top of the block
+                // In a document's search: the plain code block and the code editor draw its matches; another
+                // host's renderer does not, and they are at the top of the block
                 std::vector<CodeBlockMatch> matches = code_block_matches(code);
                 const float top = ImGui::GetCursorScreenPos().y;
                 std::vector<ImRect> rects;
+#ifdef IMGUI_RICHMD_WITH_CODE_EDITOR
+                using RenderFn = void (*)(const std::string&, const std::string&);
+                const RenderFn* render = gHostServices.RenderCodeBlock.target<RenderFn>();
+                if (render != nullptr && *render == _RenderCodeBlockWithEditor)  // the host kept the code editor
+                    rects = _RenderCodeBlockInEditor(code, m_code_block_language, matches, document != nullptr);
+                else
+#endif
                 if (gHostServices.RenderCodeBlock)
                     gHostServices.RenderCodeBlock(code, m_code_block_language);
                 else

@@ -43,13 +43,6 @@
 namespace RichMd
 {
 
-// A match of the search in a code block: its bytes in the code, its color (0: not drawn)
-struct CodeBlockMatch
-{
-	size_t begin = 0, end = 0;
-	ImU32 color = 0;
-};
-
 struct Renderer
 {
 	// GitHub-style admonitions: > [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]

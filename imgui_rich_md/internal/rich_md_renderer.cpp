@@ -2516,6 +2516,7 @@ std::vector<CodeBlockMatch> Renderer::code_block_matches(const std::string& code
 		match.begin = found.begin;
 		match.end = found.end;
 		bool current = fragment == document->currentFragment && code_block_source(found.begin) == document->currentBegin;
+		match.current = current;
 		if (current || document->highlightAll)
 			match.color = ImGui::GetColorU32(current ? style.searchMatchCurrent : style.searchMatch);
 		matches.push_back(match);
