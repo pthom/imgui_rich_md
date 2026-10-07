@@ -60,7 +60,7 @@ namespace RichMd
         std::string text;       // without markup
         std::string slug;       // its anchor, made from the text as GitHub does (a repeated title gets -1, -2...)
         float y = 0.f;          // its top, in its window's content coordinates: SetScrollY(y) shows it at the top
-        bool hidden = false;    // inside a collapsed <details>: y is the one of the section's header
+        bool hidden = false;    // inside a collapsed `<details>`: y is the one of the section's header
     };
     // The headings of the last Render() call (valid until the next one)
     const std::vector<Heading>& LastRenderHeadings();
