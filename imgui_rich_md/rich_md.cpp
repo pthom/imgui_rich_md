@@ -1871,10 +1871,17 @@ namespace RichMd
             _DrawTocLine(frame, state, view);
         state.currentSection = view.current;
 
-        // The search: Ctrl+F (Cmd+F on macOS) in the document opens the find bar, drawn over the content
+        // The search: Ctrl+F (Cmd+F on macOS) in the document opens the find bar, drawn over the content; so does "/"
+        // (the web's convention, where the browser takes Cmd+F too), when no text field is active. "/" is read as a
+        // typed character: on some keyboard layouts, it is Shift with another key.
         if (frame.options.search) {
             if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F))  // routed to the focused window and its parents
                 _OpenSearch(state);
+            const ImGuiIO& io = ImGui::GetIO();
+            if (!io.WantTextInput && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
+                for (ImWchar c : io.InputQueueCharacters)
+                    if (c == '/')
+                        _OpenSearch(state);
             // Escape anywhere in the document closes the bar; an active widget that uses Escape (the query's field, a
             // text field of the application) has the priority
             if (state.searchOpen && ImGui::Shortcut(ImGuiKey_Escape))

@@ -386,6 +386,17 @@ static bool CheckSearch()
     PressKey(ImGuiKey_Escape, content);
     ok = Expect("the query stays for the next search", std::string(state.query) == "Line 5") && ok;
 
+    // "/" opens the bar too, when no text field is active (the query is selected); in the query's field, it is typed
+    ImGui::GetIO().AddInputCharacter('/');
+    for (int i = 0; i < 5; ++i)
+        DrawFrame(content);
+    ok = Expect("/ opens the find bar", state.searchOpen) && ok;
+    ImGui::GetIO().AddInputCharactersUTF8("a/b");
+    for (int i = 0; i < 5; ++i)
+        DrawFrame(content);
+    ok = Expect("/ in the query's field is typed", std::string(state.query) == "a/b") && ok;
+    PressKey(ImGuiKey_Escape, content);
+
     // A narrow document: the magnifier at the end of its line opens the find bar (a touch screen has no Ctrl+F)
     auto narrow = []() {
         RichMd::RenderDocument("narrow search", "## One\n\n## Two\n\n## Three\n",
