@@ -1708,17 +1708,9 @@ namespace RichMd
     }
 
     // The entries of the table of contents (the panel's, or the menu's): a click scrolls to the entry's heading.
-    // Above them, when the headings fold: fold all, unfold all (done at the next frame; a menu stays open).
     // Returns true when an entry was clicked.
     static bool _DrawTocEntries(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
     {
-        if (frame.renders.foldMargin > 0.f) {
-            if (ImGui::SmallButton("Fold all"))
-                state.foldAll = 1;
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Unfold all"))
-                state.foldAll = -1;
-        }
         const std::vector<Heading>& headings = frame.renders.headings;
         const int current = view.current;
         int minLevel = 6;
@@ -1759,6 +1751,37 @@ namespace RichMd
     }
 
     // The table of contents, and the matches beside it in a second tab
+    // The headings fold: a frameless "..." (a tab bar's trailing button, or a button) opens the menu Fold all, Unfold
+    // all (done at the next frame)
+    static void _DrawFoldMenu(DocumentState& state, bool inTabBar)
+    {
+        bool clicked;
+        if (inTabBar) {
+            ImGui::PushStyleColor(ImGuiCol_Tab, ImVec4(0.f, 0.f, 0.f, 0.f));
+            clicked = ImGui::TabItemButton("   ##fold_menu", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip);
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.f, 0.f, 0.f, 0.f));
+            clicked = ImGui::Button("##fold_menu", ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
+            ImGui::PopStyleColor();
+        }
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        const float dot = ImGui::GetFontSize() * 0.07f, gap = ImGui::GetFontSize() * 0.22f;
+        for (int k = -1; k <= 1; ++k)
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(c.x + (float)k * gap, c.y), dot,
+                                                         ImGui::GetColorU32(ImGuiCol_Text));
+        if (clicked)
+            ImGui::OpenPopup("##fold_menu_popup");
+        if (ImGui::BeginPopup("##fold_menu_popup")) {
+            if (ImGui::MenuItem("Fold all"))
+                state.foldAll = 1;
+            if (ImGui::MenuItem("Unfold all"))
+                state.foldAll = -1;
+            ImGui::EndPopup();
+        }
+    }
+
     static void _DrawTocTabs(const DocumentFrame& frame, DocumentState& state, const _DocumentView& view)
     {
         if (!ImGui::BeginTabBar("##tabs"))
@@ -1776,6 +1799,8 @@ namespace RichMd
             _DrawMatchList(frame, state, view);
             ImGui::EndTabItem();
         }
+        if (frame.renders.foldMargin > 0.f)
+            _DrawFoldMenu(state, true);
         ImGui::EndTabBar();
     }
 
@@ -1794,6 +1819,12 @@ namespace RichMd
         else {
             ImGui::AlignTextToFramePadding();
             ImGui::TextDisabled("Contents");
+            if (frame.renders.foldMargin > 0.f) {
+                ImGui::SameLine();
+                const float right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+                ImGui::SetCursorPosX(right - ImGui::GetFrameHeight());
+                _DrawFoldMenu(state, false);
+            }
             ImGui::Separator();
             _DrawTocEntries(frame, state, view);
         }
@@ -1834,8 +1865,16 @@ namespace RichMd
         if (ImGui::BeginCombo("##section", title.c_str(), ImGuiComboFlags_HeightLarge)) {
             if (frame.options.search)  // a click on an entry or a match closes the menu
                 _DrawTocTabs(frame, state, view);
-            else
+            else {
                 _DrawTocEntries(frame, state, view);
+                if (frame.renders.foldMargin > 0.f) {  // the headings fold (done at the next frame)
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Fold all"))
+                        state.foldAll = 1;
+                    if (ImGui::MenuItem("Unfold all"))
+                        state.foldAll = -1;
+                }
+            }
             ImGui::EndCombo();
         }
         if (frame.options.search) {

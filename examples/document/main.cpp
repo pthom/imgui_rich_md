@@ -20,7 +20,7 @@ Links to the sections, wherever they are: [the widgets](#a-section-of-widgets), 
 section](#inside-a-collapsed-section), [the end](#the-end).
 
 The headings fold: the arrow at their left, shown under the mouse, hides their section. The menu of a right click,
-and the buttons at the top of the table of contents, fold or unfold them all.
+and the "..." menu at the top of the table of contents, fold or unfold them all.
 
 ## Headings and anchors
 
