@@ -57,7 +57,9 @@ namespace RichMd
     struct DocumentRenders
     {
         std::vector<Heading> headings;
-        std::vector<ImGuiID> headingDetails;  // the collapsed <details> that hides each heading (0: none)
+        std::vector<ImGuiID> headingDetails;  // what hides each heading: a collapsed <details> or a fold (0: none)
+        std::vector<ImGuiID> headingFolds;    // the state of each heading's fold (0: it does not fold)
+        int foldAll = 0;                      // fold all (1) or unfold all (-1), asked in this frame: done at its end
         std::unordered_map<std::string, int> slugOccurrences;
         std::string clickedAnchor;
         float contentStartY = 0.f;  // the top of the content: a fragment below it starts with the gap of a block

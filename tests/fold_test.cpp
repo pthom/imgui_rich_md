@@ -2,6 +2,7 @@
 // the arrow in the margin folds a heading's section: the headings it hides are listed as hidden, at the folded
 // heading's place, until a heading of its level or above; a heading inside a list does not end the fold, and does not
 // fold; the "#" title does not fold (foldableHeadingsMinLevel). A link to a heading of a folded section unfolds it.
+// FoldAllHeadings() folds them all, and unfolds them all, also those inside a folded section.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs
 #include "imgui_impl_null.h"
@@ -39,6 +40,8 @@ Beta text.
 Gamma text.
 )";
 
+static int gFoldAll = 0;  // FoldAllHeadings() after the render of the next frame: 1 folds, -1 unfolds
+
 struct Frame
 {
     std::vector<RichMd::Heading> headings;
@@ -60,6 +63,10 @@ static Frame DrawFrame()
     RichMd::Render(kMarkdown);
     frame.headings = RichMd::LastRenderHeadings();
     frame.height = ImGui::GetCursorPosY() - frame.originY;
+    if (gFoldAll != 0) {
+        RichMd::FoldAllHeadings(gFoldAll > 0);
+        gFoldAll = 0;
+    }
     ImGui::End();
     ImGui::Render();
     ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
@@ -167,6 +174,27 @@ int main(int, char**)
     float lineHeight = RichMd::GetFont(RichMd::MarkdownFontSpec()).size;
     f = Click(ImVec2(folded.textOrigin.x + 30.f, folded.textOrigin.y + lineHeight * 0.5f));  // past the margin
     ok = ExpectHidden(f, "alpha-one", false) && ok;
+
+    // Fold all: the sections of Alpha, Beta, Gamma; "Alpha one", inside Alpha, folds too (not drawn: no arrow)
+    gFoldAll = 1;
+    DrawFrame();
+    f = DrawFrame();
+    for (const char* slug : {"title", "alpha", "beta", "gamma"})
+        ok = ExpectHidden(f, slug, false) && ok;
+    ok = ExpectHidden(f, "alpha-one", true) && ok;
+    ok = ExpectHidden(f, "in-a-list", true) && ok;
+    // Alpha unfolds alone: "Alpha one" is folded inside it
+    f = ClickArrow(f, "alpha");
+    ok = ExpectHidden(f, "alpha-one", false) && ok;
+    ok = ExpectHidden(f, "in-a-list", true) && ok;
+    // Unfold all, also what a folded section hid: fold Alpha again, then unfold all
+    f = ClickArrow(f, "alpha");
+    gFoldAll = -1;
+    DrawFrame();
+    f = DrawFrame();
+    for (const char* slug : {"title", "alpha", "alpha-one", "in-a-list", "beta", "gamma"})
+        ok = ExpectHidden(f, slug, false) && ok;
+    ok = Expect("unfold all gives the whole height back", ImAbs(f.height - open.height) <= 1.f) && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

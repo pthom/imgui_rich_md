@@ -243,7 +243,7 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 		}
 		add_heading((int)d->level, top, false);
 		heading((int)d->level, m_heading_text);
-		if (foldableHeadings && (int)d->level >= foldableHeadingsMinLevel && top_level())
+		if (m_heading_folds.back() != 0)
 			fold_heading((int)d->level, top);
 	}
 }
@@ -254,7 +254,7 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 // its level or above.
 void Renderer::fold_heading(int level, float top)
 {
-	const ImGuiID id = ImGui::GetID(("##fold-" + m_headings.back().slug).c_str());
+	const ImGuiID id = m_heading_folds.back();
 	ImGuiStorage* storage = ImGui::GetStateStorage();
 	bool open = storage->GetInt(id, 1) != 0;
 	if (m_fold_margin > 0.f) {
@@ -324,12 +324,27 @@ void Renderer::add_heading(int level, float y, bool hidden)
 	heading.hidden = hidden;
 	heading.slug = UniqueSlug(m_heading_text, document ? document->slugOccurrences : m_slug_occurrences);
 	ImGuiID details = hidden ? m_hidden_id : 0;
+	// Its fold's state: also for a hidden heading, which unfold all must reach
+	const bool foldable = foldableHeadings && level >= foldableHeadingsMinLevel && top_level();
+	const ImGuiID fold = foldable ? ImGui::GetID(("##fold-" + heading.slug).c_str()) : 0;
 	if (document) {
 		document->headings.push_back(heading);
 		document->headingDetails.push_back(details);
+		document->headingFolds.push_back(fold);
 	}
 	m_headings.push_back(std::move(heading));
 	m_heading_details.push_back(details);
+	m_heading_folds.push_back(fold);
+}
+
+void Renderer::fold_all(bool folded)
+{
+	if (document)
+		document->foldAll = folded ? 1 : -1;
+	else if (m_fold_storage)
+		for (ImGuiID id : m_heading_folds)
+			if (id != 0)
+				m_fold_storage->SetInt(id, folded ? 0 : 1);
 }
 
 // A click on a link: an anchor (#slug) waits for the end of the fragment (or of its document), where its heading is
@@ -1916,6 +1931,8 @@ int Renderer::print(const char* str, const char* str_end)
 {
 	m_headings.clear();
 	m_heading_details.clear();
+	m_heading_folds.clear();
+	m_fold_storage = ImGui::GetStateStorage();
 	m_slug_occurrences.clear();
 	if (str >= str_end)
         return 0;
@@ -2384,7 +2401,7 @@ void Renderer::update_selection(ImGuiID fragmentId)
 	show_selection_menu(fragmentId);
 }
 
-// The menu of a right click: Copy, Copy as Markdown, Select All, and Copy Link over a link
+// The menu of a right click: Copy, Copy as Markdown, Select All, Copy Link over a link, Fold All and Unfold All
 void Renderer::show_selection_menu(ImGuiID fragmentId)
 {
 	if (!ImGui::BeginPopup("##rich_md_selection_menu"))
@@ -2404,6 +2421,17 @@ void Renderer::show_selection_menu(ImGuiID fragmentId)
 	ImGui::Separator();
 	if (ImGui::MenuItem("Select All", (modifier + "A").c_str()))
 		select_all(fragmentId);
+	// The folds of the document, or of this render
+	bool foldable = document != nullptr && foldableHeadings;
+	for (ImGuiID id : m_heading_folds)
+		foldable = foldable || id != 0;
+	if (foldable) {
+		ImGui::Separator();
+		if (ImGui::MenuItem("Fold All"))
+			fold_all(true);
+		if (ImGui::MenuItem("Unfold All"))
+			fold_all(false);
+	}
 	ImGui::EndPopup();
 }
 

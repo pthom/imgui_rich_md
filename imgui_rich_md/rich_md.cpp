@@ -1109,6 +1109,12 @@ namespace RichMd
         return renderer ? renderer->headings() : kNone;
     }
 
+    void FoldAllHeadings(bool folded)
+    {
+        if (MarkdownRenderer* renderer = _Renderer())
+            renderer->fold_all(folded);
+    }
+
     // ::md Documents
     // A document is two child windows: the content, where the renders put their headings, the anchors clicked in them
     // and the matches of the search (into the context's document), and the table of contents beside it.
@@ -1833,7 +1839,12 @@ namespace RichMd
         DocumentState& state = context->documents[frame.id];
         const std::vector<Heading>& headings = frame.renders.headings;
 
-        // In the content's window: the anchor clicked in a render, the current match, the scroll in progress
+        // In the content's window: fold all or unfold all (the states of the renders' folds are there), the anchor
+        // clicked in a render, the current match, the scroll in progress
+        if (frame.renders.foldAll != 0)
+            for (ImGuiID id : frame.renders.headingFolds)
+                if (id != 0)
+                    ImGui::GetStateStorage()->SetInt(id, frame.renders.foldAll > 0 ? 0 : 1);
         if (!frame.renders.clickedAnchor.empty())
             _ScrollToHeading(state, frame.renders.clickedAnchor);
         _UpdateCurrentMatch(frame, state);

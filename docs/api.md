@@ -52,6 +52,9 @@ struct Heading
 };
 // The headings of the last Render() call (valid until the next one)
 const std::vector<Heading>& LastRenderHeadings();
+// Folds (or unfolds) all the foldable headings (MarkdownOptions::foldableHeadings), from the next frame: those of
+// the current document between BeginDocument() and EndDocument(), else those of the last Render()
+void FoldAllHeadings(bool folded);
 ```
 
 ## Documents

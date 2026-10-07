@@ -73,6 +73,9 @@ struct Renderer
 
 	// The headings of the last fragment, in order
 	const std::vector<Heading>& headings() const { return m_headings; }
+	// Folds (or unfolds) every foldable heading, at the next frame: those of the document (at its end), else those
+	// of the last fragment
+	void fold_all(bool folded);
 	// Set between BeginDocument() and EndDocument(): the headings and the anchors of the fragments go to the document
 	DocumentRenders* document = nullptr;
 
@@ -366,6 +369,8 @@ private:
 	void add_heading(int level, float y, bool hidden);
 	// The fold: what follows a folded heading is hidden, until a heading of its level or above, at the top level (a
 	// fold never crosses a list, a quote or a <details>)
+	std::vector<ImGuiID> m_heading_folds;   // for each heading, the id of its fold's state (0: it does not fold)
+	ImGuiStorage* m_fold_storage = nullptr; // where the states are: the storage of the fragment's window
 	int m_fold_level = 0;        // the level of the folded heading (0: no fold)
 	int m_container_depth = 0;   // the lists and quotes around the current block, counted also while hidden
 	float m_fold_margin = 0.f;        // the width of the margin of the arrows, at the left of the content (0: none)
