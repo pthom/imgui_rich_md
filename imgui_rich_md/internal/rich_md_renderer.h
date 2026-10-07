@@ -43,6 +43,13 @@
 namespace RichMd
 {
 
+// A match of the search in a code block: its bytes in the code, its color (0: not drawn)
+struct CodeBlockMatch
+{
+	size_t begin = 0, end = 0;
+	ImU32 color = 0;
+};
+
 struct Renderer
 {
 	// GitHub-style admonitions: > [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]
@@ -161,6 +168,12 @@ protected:
 
     // By default, code blocks are rendered as text with the code font, but you can override this
     virtual void render_code_block();
+
+    // The search in a code block, in a document: its matches. The code block draws them, then hands their rectangles
+    // back (on the screen; none when it does not know them: its matches are then at the top of the block).
+    std::vector<CodeBlockMatch> code_block_matches(const std::string& code) const;
+    void add_code_block_matches(const std::string& code, const std::vector<CodeBlockMatch>& matches,
+                                const std::vector<ImRect>& rects, float blockTop);
 
     // Code blocks may be rendered inside a child window (see the overrides of render_code_block).
     // Return false where child windows cannot be used (e.g. inside the canvas of a node editor):
@@ -350,6 +363,7 @@ private:
 	std::unordered_map<std::string, int> m_slug_occurrences;
 	float m_heading_top = -1.f;          // the top of the heading being read (its first text run), in content coordinates
 	float m_collapsed_details_y = 0.f;   // the header of the outermost collapsed <details>: its hidden headings are there
+	float m_collapsed_details_bottom = 0.f;
 	ImGuiID m_collapsed_details_id = 0;  // and its id (the state of a CollapsingHeader)
 	std::vector<ImGuiID> m_heading_details;  // for each heading, the collapsed <details> that hides it (0: none)
 	void add_heading(int level, float y, bool hidden);
@@ -384,6 +398,22 @@ private:
 	void range_rects(size_t b, size_t e, std::vector<ImRect>& out) const;
 	// The matches of the document's search in this fragment: added to the document, drawn behind the text
 	void search_fragment(int fragment);
+
+	// The search in the text a fragment does not draw as runs: the collapsed sections' (their matches are at their
+	// header), the code blocks' (drawn by the code block)
+	struct HiddenText
+	{
+		std::string text;
+		std::vector<size_t> sources;  // per byte of the text: its offset in the fragment's text
+		ImGuiID details = 0;          // the collapsed <details> that hides it
+		float y = 0.f, bottom = 0.f;  // its header, in the content's coordinates
+	};
+	std::vector<HiddenText> m_hidden_texts;
+	void add_hidden_text(const char* str, const char* str_end);
+	std::vector<std::pair<size_t, size_t>> m_code_block_sources;  // per chunk of m_code_block: its offset there, and in
+	                                                              // the fragment's text
+	size_t code_block_source(size_t offset) const;
+	std::vector<DocumentMatch> m_code_block_matches;  // those of the fragment so far
 
 	MD_PARSER m_md;
 };

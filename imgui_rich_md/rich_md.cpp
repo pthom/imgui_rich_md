@@ -41,6 +41,7 @@
 
 #include "third_party/stb_image.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <utility>
@@ -377,8 +378,12 @@ namespace RichMd
     // ::endcode
 
     // Default code block: monospaced text in a frame, with a copy button
-    static void _RenderCodeBlockPlain(const std::string& code)
+    // A code block as text, with the matches of a search behind it. Returns their rectangles, on the screen (none when
+    // the block is out of view).
+    static std::vector<ImRect> _RenderCodeBlockPlain(const std::string& code,
+                                                     const std::vector<CodeBlockMatch>& matches = {})
     {
+        std::vector<ImRect> rects;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
         if (ImGui::BeginChild("code", ImVec2(0.f, 0.f), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding))
         {
@@ -389,11 +394,26 @@ namespace RichMd
             ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x);
             SizedFont codeFont = GetCodeFont();
             ImGui::PushFont(codeFont.font, codeFont.size);
+            const ImVec2 origin = ImGui::GetCursorScreenPos();
+            for (const CodeBlockMatch& match : matches) {  // a match is on one line (the query has no newline)
+                size_t lineStart = code.rfind('\n', match.begin == 0 ? 0 : match.begin - 1);
+                lineStart = (lineStart == std::string::npos || match.begin == 0) ? 0 : lineStart + 1;
+                const float line = (float)std::count(code.begin(), code.begin() + (long)lineStart, '\n');
+                const char* text = code.c_str();
+                ImVec2 min(origin.x + ImGui::CalcTextSize(text + lineStart, text + match.begin).x,
+                           origin.y + line * ImGui::GetTextLineHeight());
+                ImVec2 max(min.x + ImGui::CalcTextSize(text + match.begin, text + match.end).x,
+                           min.y + ImGui::GetTextLineHeight());
+                if (match.color != 0)
+                    ImGui::GetWindowDrawList()->AddRectFilled(min, max, match.color);  // behind the text
+                rects.emplace_back(min, max);
+            }
             ImGui::TextUnformatted(code.c_str());
             ImGui::PopFont();
         }
         ImGui::EndChild();
         ImGui::PopStyleColor();
+        return rects;
     }
 
     // A code block: through the host (the code editor), or plain
@@ -773,9 +793,20 @@ namespace RichMd
             auto& fenced = gCurrentContext->fencedBlockRenderers;
             auto it = fenced.find(_ToLower(m_code_block_language));
             if (it != fenced.end())
-                it->second(code);
-            else
-                _RenderCodeBlock(code, m_code_block_language);
+                it->second(code);  // a diagram, a widget: its source is not shown, nor searched
+            else {
+                // In a document's search: the plain code block draws its matches; the code editor (or another
+                // host's renderer) does not, and they are at the top of the block
+                std::vector<CodeBlockMatch> matches = code_block_matches(code);
+                const float top = ImGui::GetCursorScreenPos().y;
+                std::vector<ImRect> rects;
+                if (gHostServices.RenderCodeBlock)
+                    gHostServices.RenderCodeBlock(code, m_code_block_language);
+                else
+                    rects = _RenderCodeBlockPlain(code, matches);
+                if (!matches.empty())
+                    add_code_block_matches(code, matches, rects, top);
+            }
             ImGui::PopID();
         }
 
@@ -1215,6 +1246,10 @@ namespace RichMd
             for (const DocumentMatch& m : frame.renders.matches)
                 if (m.fragment == s.matchFragment && m.begin == s.matchBegin)
                     match = &m;
+            if (match != nullptr && match->details != 0 && --s.frames > 0) {
+                ImGui::GetStateStorage()->SetInt(match->details, 1);  // the section opens at the next frame
+                return;
+            }
             // The match comes below the find bar (and its list), else at a third of the view
             const float height = ImGui::GetWindowHeight(), em = ImGui::GetFontSize();
             float top = state.findBarBottom > 0.f ? ImMin(state.findBarBottom + em, height - 3.f * em) : height / 3.f;
@@ -1270,7 +1305,7 @@ namespace RichMd
         state.currentMatch = current;
         state.currentFragment = match.fragment;
         state.currentBegin = match.begin;
-        if (scroll && (match.y < viewTop || match.bottom > viewBottom))
+        if (scroll && (match.details != 0 || match.y < viewTop || match.bottom > viewBottom))
             _ScrollToMatch(state, match.fragment, match.begin);
     }
 
@@ -1323,7 +1358,8 @@ namespace RichMd
         state.searchOpen = false;
         state.focusContent = true;
         state.wrapMessage = nullptr;
-        if (state.currentMatch >= 0 && state.currentMatch < (int)frame.renders.matches.size()) {
+        if (state.currentMatch >= 0 && state.currentMatch < (int)frame.renders.matches.size()
+            && frame.renders.matches[(size_t)state.currentMatch].inRuns) {
             const DocumentMatch& match = frame.renders.matches[(size_t)state.currentMatch];
             state.selectFragment = match.fragment;
             state.selectBegin = match.begin;

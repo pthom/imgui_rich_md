@@ -80,7 +80,8 @@ namespace RichMd
     to the next one, Shift+Enter (or the up arrow) to the previous one, and past the last one back to the first (the bar
     says so). Escape closes the bar, and the current match becomes the selection. The matches with their context are
     listed under the bar and in the Search tab, the table of contents shows their count per section, and ticks on the
-    scrollbar show where they are.
+    scrollbar show where they are. The search also finds the text of the collapsed sections (a jump to one of their
+    matches opens them), of the code blocks, and of the formulas (their LaTeX source: a formula is one match).
     ::code
     */
     // The scroll to a match, a heading or an anchor: eased over scrollAnimationSeconds, unless reduced motion is asked

@@ -46,6 +46,8 @@ namespace RichMd
         size_t begin = 0, end = 0;        // its bytes in the render's text
         float y = 0.f, bottom = 0.f;      // its top and bottom, in the content's coordinates
         std::string before, text, after;  // its context, for the lists of matches
+        ImGuiID details = 0;              // the collapsed <details> that hides it (at its header): a jump opens it
+        bool inRuns = true;               // drawn as text runs (not in a code block): it can become the selection
     };
 
     // What the renders of the document being drawn (between BeginDocument() and EndDocument()) share: their headings

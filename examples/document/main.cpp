@@ -44,6 +44,17 @@ static const char* kSecondRender = R"md(
 
 The second section named "Notes", in the second render of the document: its slug is `#notes-1`.
 
+## The search
+
+Ctrl+F (Cmd+F on macOS) opens the find bar. The search also finds the text of the collapsed sections (a jump to one of
+their matches opens them), and of the code blocks:
+
+```cpp
+RichMd::BeginDocument("document");
+RichMd::Render(markdown);
+RichMd::EndDocument();
+```
+
 ## Long text
 
 The table of contents marks the section at the top of the view, and follows it as the document scrolls.

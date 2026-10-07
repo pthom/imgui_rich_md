@@ -6,18 +6,22 @@
 // document, Enter, Shift+Enter and the arrows go through them (the scroll follows, animated), a click on a match of the
 // list under the find bar or of the ticks on the scrollbar goes to it, a step past an end wraps around and says so,
 // Escape closes the bar (its current match becomes the selection) and keeps the query. The magnifier of a narrow
-// document opens the bar, above its content. The user errors (a document inside a document, an EndDocument() without
-// its BeginDocument(), a document left open) are reported.
+// document opens the bar, above its content. The search goes beyond the text: a formula is one match (in its LaTeX
+// source), a collapsed section is searched (a jump to one of its matches opens it), a code block is searched. The user
+// errors (a document inside a document, an EndDocument() without its BeginDocument(), a document left open) are
+// reported.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs, ImGuiContext::ErrorCountCurrentFrame, the child windows
 #include "imgui_impl_null.h"
 #include "imgui_rich_md/rich_md.h"
+#include "imgui_rich_md/rich_md_host.h"
 #include "imgui_rich_md/internal/rich_md_internal.h"  // the state of a document
 
 #include <cfloat>
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -403,6 +407,45 @@ static bool CheckSearch()
     return ok;
 }
 
+static bool CheckSearchEverywhere()
+{
+    const std::string md = "## Top\n\nA $\\alpha + \\alpha$ formula, and alpha.\n\n"
+                           "<details>\n<summary>More</summary>\n\n### Inside\n\nThe hidden alpha.\n\n</details>\n\n"
+                           "```\nint alpha = 1;\n```\n";
+    std::vector<RichMd::Heading> headings;
+    auto content = [&]() {
+        RichMd::RenderDocument("everywhere", md, ImVec2(0.f, 200.f));
+        headings = RichMd::LastRenderHeadings();
+    };
+    DrawFrame(content);
+    DrawFrame(content);
+    RichMd::DocumentState& state = DocumentStateOf("everywhere");
+    state.searchOpen = true;
+    ImStrncpy(state.query, "alpha", sizeof(state.query));
+    DrawFrame(content);
+    DrawFrame(content);
+    bool ok = Expect("the formula is one match; the collapsed section and the code block are searched",
+                     state.matchCount == 4 && state.currentMatch == 0);
+
+    // The third match is in the collapsed section: going to it opens the section, and it stays the current match
+    auto hidden = [&headings]() { return headings.size() == 2 && headings[1].hidden; };
+    ok = Expect("the section is collapsed", hidden()) && ok;
+    state.step = 1;
+    for (int i = 0; i < kScrollFrames; ++i)
+        DrawFrame(content);
+    state.step = 1;
+    for (int i = 0; i < kScrollFrames; ++i)
+        DrawFrame(content);
+    ok = Expect("a jump to a match of a collapsed section opens it", !hidden()) && ok;
+    ok = Expect("the match stays current once shown", state.matchCount == 4 && state.currentMatch == 2) && ok;
+    state.step = 1;
+    for (int i = 0; i < kScrollFrames; ++i)
+        DrawFrame(content);
+    ok = Expect("the next match is in the code block", state.currentMatch == 3) && ok;
+    state.searchOpen = false;
+    return ok;
+}
+
 // The user errors are reported, and the next document works
 static bool CheckUserErrors()
 {
@@ -446,7 +489,14 @@ int main(int, char**)
     ImGui::GetIO().IniFilename = nullptr;
     ImGui::GetIO().ConfigMacOSXBehaviors = false;  // on macOS, ImGui reads the Ctrl key sent by the tests as Cmd
     ImGui_ImplNull_Init();
+    // The formulas of a host without LaTeX: each shows its source, as one run
+    RichMd::HostServices services;
+    services.RenderLatex = [](const std::string&, float, ImU32, bool) -> std::optional<RichMd::LatexBitmap> {
+        return std::nullopt;
+    };
+    RichMd::SetHostServices(services);
     RichMd::MarkdownOptions options;
+    options.withLatex = true;
     options.callbacks.OnOpenLink = [](const std::string& url) { gOpenedLink = url; };
     ImGui::GetPlatformIO().Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { gClipboard = text; };
     RichMd::CreateContext(options);
@@ -458,6 +508,7 @@ int main(int, char**)
     ok = CheckRenderDocument() && ok;
     ok = CheckTableOfContents() && ok;
     ok = CheckSearch() && ok;
+    ok = CheckSearchEverywhere() && ok;
     ok = CheckUserErrors() && ok;
 
     RichMd::DestroyContext();

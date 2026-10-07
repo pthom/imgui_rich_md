@@ -31,9 +31,11 @@
 #include "rich_md_renderer.h"
 #include "imgui_internal.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cctype>
 #include <cmath>
+#include <iterator>
 
 namespace RichMd
 {
@@ -496,8 +498,10 @@ void Renderer::BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* detail, bool e)
     {
     m_is_code_block = e;
 
-    if (m_is_code_block)
+    if (m_is_code_block) {
         m_code_block = "";
+        m_code_block_sources.clear();
+    }
     else {
         end_line();  // on its own line (in a list item, no block gap ended the line of the item's text)
         render_code_block();
@@ -1399,6 +1403,7 @@ bool Renderer::check_html(const char* str, const char* str_end)
 		ImGui::PopID();
 		if (!open) {  // the outermost collapsed section: the place of the headings it hides
 			m_collapsed_details_y = ImGui::GetItemRectMin().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
+			m_collapsed_details_bottom = ImGui::GetItemRectMax().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
 			m_collapsed_details_id = ImGui::GetItemID();
 		}
 		m_details_open_stack.push_back(open);
@@ -1587,6 +1592,9 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 	if (details_hidden(m_details_open_stack) && type != MD_TEXT_HTML) {
 		if (m_hlevel > 0 && (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE))
 			m_heading_text.append(str, str_end);  // a heading inside a collapsed section is listed, with its text
+		bool searched = type == MD_TEXT_NORMAL || type == MD_TEXT_CODE || type == MD_TEXT_LATEXMATH;
+		if (searched && document && !document->query.empty())  // the search finds it, at the section's header
+			add_hidden_text(str, str_end);
 		return 0;
 	}
 	bool afterComment = m_html_comment_closed;
@@ -1618,8 +1626,10 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 	case MD_TEXT_CODE:
 		if (m_hlevel > 0)
 			m_heading_text.append(str, str_end);
-        if (m_is_code_block)
+        if (m_is_code_block) {
+            m_code_block_sources.emplace_back(m_code_block.size(), (size_t)(str - m_fragment_begin));
             m_code_block += std::string(str, str_end);
+        }
         else
             render_inline_code(str, str_end);
 		break;
@@ -1871,6 +1881,8 @@ int Renderer::print(const char* str, const char* str_end)
     m_in_pre = false;
     m_pre_buffer.clear();
     m_runs.clear();
+    m_hidden_texts.clear();
+    m_code_block_matches.clear();
     m_fragment_begin = str;
     m_fragment_end = str_end;
     m_block_number = 0;
@@ -2408,11 +2420,14 @@ void Renderer::search_fragment(int fragment)
 	const ImU32 matchColor = ImGui::GetColorU32(style.searchMatch);
 	const ImU32 currentColor = ImGui::GetColorU32(style.searchMatchCurrent);
 	std::vector<ImRect> rects;
+	std::vector<DocumentMatch> matches;
 	for (const TextMatch& found : FindMatches(text, d.query, d.searchOptions)) {
 		DocumentMatch match;
 		match.fragment = fragment;
 		match.begin = sources[found.begin].first;
 		match.end = sources[found.end - 1].second;
+		if (!matches.empty() && matches.back().begin == match.begin && matches.back().end == match.end)
+			continue;  // a formula is one match, highlighted whole, however many times its source has the query
 		rects.clear();
 		range_rects(match.begin, match.end, rects);
 		if (rects.empty())
@@ -2427,7 +2442,104 @@ void Renderer::search_fragment(int fragment)
 			for (const ImRect& r : rects)
 				if (ImGui::IsRectVisible(r.Min, r.Max))
 					drawList->AddRectFilled(r.Min, r.Max, current ? currentColor : matchColor);
-		d.matches.push_back(std::move(match));
+		matches.push_back(std::move(match));
+	}
+	for (const HiddenText& hidden : m_hidden_texts)
+		for (const TextMatch& found : FindMatches(hidden.text, d.query, d.searchOptions)) {
+			DocumentMatch match;
+			match.fragment = fragment;
+			match.begin = hidden.sources[found.begin];
+			match.end = hidden.sources[found.end - 1] + 1;
+			match.y = hidden.y;
+			match.bottom = hidden.bottom;
+			match.before = context_before(hidden.text, found.begin);
+			match.text = hidden.text.substr(found.begin, found.end - found.begin);
+			match.after = context_after(hidden.text, found.end);
+			match.details = hidden.details;
+			match.inRuns = false;
+			matches.push_back(std::move(match));
+		}
+	matches.insert(matches.end(), m_code_block_matches.begin(), m_code_block_matches.end());
+	std::stable_sort(matches.begin(), matches.end(),
+	                 [](const DocumentMatch& a, const DocumentMatch& b) { return a.begin < b.begin; });
+	d.matches.insert(d.matches.end(), std::make_move_iterator(matches.begin()), std::make_move_iterator(matches.end()));
+}
+
+// The text of a collapsed section, gathered for the search: a space between two chunks where the source between them is
+// blank (a line break), nothing where it is markup
+void Renderer::add_hidden_text(const char* str, const char* str_end)
+{
+	if (str < m_fragment_begin || str_end > m_fragment_end || str >= str_end)
+		return;  // not from the fragment's text
+	if (m_hidden_texts.empty() || m_hidden_texts.back().details != m_collapsed_details_id) {
+		HiddenText hidden;
+		hidden.details = m_collapsed_details_id;
+		hidden.y = m_collapsed_details_y;
+		hidden.bottom = m_collapsed_details_bottom;
+		m_hidden_texts.push_back(std::move(hidden));
+	}
+	HiddenText& hidden = m_hidden_texts.back();
+	const size_t begin = (size_t)(str - m_fragment_begin), end = (size_t)(str_end - m_fragment_begin);
+	if (!hidden.sources.empty()) {
+		const size_t previous = hidden.sources.back() + 1;
+		bool blank = begin > previous;
+		for (size_t i = previous; i < begin && blank; ++i)
+			blank = is_blank(m_fragment_begin[i]);
+		if (blank) {
+			hidden.text += ' ';
+			hidden.sources.push_back(previous);
+		}
+	}
+	hidden.text.append(str, str_end);
+	for (size_t i = begin; i < end; ++i)
+		hidden.sources.push_back(i);
+}
+
+// The offset in the fragment's text of a byte of the code block
+size_t Renderer::code_block_source(size_t offset) const
+{
+	size_t source = 0;
+	for (const auto& [code, fragment] : m_code_block_sources)
+		if (code <= offset)
+			source = fragment + (offset - code);
+	return source;
+}
+
+std::vector<CodeBlockMatch> Renderer::code_block_matches(const std::string& code) const
+{
+	std::vector<CodeBlockMatch> matches;
+	if (!document || document->query.empty())
+		return matches;
+	const int fragment = document->fragmentCount;  // the rank of this fragment, counted at its end
+	for (const TextMatch& found : FindMatches(code, document->query, document->searchOptions)) {
+		CodeBlockMatch match;
+		match.begin = found.begin;
+		match.end = found.end;
+		bool current = fragment == document->currentFragment && code_block_source(found.begin) == document->currentBegin;
+		if (current || document->highlightAll)
+			match.color = ImGui::GetColorU32(current ? style.searchMatchCurrent : style.searchMatch);
+		matches.push_back(match);
+	}
+	return matches;
+}
+
+void Renderer::add_code_block_matches(const std::string& code, const std::vector<CodeBlockMatch>& matches,
+                                      const std::vector<ImRect>& rects, float blockTop)
+{
+	const float toContent = ImGui::GetScrollY() - ImGui::GetWindowPos().y;
+	for (size_t i = 0; i < matches.size(); ++i) {
+		DocumentMatch match;
+		match.fragment = document->fragmentCount;
+		match.begin = code_block_source(matches[i].begin);
+		match.end = code_block_source(matches[i].end - 1) + 1;
+		const bool known = i < rects.size();
+		match.y = (known ? rects[i].Min.y : blockTop) + toContent;
+		match.bottom = (known ? rects[i].Max.y : blockTop + ImGui::GetTextLineHeight()) + toContent;
+		match.before = context_before(code, matches[i].begin);
+		match.text = code.substr(matches[i].begin, matches[i].end - matches[i].begin);
+		match.after = context_after(code, matches[i].end);
+		match.inRuns = false;
+		m_code_block_matches.push_back(std::move(match));
 	}
 }
 
