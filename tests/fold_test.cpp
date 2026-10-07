@@ -44,8 +44,8 @@ Beta text.
 Gamma text.
 )";
 
-static int gFoldAll = 0;
-static bool gDocumentFoldable = false;  // DocumentOptions::foldableHeadings of the document  // FoldAllHeadings() after the render of the next frame: 1 folds, -1 unfolds
+static int gFoldAll = 0;  // FoldAllHeadings() after the render of the next frame: 1 folds, -1 unfolds
+static bool gDocumentFoldable = false;  // DocumentOptions::foldableHeadings of the document
 
 struct Frame
 {
@@ -256,7 +256,8 @@ int main(int, char**)
     ok = ExpectHidden(folded, "gamma", false) && ok;
     const RichMd::Heading* alpha = FindHeading(folded, "alpha");
     const RichMd::Heading* alphaOne = FindHeading(folded, "alpha-one");
-    ok = Expect("a hidden heading is at the folded heading's place", alpha && alphaOne && alphaOne->y == alpha->y) && ok;
+    ok = Expect("a hidden heading is at the folded heading's place", alpha && alphaOne && alphaOne->y == alpha->y)
+         && ok;
     ok = Expect("the folded render is shorter", folded.height < open.height) && ok;
     ok = Expect("the fold holds at the next frame", DrawFrame().height == folded.height) && ok;
 
@@ -315,8 +316,9 @@ int main(int, char**)
     gDocumentFoldable = true;
     ok = CheckDocument() && ok;
     DrawFrame();
-    ok = Expect("without the option, a plain render does not fold", ClickArrow(DrawFrame(), "alpha").height == open.height)
-         && ok;
+    const float plainHeight = DrawFrame().height;
+    const float clickedHeight = ClickArrow(DrawFrame(), "alpha").height;
+    ok = Expect("without the option, a plain render does not fold", clickedHeight == plainHeight) && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();
