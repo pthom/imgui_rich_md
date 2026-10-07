@@ -258,7 +258,18 @@ static std::string heading_slug(const std::string& text)
 	return slug;
 }
 
-// A repeated slug gets -1, -2..., as GitHub numbers them (github-slugger)
+// A slug made unique among those given so far: a repeated one gets -1, -2..., as GitHub numbers them (github-slugger)
+std::string UniqueSlug(const std::string& text, std::unordered_map<std::string, int>& occurrences)
+{
+	const std::string base = heading_slug(text);
+	std::string slug = base;
+	while (occurrences.count(slug))
+		slug = base + "-" + std::to_string(++occurrences[base]);
+	occurrences[slug] = 0;
+	return slug;
+}
+
+// In a document, the slugs are unique in the document, and the document gathers the headings of its fragments
 void Renderer::add_heading(int level, float y, bool hidden)
 {
 	Heading heading;
@@ -266,56 +277,71 @@ void Renderer::add_heading(int level, float y, bool hidden)
 	heading.text = m_heading_text;
 	heading.y = y;
 	heading.hidden = hidden;
-	const std::string base = heading_slug(m_heading_text);
-	heading.slug = base;
-	while (m_slug_occurrences.count(heading.slug))
-		heading.slug = base + "-" + std::to_string(++m_slug_occurrences[base]);
-	m_slug_occurrences[heading.slug] = 0;
+	heading.slug = UniqueSlug(m_heading_text, document ? document->slugOccurrences : m_slug_occurrences);
+	ImGuiID details = hidden ? m_collapsed_details_id : 0;
+	if (document) {
+		document->headings.push_back(heading);
+		document->headingDetails.push_back(details);
+	}
 	m_headings.push_back(std::move(heading));
-	m_heading_details.push_back(hidden ? m_collapsed_details_id : 0);
+	m_heading_details.push_back(details);
 }
 
-// A click on a link: an anchor (#slug) waits for the end of the fragment, where its heading is known; any other link
-// goes to open_url()
+// A click on a link: an anchor (#slug) waits for the end of the fragment (or of its document), where its heading is
+// known; any other link goes to open_url()
 void Renderer::follow_link()
 {
 	if (m_href.size() > 1 && m_href[0] == '#') {
-		m_pending_anchor = m_href.substr(1);
-		m_pending_anchor_fragment = m_fragment_id;
-		m_pending_anchor_frames = 8;
+		if (document)
+			document->clickedAnchor = m_href.substr(1);
+		else {
+			m_anchor = PendingAnchor();
+			m_anchor.slug = m_href.substr(1);
+			m_anchor.fragment = m_fragment_id;
+		}
 	} else
 		open_url();
 }
 
-// The anchor clicked in this fragment: the window scrolls to its heading. A heading that a collapsed <details> hides
-// opens it first, and the scroll waits for a next frame, where the heading is drawn. An anchor that no heading of the
-// fragment has goes to open_url(), as any link.
-// The heading is measured again at the frames after the scroll, which is corrected until it holds: Dear ImGui truncates
-// the cursor toward zero (ItemSize), so the content scrolled above the top of the screen grows by a pixel per item of a
-// fractional height (the gaps between blocks, the fonts of the headings).
+// The anchor clicked in this fragment. One that no heading of the fragment has goes to open_url(), as any link.
 void Renderer::resolve_anchor(ImGuiID fragmentId)
 {
-	if (m_pending_anchor.empty() || m_pending_anchor_fragment != fragmentId)
+	if (m_anchor.slug.empty() || m_anchor.fragment != fragmentId)
 		return;
-	size_t i = 0;
-	while (i < m_headings.size() && m_headings[i].slug != m_pending_anchor)
-		++i;
-	if (i == m_headings.size()) {
-		m_href = "#" + m_pending_anchor;
+	std::string slug = m_anchor.slug;
+	if (ResolveAnchor(m_anchor, m_headings, m_heading_details) == AnchorStatus::NotFound) {
+		m_href = "#" + slug;
 		open_url();
 		m_href.clear();
-		m_pending_anchor.clear();
-	} else if (m_headings[i].hidden && --m_pending_anchor_frames > 0)
-		ImGui::GetStateStorage()->SetInt(m_heading_details[i], 1);  // the section opens at the next frame
-	else {
-		ImGuiWindow* window = ImGui::GetCurrentWindow();
-		float top = m_headings[i].y - window->DecoOuterSizeY1 - window->DecoInnerSizeY1;  // below a title bar, a menu bar
-		float scroll = ImClamp(ImTrunc(top), 0.f, window->ScrollMax.y);
-		if (ImFabs(window->Scroll.y - scroll) <= 1.f || --m_pending_anchor_frames <= 0)
-			m_pending_anchor.clear();  // there, or as near as it gets
-		else
-			ImGui::SetScrollY(scroll);  // applied at the next frame, where the heading is measured again
 	}
+}
+
+// The scroll is measured again at the frames after it, and corrected until it holds: Dear ImGui truncates the cursor
+// toward zero (ItemSize), so the content scrolled above the top of the screen grows by a pixel per item of a fractional
+// height (the gaps between blocks, the fonts of the headings).
+AnchorStatus ResolveAnchor(PendingAnchor& anchor, const std::vector<Heading>& headings,
+                           const std::vector<ImGuiID>& headingDetails)
+{
+	size_t i = 0;
+	while (i < headings.size() && headings[i].slug != anchor.slug)
+		++i;
+	if (i == headings.size()) {
+		anchor.slug.clear();
+		return AnchorStatus::NotFound;
+	}
+	if (headings[i].hidden && --anchor.frames > 0) {
+		ImGui::GetStateStorage()->SetInt(headingDetails[i], 1);  // the section opens at the next frame
+		return AnchorStatus::Waiting;
+	}
+	ImGuiWindow* window = ImGui::GetCurrentWindow();
+	float top = headings[i].y - window->DecoOuterSizeY1 - window->DecoInnerSizeY1;  // below a title bar, a menu bar
+	float scroll = ImClamp(ImTrunc(top), 0.f, window->ScrollMax.y);
+	if (ImFabs(window->Scroll.y - scroll) <= 1.f || --anchor.frames <= 0) {
+		anchor.slug.clear();  // there, or as near as it gets
+		return AnchorStatus::Reached;
+	}
+	ImGui::SetScrollY(scroll);  // applied at the next frame, where the heading is measured again
+	return AnchorStatus::Waiting;
 }
 
 void Renderer::heading(int, const std::string&)
@@ -1843,7 +1869,8 @@ int Renderer::print(const char* str, const char* str_end)
 	if (style.fragmentGapTop > 0.0f)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapTop));
 	int result = md_parse(str, (MD_SIZE)(str_end - str), &m_md, this);
-	resolve_anchor(selectionId);
+	if (!document)
+		resolve_anchor(selectionId);
 
     if (selectableText)
         update_selection(selectionId);

@@ -34,6 +34,7 @@
 #include "md4c.h"
 #include "imgui.h"
 #include "../rich_md.h"  // Style
+#include "rich_md_internal.h"  // PendingAnchor, DocumentHeadings
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -69,6 +70,8 @@ struct Renderer
 
 	// The headings of the last fragment, in order
 	const std::vector<Heading>& headings() const { return m_headings; }
+	// Set between BeginDocument() and EndDocument(): the headings and the anchors of the fragments go to the document
+	DocumentHeadings* document = nullptr;
 
 	// The automatic link color: the text color, shifted to blue
 	static ImVec4 default_link_color();
@@ -350,11 +353,10 @@ private:
 	std::vector<ImGuiID> m_heading_details;  // for each heading, the collapsed <details> that hides it (0: none)
 	void add_heading(int level, float y, bool hidden);
 
-	// An anchor link (#slug) clicked in a fragment: resolved at the end of the fragment, once its headings are known
-	std::string m_pending_anchor;
+	// An anchor link (#slug) clicked in a fragment: resolved at the end of the fragment, once its headings are known (in
+	// a document: by EndDocument(), once those of all its fragments are known)
+	PendingAnchor m_anchor;
 	ImGuiID m_fragment_id = 0;           // the fragment being drawn (its id, taken in the id scope of print())
-	ImGuiID m_pending_anchor_fragment = 0;
-	int m_pending_anchor_frames = 0;     // the frames left to reach it through collapsed sections, one level per frame
 	void follow_link();
 	void resolve_anchor(ImGuiID fragmentId);
 	ImDrawListSplitter m_selection_splitter;     // channel 0: the highlight, behind the text of channel 1
@@ -373,6 +375,15 @@ private:
 
 	MD_PARSER m_md;
 };
+
+// A slug made from a heading's text, unique among those given so far (a repeated one gets -1, -2...)
+std::string UniqueSlug(const std::string& text, std::unordered_map<std::string, int>& occurrences);
+
+// One frame of the way to an anchor, in the current window: a collapsed section that hides its heading opens (at the
+// next frame), or the window scrolls the heading to its top (corrected at the next frames, until it holds)
+enum class AnchorStatus { Waiting, Reached, NotFound };
+AnchorStatus ResolveAnchor(PendingAnchor& anchor, const std::vector<Heading>& headings,
+                           const std::vector<ImGuiID>& headingDetails);
 
 } // namespace RichMd
 

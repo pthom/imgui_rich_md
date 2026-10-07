@@ -67,6 +67,34 @@ namespace RichMd
     // ::endcode
 
     // =================================================================================================================
+    //                                        Documents
+    // =================================================================================================================
+    /*::md Documents
+    A document is markdown in a scroll area of its own. `RenderDocument()` draws one markdown string.
+    `BeginDocument()` and `EndDocument()` frame several renders and widgets: their headings belong to the document, and
+    a link `[text](#slug)` in any of them reaches a heading of any other. `DocumentHeading()` gives a section made of
+    widgets its heading, as a markdown heading does.
+    ::code
+    */
+    // The options of a document
+    struct DocumentOptions
+    {
+    };
+    // A document: the renders and the widgets drawn until EndDocument() share a scroll area and their headings.
+    // size: as BeginChild (0: all the available space). Call EndDocument() in the same frame. The content is always
+    // drawn: there is no return value to skip it. One document at a time.
+    void BeginDocument(const char* id, ImVec2 size = ImVec2(0.f, 0.f), const DocumentOptions& options = DocumentOptions());
+    void EndDocument();
+    // The one-call form: BeginDocument(id, size, options), Render(markdown), EndDocument()
+    void RenderDocument(const char* id, const std::string& markdown, ImVec2 size = ImVec2(0.f, 0.f),
+                        const DocumentOptions& options = DocumentOptions());
+    // Starts a section of the document that is not markdown (widgets, a plot): a heading of the document, with its slug
+    // (an anchor for [text](#slug) links). drawTitle: draws the text as a markdown heading of that level; false when
+    // the title is drawn by other means (an ImGui text, a plot's own title), or not at all.
+    void DocumentHeading(int level, const std::string& text, bool drawTitle = true);
+    // ::endcode
+
+    // =================================================================================================================
     //                                        Options and callbacks
     // =================================================================================================================
     /*::md Options and callbacks

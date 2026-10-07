@@ -46,6 +46,7 @@ void RenderRaw(const std::string& markdownString)
     ImGui::PushID(context->fragmentCounter++);
     // Whether its text can be selected: the last PushSelectableText(), else the option
     _CheckSelectableTextStack(context);
+    _CheckDocumentEnded(context);
     renderer->selectableText = context->selectableTextStack.empty()
         ? context->options.selectableText : context->selectableTextStack.back();
     renderer->Render(markdownString);
@@ -150,6 +151,13 @@ global: every context shares them.
         int fragmentCounter = 0;   // Render calls in this frame (seeds their ImGui ids)
         std::vector<bool> selectableTextStack;  // PushSelectableText()
         int selectableTextFrame = -1;            // the frame of the last PushSelectableText()
+        // Documents: the one being drawn (between BeginDocument() and EndDocument()), and the anchor each one is
+        // reaching, by id
+        std::unique_ptr<DocumentHeadings> document;
+        ImGuiID documentId = 0;
+        int documentFrame = -1;    // the frame of the last BeginDocument()
+        int documentNesting = 0;   // BeginDocument() inside a document (a user error): only a child window
+        std::unordered_map<ImGuiID, PendingAnchor> documentAnchors;
 #ifdef IMGUI_RICHMD_WITH_MERMAID
         Mermaid::CachePtr mermaidCache;  // created on first use
 #endif

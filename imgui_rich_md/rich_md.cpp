@@ -1008,6 +1008,18 @@ namespace RichMd
         context->selectableTextStack.clear();
     }
 
+    // A BeginDocument() left without its EndDocument() by an earlier frame: reported, then dropped
+    static void _CheckDocumentEnded(Context* context)
+    {
+        if (!context->document || context->documentFrame == ImGui::GetFrameCount())
+            return;
+        IM_ASSERT_USER_ERROR(false, "RichMd: BeginDocument() without EndDocument() in the same frame");
+        if (context->renderer)
+            context->renderer->document = nullptr;
+        context->document.reset();
+        context->documentNesting = 0;
+    }
+
     // ::md Rendering a fragment
     // Each `Render()` call renders a *fragment*: `Render()` removes its common indentation and resolves its
     // transclusions (once per text: the result is cached in the context), then `RenderRaw()` gives it its own ImGui
@@ -1034,6 +1046,7 @@ namespace RichMd
         ImGui::PushID(context->fragmentCounter++);
         // Whether its text can be selected: the last PushSelectableText(), else the option
         _CheckSelectableTextStack(context);
+        _CheckDocumentEnded(context);
         renderer->selectableText = context->selectableTextStack.empty()
             ? context->options.selectableText : context->selectableTextStack.back();
         renderer->Render(markdownString);
@@ -1047,6 +1060,97 @@ namespace RichMd
         static const std::vector<Heading> kNone;
         MarkdownRenderer* renderer = _Renderer();
         return renderer ? renderer->headings() : kNone;
+    }
+
+    // Documents: the renders between BeginDocument() and EndDocument() put their headings and the anchors clicked in
+    // them into the context's document; EndDocument() resolves the anchor, in the document's window (the state of its
+    // collapsed sections, its scroll), then closes it.
+    void BeginDocument(const char* id, ImVec2 size, const DocumentOptions& options)
+    {
+        IM_ASSERT(gCurrentContext && "RichMd: call CreateContext first");
+        (void)options;
+        Context* context = gCurrentContext;
+        _CheckDocumentEnded(context);
+        if (context->document) {
+            IM_ASSERT_USER_ERROR(false, "RichMd: BeginDocument() inside a document (one document at a time)");
+            context->documentNesting++;  // only a child window: its renders belong to the outer document
+            ImGui::BeginChild(id, size);
+            return;
+        }
+        context->documentId = ImGui::GetID(id);
+        ImGui::BeginChild(id, size);
+        context->document = std::make_unique<DocumentHeadings>();
+        context->documentFrame = ImGui::GetFrameCount();
+        if (MarkdownRenderer* renderer = _Renderer())
+            renderer->document = context->document.get();
+    }
+
+    void EndDocument()
+    {
+        Context* context = gCurrentContext;
+        if (context && context->documentNesting > 0) {
+            context->documentNesting--;
+            ImGui::EndChild();
+            return;
+        }
+        if (!context || !context->document) {
+            IM_ASSERT_USER_ERROR(false, "RichMd: EndDocument() without BeginDocument()");
+            return;
+        }
+        DocumentHeadings& document = *context->document;
+        PendingAnchor& anchor = context->documentAnchors[context->documentId];
+        if (!document.clickedAnchor.empty()) {
+            anchor = PendingAnchor();
+            anchor.slug = document.clickedAnchor;
+        }
+        if (!anchor.slug.empty()) {
+            std::string slug = anchor.slug;
+            if (ResolveAnchor(anchor, document.headings, document.headingDetails) == AnchorStatus::NotFound
+                && context->options.callbacks.OnOpenLink)
+                context->options.callbacks.OnOpenLink("#" + slug);  // an anchor that no heading of the document has
+        }
+        if (context->renderer)
+            context->renderer->document = nullptr;
+        context->document.reset();
+        ImGui::EndChild();
+    }
+
+    void RenderDocument(const char* id, const std::string& markdown, ImVec2 size, const DocumentOptions& options)
+    {
+        BeginDocument(id, size, options);
+        Render(markdown);
+        EndDocument();
+    }
+
+    // The text as markdown that shows it as it is: the ASCII punctuation escaped
+    static std::string _EscapeMarkdown(const std::string& text)
+    {
+        std::string escaped;
+        for (char c : text) {
+            if ((unsigned char)c < 0x80 && std::ispunct((unsigned char)c))
+                escaped += '\\';
+            escaped += c;
+        }
+        return escaped;
+    }
+
+    void DocumentHeading(int level, const std::string& text, bool drawTitle)
+    {
+        level = ImClamp(level, 1, 6);
+        if (drawTitle) {  // a markdown heading: drawn as one, and recorded by its render
+            RenderRaw(std::string((size_t)level, '#') + " " + _EscapeMarkdown(text));
+            return;
+        }
+        Context* context = gCurrentContext;
+        if (!context || !context->document)
+            return;  // outside a document, there is nothing to record
+        Heading heading;
+        heading.level = level;
+        heading.text = text;
+        heading.slug = UniqueSlug(text, context->document->slugOccurrences);
+        heading.y = ImGui::GetCursorPosY();
+        context->document->headings.push_back(heading);
+        context->document->headingDetails.push_back(0);
     }
 
     // A text file: from the assets, else from the file system as is (a source file rendering itself)

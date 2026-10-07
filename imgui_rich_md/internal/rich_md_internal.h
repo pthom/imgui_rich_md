@@ -28,6 +28,26 @@ namespace RichMd
         double lastCheck = 0.0;  // ImGui::GetTime() of the last check of the files
     };
 
+    // An anchor to reach (#slug), clicked in a fragment or in a document: resolved where all the headings are known, at
+    // the end of the fragment or of the document. Collapsed sections open one level per frame, and the scroll is
+    // corrected over a few frames (ResolveAnchor, in rich_md_renderer.cpp).
+    struct PendingAnchor
+    {
+        std::string slug;       // empty: no anchor
+        int frames = 8;         // the frames left to reach it
+        ImGuiID fragment = 0;   // the fragment it was clicked in (outside a document)
+    };
+
+    // The headings of the document being drawn (between BeginDocument() and EndDocument()), gathered across its
+    // fragments (their slugs unique in the document), and the anchor clicked in one of them in this frame
+    struct DocumentHeadings
+    {
+        std::vector<Heading> headings;
+        std::vector<ImGuiID> headingDetails;  // the collapsed <details> that hides each heading (0: none)
+        std::unordered_map<std::string, int> slugOccurrences;
+        std::string clickedAnchor;
+    };
+
     // ::md Context
     // A context holds the options, the renderer (created at the first render: it loads the fonts), the fenced block
     // renderers registered by the application, and caches: the resolved transclusions (per text, resolved again when
@@ -46,6 +66,13 @@ namespace RichMd
         int fragmentCounter = 0;   // Render calls in this frame (seeds their ImGui ids)
         std::vector<bool> selectableTextStack;  // PushSelectableText()
         int selectableTextFrame = -1;            // the frame of the last PushSelectableText()
+        // Documents: the one being drawn (between BeginDocument() and EndDocument()), and the anchor each one is
+        // reaching, by id
+        std::unique_ptr<DocumentHeadings> document;
+        ImGuiID documentId = 0;
+        int documentFrame = -1;    // the frame of the last BeginDocument()
+        int documentNesting = 0;   // BeginDocument() inside a document (a user error): only a child window
+        std::unordered_map<ImGuiID, PendingAnchor> documentAnchors;
 #ifdef IMGUI_RICHMD_WITH_MERMAID
         Mermaid::CachePtr mermaidCache;  // created on first use
 #endif
