@@ -120,7 +120,7 @@ namespace RichMd
     void RenderDocument(const char* id, const std::string& markdown, ImVec2 size = ImVec2(0.f, 0.f),
                         const DocumentOptions& options = DocumentOptions());
     // Starts a section of the document that is not markdown (widgets, a plot): a heading of the document, with its slug
-    // (an anchor for [text](#slug) links). drawTitle: draws the text as a markdown heading of that level; false when
+    // (an anchor for `[text](#slug)` links). drawTitle: draws the text as a markdown heading of that level; false when
     // the title is drawn by other means (an ImGui text, a plot's own title), or not at all.
     void DocumentHeading(int level, const std::string& text, bool drawTitle = true);
     // ::endcode
