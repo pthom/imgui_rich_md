@@ -1569,7 +1569,8 @@ namespace RichMd
             width = ImMin(em * 30.f, width - style.ScrollbarSize - 2.f * pad);
             ImGui::SetCursorScreenPos(ImVec2(contentMax.x - style.ScrollbarSize - pad - width, contentMin.y + pad));
         }
-        ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
+        // A toolbar's color: the fields stand out on it (in a light theme, the popups are as white as the fields)
+        ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg);
         background.w = 1.f;  // opaque: the text below does not show through
         ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
         ImGuiChildFlags flags =
