@@ -13,6 +13,10 @@ its source is [api.src.md](api.src.md).
 ![[../imgui_rich_md/rich_md.h#Rendering]]
 ![[../imgui_rich_md/rich_md.h#Rendering#code]]
 
+## Headings
+![[../imgui_rich_md/rich_md.h#Headings]]
+![[../imgui_rich_md/rich_md.h#Headings#code]]
+
 ## Contexts
 ![[../imgui_rich_md/rich_md.h#Contexts]]
 ![[../imgui_rich_md/rich_md.h#Contexts#code]]

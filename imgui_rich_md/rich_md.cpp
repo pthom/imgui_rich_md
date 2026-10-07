@@ -1042,6 +1042,13 @@ namespace RichMd
     }
     // ::endcode
 
+    const std::vector<Heading>& LastRenderHeadings()
+    {
+        static const std::vector<Heading> kNone;
+        MarkdownRenderer* renderer = _Renderer();
+        return renderer ? renderer->headings() : kNone;
+    }
+
     // A text file: from the assets, else from the file system as is (a source file rendering itself)
     static std::optional<std::string> _ReadTextAssetOrFile(const std::string& path)
     {

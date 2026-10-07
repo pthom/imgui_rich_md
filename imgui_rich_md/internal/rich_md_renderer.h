@@ -35,6 +35,7 @@
 #include "imgui.h"
 #include "../rich_md.h"  // Style
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace RichMd
@@ -65,6 +66,9 @@ struct Renderer
 
 	Style style;
 	bool selectableText = true;  // the text can be selected (set by RichMd::RenderRaw for each fragment)
+
+	// The headings of the last fragment, in order
+	const std::vector<Heading>& headings() const { return m_headings; }
 
 	// The automatic link color: the text color, shifted to blue
 	static ImVec4 default_link_color();
@@ -336,6 +340,13 @@ private:
 	bool m_press_in_selection = false;           // a press inside the selection keeps it: a drag starts a new one,
 	                                             // a release collapses it (a release at no position, a cancel, keeps it)
 	std::string m_menu_link;                     // the link under the right click that opened the menu
+
+	// The headings of the fragment (print() clears them), and the slugs given so far (a repeated one gets -1, -2...)
+	std::vector<Heading> m_headings;
+	std::unordered_map<std::string, int> m_slug_occurrences;
+	float m_heading_top = -1.f;          // the top of the heading being read (its first text run), in content coordinates
+	float m_collapsed_details_y = 0.f;   // the header of the outermost collapsed <details>: its hidden headings are there
+	void add_heading(int level, float y, bool hidden);
 	ImDrawListSplitter m_selection_splitter;     // channel 0: the highlight, behind the text of channel 1
 
 	void record_run(const char* str, const char* str_end, const std::string& replacement = "");

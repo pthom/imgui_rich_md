@@ -34,6 +34,25 @@ void PopSelectableText();
 void SetSelectableTextDefault(bool selectable);
 ```
 
+## Headings
+
+After a `Render()`, its headings and their places: for a table of contents drawn by the application.
+
+```cpp
+// A heading of the last render
+struct Heading
+{
+    int level = 1;          // 1 to 6
+    std::string text;       // without markup
+    std::string slug;       // its anchor, made from the text as GitHub does (a repeated title gets -1, -2...)
+    float y = 0.f;          // its top, in the content coordinates of the window that holds the render (as
+                            // ImGui::GetCursorPosY()): ImGui::SetScrollY(y) shows it at the top
+    bool hidden = false;    // inside a collapsed <details>: y is the one of the section's header
+};
+// The headings of the last Render() call (valid until the next one)
+const std::vector<Heading>& LastRenderHeadings();
+```
+
 ## Contexts
 
 A context holds the options, the fonts and the caches (textures, formulas, diagrams). Most applications have one.

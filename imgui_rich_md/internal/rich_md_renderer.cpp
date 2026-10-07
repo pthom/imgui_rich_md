@@ -224,6 +224,7 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 	if (e) {
 		m_hlevel = d->level;
 		m_heading_text.clear();
+		m_heading_top = -1.f;
 	} else {
 		m_hlevel = 0;
 	}
@@ -231,12 +232,46 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 	set_font(e);
 
 	if (!e) {
+		float top = (m_heading_top >= 0.f) ? m_heading_top : ImGui::GetCursorPosY();  // an empty heading: where it ends
 		if (d->level <= 2) {
 			end_line();  // the underline, just below the title
 			ImGui::Separator();
 		}
+		add_heading((int)d->level, top, false);
 		heading((int)d->level, m_heading_text);
 	}
+}
+
+// The anchor of a heading, as GitHub makes it: lower case, the spaces as hyphens, the ASCII punctuation dropped but
+// '-' and '_'. The other characters are kept as they are.
+static std::string heading_slug(const std::string& text)
+{
+	std::string slug;
+	for (unsigned char c : text) {
+		if (c >= 0x80 || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_')
+			slug += (char)c;
+		else if (c >= 'A' && c <= 'Z')
+			slug += (char)(c - 'A' + 'a');
+		else if (c == ' ')
+			slug += '-';
+	}
+	return slug;
+}
+
+// A repeated slug gets -1, -2..., as GitHub numbers them (github-slugger)
+void Renderer::add_heading(int level, float y, bool hidden)
+{
+	Heading heading;
+	heading.level = level;
+	heading.text = m_heading_text;
+	heading.y = y;
+	heading.hidden = hidden;
+	const std::string base = heading_slug(m_heading_text);
+	heading.slug = base;
+	while (m_slug_occurrences.count(heading.slug))
+		heading.slug = base + "-" + std::to_string(++m_slug_occurrences[base]);
+	m_slug_occurrences[heading.slug] = 0;
+	m_headings.push_back(std::move(heading));
 }
 
 void Renderer::heading(int, const std::string&)
@@ -1271,6 +1306,8 @@ bool Renderer::check_html(const char* str, const char* str_end)
 			ImGui::SetNextItemOpen(true, ImGuiCond_Once);
 		bool open = ImGui::CollapsingHeader(label.c_str());
 		ImGui::PopID();
+		if (!open)  // the outermost collapsed section: the place of the headings it hides
+			m_collapsed_details_y = ImGui::GetItemRectMin().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
 		m_details_open_stack.push_back(open);
 		if (open)
 			ImGui::Indent();
@@ -1454,8 +1491,11 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 {
 	// Even while hidden we keep processing raw HTML so </details>
 	// can pop the stack; everything else is discarded.
-	if (details_hidden(m_details_open_stack) && type != MD_TEXT_HTML)
+	if (details_hidden(m_details_open_stack) && type != MD_TEXT_HTML) {
+		if (m_hlevel > 0 && (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE))
+			m_heading_text.append(str, str_end);  // a heading inside a collapsed section is listed, with its text
 		return 0;
+	}
 	bool afterComment = m_html_comment_closed;
 	m_html_comment_closed = false;
 
@@ -1483,6 +1523,8 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 		render_text(str, str_end);
 		break;
 	case MD_TEXT_CODE:
+		if (m_hlevel > 0)
+			m_heading_text.append(str, str_end);
         if (m_is_code_block)
             m_code_block += std::string(str, str_end);
         else
@@ -1556,8 +1598,19 @@ int Renderer::block(MD_BLOCKTYPE type, void* d, bool e)
 	// BLOCK_HTML pairs still arrive (the tags themselves land as
 	// MD_TEXT_HTML in text(), which is allowed through), so we just
 	// drop any other block work here.
-	if (details_hidden(m_details_open_stack))
+	if (details_hidden(m_details_open_stack)) {
+		if (type == MD_BLOCK_H) {  // a heading inside a collapsed section: listed, at the section's header
+			int level = (int)((MD_BLOCK_H_DETAIL*)d)->level;
+			if (e) {
+				m_hlevel = (unsigned)level;
+				m_heading_text.clear();
+			} else {
+				add_heading(level, m_collapsed_details_y, true);
+				m_hlevel = 0;
+			}
+		}
 		return 0;
+	}
 	if (e)
 		++m_block_number;
 
@@ -1706,6 +1759,8 @@ int Renderer::span(MD_SPANTYPE type, void* d, bool e)
 
 int Renderer::print(const char* str, const char* str_end)
 {
+	m_headings.clear();
+	m_slug_occurrences.clear();
 	if (str >= str_end)
         return 0;
 
@@ -1897,6 +1952,8 @@ void Renderer::record_run(const char* str, const char* str_end, const std::strin
 		if (run.replacement.empty() && str != nullptr)
 			run.replacement.assign(str, str_end);
 	}
+	if (m_hlevel > 0 && m_heading_top < 0.f)  // the first text of a heading: its top
+		m_heading_top = run.min.y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
 	m_runs.push_back(std::move(run));
 }
 
