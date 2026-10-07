@@ -2,11 +2,14 @@
 // the arrow in the margin folds a heading's section: the headings it hides are listed as hidden, at the folded
 // heading's place, until a heading of its level or above; a heading inside a list does not end the fold, and does not
 // fold; the "#" title does not fold (foldableHeadingsMinLevel). A link to a heading of a folded section unfolds it.
-// FoldAllHeadings() folds them all, and unfolds them all, also those inside a folded section.
+// FoldAllHeadings() folds them all, and unfolds them all, also those inside a folded section. In a document, a fold
+// goes on across its renders and its sections of widgets: DocumentHeading() returns false for a hidden section, and
+// a jump of the search to a match in a folded section unfolds what hides it.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs
 #include "imgui_impl_null.h"
 #include "imgui_rich_md/rich_md.h"
+#include "imgui_rich_md/internal/rich_md_internal.h"  // the state of a document (its search)
 
 #include <cfloat>
 #include <cstdio>
@@ -121,6 +124,111 @@ static bool ExpectHidden(const Frame& f, const char* slug, bool hidden)
     return ok;
 }
 
+// A document: two renders, a section of widgets inside the second one's last section, a third render
+struct DocFrame
+{
+    std::vector<RichMd::Heading> first;  // the headings of the first render
+    ImVec2 origin;                       // the top left of the content (past the margin), on the screen
+    float originY = 0.f;                 // the same, in the content's coordinates
+    float secondHeight = 0.f;            // the height of the second render
+    bool widgetsShown = false;           // what DocumentHeading() returned
+};
+
+static DocFrame DrawDocument(int foldAll = 0)
+{
+    DocFrame frame;
+    ImGui_ImplNull_NewFrame();
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(900.f, 800.f), ImGuiCond_Always);
+    ImGui::Begin("Document window", nullptr, ImGuiWindowFlags_NoTitleBar);
+    RichMd::DocumentOptions options;
+    options.toc = false;
+    RichMd::BeginDocument("doc", ImVec2(0.f, 0.f), options);
+    frame.origin = ImGui::GetCursorScreenPos();
+    frame.originY = ImGui::GetCursorPosY();
+    RichMd::Render("## One\n\nOne text.\n\n### One a\n\nOne a text.");
+    frame.first = RichMd::LastRenderHeadings();
+    float y = ImGui::GetCursorPosY();
+    RichMd::Render("Still in One a.\n\n## Two\n\nTwo text.");
+    frame.secondHeight = ImGui::GetCursorPosY() - y;
+    frame.widgetsShown = RichMd::DocumentHeading(3, "Widgets", false);
+    if (frame.widgetsShown)
+        ImGui::Button("A widget");
+    RichMd::Render("## Three\n\nThree text.");
+    if (foldAll != 0)
+        RichMd::FoldAllHeadings(foldAll > 0);
+    RichMd::EndDocument();
+    ImGui::End();
+    ImGui::Render();
+    ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+    return frame;
+}
+
+static DocFrame ClickDocumentArrow(const DocFrame& f, const char* slug)
+{
+    for (const RichMd::Heading& h : f.first)
+        if (h.slug == slug) {
+            ImVec2 pos(f.origin.x - 6.f, f.origin.y + (h.y - f.originY) + 4.f);  // in the margin
+            ImGui::GetIO().AddMousePosEvent(pos.x, pos.y);
+            DrawDocument();
+            ImGui::GetIO().AddMouseButtonEvent(0, true);
+            DrawDocument();
+            ImGui::GetIO().AddMouseButtonEvent(0, false);
+            DrawDocument();
+            ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+        }
+    DrawDocument();
+    return DrawDocument();
+}
+
+static bool CheckDocument()
+{
+    DrawDocument();
+    DocFrame open = DrawDocument();
+    bool ok = Expect("a document: its widgets shown", open.widgetsShown);
+    ok = Expect("a document: two headings in its first render", open.first.size() == 2) && ok;
+
+    // "One a" folds: the fold goes on into the second render, until "Two"
+    DocFrame folded = ClickDocumentArrow(open, "one-a");
+    ok = Expect("a fold goes on into the next render", folded.secondHeight < open.secondHeight) && ok;
+    ok = Expect("a fold of the render before does not hide the widgets after Two", folded.widgetsShown) && ok;
+    open = ClickDocumentArrow(folded, "one-a");
+    ok = Expect("unfolded, the next render has its height back", ImAbs(open.secondHeight - folded.secondHeight) > 1.f)
+         && ok;
+
+    // Fold all: "Two" folds, its section hides the widgets; unfold all shows them again
+    DrawDocument(1);
+    DocFrame all = DrawDocument();
+    ok = Expect("fold all: DocumentHeading() returns false", !all.widgetsShown) && ok;
+    DrawDocument(-1);
+    all = DrawDocument();
+    ok = Expect("unfold all: DocumentHeading() returns true", all.widgetsShown) && ok;
+
+    // The search: after fold all, "Still" is hidden by the fold of "One" (and inside it, of "One a"); a jump to it
+    // unfolds both
+    DrawDocument(1);
+    DocFrame hidden = DrawDocument();
+    RichMd::DocumentState& state =
+        RichMd::GetCurrentContext()->documents[ImGui::FindWindowByName("Document window")->GetID("doc")];
+    state.searchOpen = true;
+    ImStrncpy(state.query, "Still", sizeof(state.query));
+    DrawDocument();
+    DrawDocument();
+    ok = Expect("fold all hides One a", hidden.first.size() == 2 && hidden.first[1].hidden) && ok;
+    ok = Expect("the search finds the folded text", state.matchCount == 1) && ok;
+    state.step = 1;
+    DocFrame shown;
+    for (int i = 0; i < 30; ++i)
+        shown = DrawDocument();
+    ok = Expect("a jump to a folded match unfolds its sections",
+                shown.first.size() == 2 && !shown.first[1].hidden && shown.secondHeight > hidden.secondHeight) && ok;
+    state.searchOpen = false;
+    DrawDocument(-1);
+    DrawDocument();
+    return ok;
+}
+
 int main(int, char**)
 {
     ImGui::CreateContext();
@@ -195,6 +303,8 @@ int main(int, char**)
     for (const char* slug : {"title", "alpha", "alpha-one", "in-a-list", "beta", "gamma"})
         ok = ExpectHidden(f, slug, false) && ok;
     ok = Expect("unfold all gives the whole height back", ImAbs(f.height - open.height) <= 1.f) && ok;
+
+    ok = CheckDocument() && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

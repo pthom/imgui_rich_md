@@ -244,7 +244,7 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 		add_heading((int)d->level, top, false);
 		heading((int)d->level, m_heading_text);
 		if (m_heading_folds.back() != 0)
-			fold_heading((int)d->level, top);
+			fold_heading((int)d->level, top, m_heading_folds.back());
 	}
 }
 
@@ -252,9 +252,8 @@ void Renderer::BLOCK_H(const MD_BLOCK_H_DETAIL* d, bool e)
 // in the margin toggles it. The arrow shows while the mouse is over the heading's line, always when the heading is
 // folded, and always on a touch screen (no hover there). A folded heading hides what follows it, until a heading of
 // its level or above.
-void Renderer::fold_heading(int level, float top)
+void Renderer::fold_heading(int level, float top, ImGuiID id)
 {
-	const ImGuiID id = m_heading_folds.back();
 	ImGuiStorage* storage = ImGui::GetStateStorage();
 	bool open = storage->GetInt(id, 1) != 0;
 	if (m_fold_margin > 0.f) {
@@ -267,7 +266,8 @@ void Renderer::fold_heading(int level, float top)
 			open = !open;
 			storage->SetInt(id, open ? 1 : 0);
 		}
-		const ImRect line(ImVec2(m_fold_margin_left, y), ImVec2(window->WorkRect.Max.x, ImGui::GetCursorScreenPos().y));
+		const ImRect line(ImVec2(m_fold_margin_left, y),  // (a heading without a title: the arrow's height)
+		                  ImVec2(window->WorkRect.Max.x, ImMax(ImGui::GetCursorScreenPos().y, arrow.Max.y)));
 		const bool lineHovered = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(line.Min, line.Max, false);
 		const bool touch = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
 		if (!open || touch || lineHovered || hovered) {
@@ -335,6 +335,55 @@ void Renderer::add_heading(int level, float y, bool hidden)
 	m_headings.push_back(std::move(heading));
 	m_heading_details.push_back(details);
 	m_heading_folds.push_back(fold);
+}
+
+// In a document, a fold goes on from a render (or a section of widgets) to the next ones: the document keeps it
+void Renderer::load_document_fold()
+{
+	m_fold_level = document ? document->foldLevel : 0;
+	if (m_fold_level > 0) {
+		m_hidden_y = document->foldY;
+		m_hidden_bottom = document->foldBottom;
+		m_hidden_id = document->foldId;
+	}
+}
+
+void Renderer::save_document_fold()
+{
+	if (!document)
+		return;
+	document->foldLevel = m_fold_level;
+	if (m_fold_level > 0) {
+		document->foldY = m_hidden_y;
+		document->foldBottom = m_hidden_bottom;
+		document->foldId = m_hidden_id;
+	}
+}
+
+bool Renderer::document_heading(int level, const std::string& text)
+{
+	load_document_fold();
+	if (m_fold_level > 0 && level <= m_fold_level)
+		m_fold_level = 0;
+	Heading heading;
+	heading.level = level;
+	heading.text = text;
+	heading.slug = UniqueSlug(text, document->slugOccurrences);
+	heading.hidden = m_fold_level > 0;
+	heading.y = heading.hidden ? m_hidden_y : ImGui::GetCursorPosY();
+	const bool foldable = foldableHeadings && level >= foldableHeadingsMinLevel;
+	const ImGuiID fold = foldable ? ImGui::GetID(("##fold-" + heading.slug).c_str()) : 0;
+	document->headings.push_back(heading);
+	document->headingDetails.push_back(heading.hidden ? m_hidden_id : 0);
+	document->headingFolds.push_back(fold);
+	if (!heading.hidden && fold != 0) {
+		m_heading_font_size = ImGui::GetFontSize();
+		m_fold_margin = document->foldMargin;
+		m_fold_margin_left = document->foldMarginLeft;
+		fold_heading(level, heading.y, fold);
+	}
+	save_document_fold();
+	return m_fold_level == 0;
 }
 
 void Renderer::fold_all(bool folded)
@@ -1947,7 +1996,6 @@ int Renderer::print(const char* str, const char* str_end)
     m_html_gap_pending = false;
     m_table_id_counter = 0;
     m_details_id_counter = 0;
-    m_fold_level = 0;
     m_container_depth = 0;
     m_in_pre = false;
     m_pre_buffer.clear();
@@ -1974,13 +2022,16 @@ int Renderer::print(const char* str, const char* str_end)
 
 	if (style.fragmentGapTop > 0.0f)
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.fragmentGapTop));
-	// The margin of the fold arrows, at the left of the content
-	m_fold_margin = (foldableHeadings && !document) ? ImGui::GetFontSize() : 0.f;
-	m_fold_margin_left = ImGui::GetCursorScreenPos().x;
-	if (m_fold_margin > 0.f)
+	// The margin of the fold arrows, at the left of the content: the document's, else this render's own
+	const bool ownMargin = foldableHeadings && !document;
+	m_fold_margin = document ? document->foldMargin : (ownMargin ? ImGui::GetFontSize() : 0.f);
+	m_fold_margin_left = document ? document->foldMarginLeft : ImGui::GetCursorScreenPos().x;
+	if (ownMargin)
 		ImGui::Indent(m_fold_margin);
+	load_document_fold();
 	int result = md_parse(str, (MD_SIZE)(str_end - str), &m_md, this);
-	if (m_fold_margin > 0.f)
+	save_document_fold();
+	if (ownMargin)
 		ImGui::Unindent(m_fold_margin);
 	const int fragmentRank = document ? document->fragmentCount++ : -1;
 	if (!document)

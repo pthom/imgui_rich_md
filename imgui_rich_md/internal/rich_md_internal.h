@@ -60,6 +60,12 @@ namespace RichMd
         std::vector<ImGuiID> headingDetails;  // what hides each heading: a collapsed <details> or a fold (0: none)
         std::vector<ImGuiID> headingFolds;    // the state of each heading's fold (0: it does not fold)
         int foldAll = 0;                      // fold all (1) or unfold all (-1), asked in this frame: done at its end
+        // The margin of the fold arrows, at the left of all the content; and the fold open at the end of the last
+        // render or section of widgets: it goes on in the next ones
+        float foldMargin = 0.f, foldMarginLeft = 0.f;
+        int foldLevel = 0;
+        float foldY = 0.f, foldBottom = 0.f;
+        ImGuiID foldId = 0;
         std::unordered_map<std::string, int> slugOccurrences;
         std::string clickedAnchor;
         float contentStartY = 0.f;  // the top of the content: a fragment below it starts with the gap of a block
@@ -136,6 +142,7 @@ namespace RichMd
         int selectFragment = -1;                // the find bar closed on a match: its render selects it
         size_t selectBegin = 0, selectEnd = 0;
         float findBarBottom = 0.f;              // the bottom of the find bar below the content's top (a jump aims below)
+        int foldAll = 0;                        // asked by the table of contents: done at the next frame
     };
 
     // ::md Context

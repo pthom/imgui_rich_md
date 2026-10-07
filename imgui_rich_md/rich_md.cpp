@@ -1184,6 +1184,13 @@ namespace RichMd
         ImGui::BeginChild("##content", contentSize, contentFlags);
         frame->scrollY = ImGui::GetScrollY();
         frame->renders.contentStartY = ImGui::GetCursorPosY();
+        if (context->options.foldableHeadings) {  // the margin of the fold arrows, at the left of all the content
+            frame->renders.foldMarginLeft = ImGui::GetCursorScreenPos().x;
+            frame->renders.foldMargin = ImGui::GetFontSize();
+            ImGui::Indent(frame->renders.foldMargin);
+        }
+        frame->renders.foldAll = state.foldAll;  // asked by the table of contents at the last frame
+        state.foldAll = 0;
         if (options.search && state.searchOpen) {  // the renders find the matches of the query, and draw them
             frame->renders.query = state.query;
             frame->renders.searchOptions = state.searchOptions;
@@ -1332,7 +1339,7 @@ namespace RichMd
     }
 
     // The icons of the document's buttons, drawn (the fonts need no glyph)
-    enum class _Icon { Close, Find, List };
+    enum class _Icon { Close, Find, List, FoldAll, UnfoldAll };
     static bool _IconButton(const char* id, _Icon icon)
     {
         const float size = ImGui::GetFrameHeight();
@@ -1350,6 +1357,17 @@ namespace RichMd
             drawList->AddCircle(lens, r * 0.75f, color, 0, thickness);
             drawList->AddLine(ImVec2(lens.x + r * 0.55f, lens.y + r * 0.55f), ImVec2(c.x + r * 1.1f, c.y + r * 1.1f),
                               color, thickness * 1.3f);
+        } else if (icon == _Icon::FoldAll || icon == _Icon::UnfoldAll) {  // two arrows, as those of the headings
+            const float s = r * 0.45f;
+            for (int k = -1; k <= 1; k += 2) {
+                const ImVec2 p(c.x, c.y + (float)k * r * 0.55f);
+                if (icon == _Icon::FoldAll)
+                    drawList->AddTriangleFilled(ImVec2(p.x - s * 0.6f, p.y - s), ImVec2(p.x - s * 0.6f, p.y + s),
+                                                ImVec2(p.x + s * 0.9f, p.y), color);
+                else
+                    drawList->AddTriangleFilled(ImVec2(p.x - s, p.y - s * 0.6f), ImVec2(p.x + s, p.y - s * 0.6f),
+                                                ImVec2(p.x, p.y + s * 0.9f), color);
+            }
         } else {  // three lines
             for (int k = -1; k <= 1; ++k) {
                 const float y = c.y + (float)k * r * 0.8f;
@@ -1766,6 +1784,16 @@ namespace RichMd
         if (ImGui::ArrowButton("##hide", ImGuiDir_Left))
             state.panelShown = false;
         ImGui::SameLine();
+        if (frame.renders.foldMargin > 0.f) {  // the headings fold: fold all, unfold all (done at the next frame)
+            if (_IconButton("##fold_all", _Icon::FoldAll))
+                state.foldAll = 1;
+            ImGui::SetItemTooltip("Fold all");
+            ImGui::SameLine();
+            if (_IconButton("##unfold_all", _Icon::UnfoldAll))
+                state.foldAll = -1;
+            ImGui::SetItemTooltip("Unfold all");
+            ImGui::SameLine();
+        }
         if (frame.options.search)
             _DrawTocTabs(frame, state, view);
         else {
@@ -1809,6 +1837,13 @@ namespace RichMd
         const float findWidth = frame.options.search ? ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x : 0.f;
         ImGui::SetNextItemWidth(-FLT_MIN - findWidth);
         if (ImGui::BeginCombo("##section", title.c_str(), ImGuiComboFlags_HeightLarge)) {
+            if (frame.renders.foldMargin > 0.f) {  // the headings fold (done at the next frame; the menu stays open)
+                if (ImGui::SmallButton("Fold all"))
+                    state.foldAll = 1;
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Unfold all"))
+                    state.foldAll = -1;
+            }
             if (frame.options.search)  // a click on an entry or a match closes the menu
                 _DrawTocTabs(frame, state, view);
             else
@@ -1874,6 +1909,8 @@ namespace RichMd
         }
         if (frame.options.search)
             _DrawScrollbarTicks(frame, state, view);
+        if (frame.renders.foldMargin > 0.f)
+            ImGui::Unindent(frame.renders.foldMargin);
         ImGui::EndChild();  // the content
         const ImVec2 contentMin = ImGui::GetItemRectMin(), contentMax = ImGui::GetItemRectMax();
 
@@ -1931,24 +1968,19 @@ namespace RichMd
         return escaped;
     }
 
-    void DocumentHeading(int level, const std::string& text, bool drawTitle)
+    // The section shows unless a fold hides it: its heading's own, or one above it, which goes on across the renders
+    bool DocumentHeading(int level, const std::string& text, bool drawTitle)
     {
         level = ImClamp(level, 1, 6);
+        Context* context = gCurrentContext;
         if (drawTitle) {  // a markdown heading: drawn as one, and recorded by its render
             RenderRaw(std::string((size_t)level, '#') + " " + _EscapeMarkdown(text));
-            return;
+            return !(context && context->document && context->document->renders.foldLevel > 0);
         }
-        Context* context = gCurrentContext;
-        if (!context || !context->document)
-            return;  // outside a document, there is nothing to record
-        Heading heading;
-        heading.level = level;
-        heading.text = text;
-        DocumentRenders& document = context->document->renders;
-        heading.slug = UniqueSlug(text, document.slugOccurrences);
-        heading.y = ImGui::GetCursorPosY();
-        document.headings.push_back(heading);
-        document.headingDetails.push_back(0);
+        MarkdownRenderer* renderer = _Renderer();
+        if (!context || !context->document || !renderer)
+            return true;  // outside a document, there is nothing to record
+        return renderer->document_heading(level, text);
     }
 
     // A text file: from the assets, else from the file system as is (a source file rendering itself)

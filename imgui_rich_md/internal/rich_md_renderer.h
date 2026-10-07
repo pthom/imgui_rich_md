@@ -76,6 +76,10 @@ struct Renderer
 	// Folds (or unfolds) every foldable heading, at the next frame: those of the document (at its end), else those
 	// of the last fragment
 	void fold_all(bool folded);
+	// A heading of a document's section of widgets (DocumentHeading() without its title), at the current line: it
+	// ends the fold that hid the content above it, or is hidden by it; a foldable one gets its arrow. Returns whether
+	// its section shows.
+	bool document_heading(int level, const std::string& text);
 	// Set between BeginDocument() and EndDocument(): the headings and the anchors of the fragments go to the document
 	DocumentRenders* document = nullptr;
 
@@ -378,7 +382,9 @@ private:
 	float m_heading_font_size = 0.f;  // the size of the heading being read (its arrow's)
 	bool top_level() const { return m_container_depth == 0 && m_details_open_stack.empty(); }
 	bool hidden() const;         // inside a collapsed <details>, or a fold
-	void fold_heading(int level, float top);
+	void fold_heading(int level, float top, ImGuiID id);
+	void load_document_fold();
+	void save_document_fold();
 
 	// An anchor link (#slug) clicked in a fragment: resolved at the end of the fragment, once its headings are known (in
 	// a document: by EndDocument(), once those of all its fragments are known)
