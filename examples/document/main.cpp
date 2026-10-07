@@ -1,5 +1,6 @@
 // imgui_rich_md documents: markdown in a scroll area of its own, with a table of contents beside it. The document is
 // made of two renders and a section of widgets between them; a link [text](#slug) reaches a heading of any of them.
+// Its headings fold (MarkdownOptions::foldableHeadings).
 #include "common/app_glfw_gl3.h"
 #include "imgui_rich_md/rich_md.h"
 
@@ -17,6 +18,9 @@ all belong to the document, with one table of contents and one search (see the c
 
 Links to the sections, wherever they are: [the widgets](#a-section-of-widgets), [the collapsed
 section](#inside-a-collapsed-section), [the end](#the-end).
+
+The headings fold: the arrow at their left, shown under the mouse, hides their section. The menu of a right click,
+and the buttons at the top of the table of contents, fold or unfold them all.
 
 ## Headings and anchors
 
@@ -56,10 +60,11 @@ their matches opens them), and of the code blocks:
 RichMd::BeginDocument("document");
 RichMd::Render(intro);  // markdown: as many renders as you like
 
-// Widgets, under a heading of the document
-RichMd::DocumentHeading(2, "A section of widgets");
-ImGui::SliderFloat("Frequency", &frequency, 0.5f, 5.f);
-DrawCurve(frequency);  // any ImGui drawing
+// Widgets, under a heading of the document (false: its section is folded)
+if (RichMd::DocumentHeading(2, "A section of widgets")) {
+    ImGui::SliderFloat("Frequency", &frequency, 0.5f, 5.f);
+    DrawCurve(frequency);  // any ImGui drawing
+}
 
 RichMd::Render(moreMarkdown);  // the same document: one table of contents, one search
 RichMd::EndDocument();
@@ -106,10 +111,12 @@ static void Gui()
     RichMd::BeginDocument("document");
     RichMd::Render(kIntro);
 
-    // A section of widgets: DocumentHeading() draws its title as a markdown heading, and gives it a slug
-    RichMd::DocumentHeading(2, "A section of widgets");
-    ImGui::SliderFloat("Frequency", &frequency, 0.5f, 5.f);
-    DrawCurve(frequency);
+    // A section of widgets: DocumentHeading() draws its title as a markdown heading, and gives it a slug. It returns
+    // false when the section is folded: its widgets are skipped.
+    if (RichMd::DocumentHeading(2, "A section of widgets")) {
+        ImGui::SliderFloat("Frequency", &frequency, 0.5f, 5.f);
+        DrawCurve(frequency);
+    }
 
     RichMd::Render(kLongText);
     RichMd::EndDocument();
@@ -117,5 +124,7 @@ static void Gui()
 
 int main(int, char**)
 {
-    return RunApp("imgui_rich_md: a document", ImVec2(900, 650), RichMd::MarkdownOptions(), Gui);
+    RichMd::MarkdownOptions options;
+    options.foldableHeadings = true;
+    return RunApp("imgui_rich_md: a document", ImVec2(900, 650), options, Gui);
 }
