@@ -159,11 +159,15 @@ namespace Snippets
         std::string contextLine;            // the line and column right-clicked (for the host's menu)
         size_t contextColumn = 0;
         std::vector<RichMd::CodeBlockMatch> shownMatches;  // the matches of a search, shown as background squiggles
+        bool codeReachesButtons = false;    // at the last frame: the code reached under its buttons (they went above)
     };
     static std::map<ImGuiID, SnippetEditor> gSnippetEditors;
     // The reader's choice for the long lines, shared by all the snippets: an editor out of view is dropped, so a
     // per-snippet state would be forgotten; and wrap on in one block means wrap on in the next
     static bool gWordWrap = false;
+    // ShowSideBySideSnippets: one of the snippets has its buttons above its code, so all keep a row there (with their
+    // buttons, or empty), and their editors stay aligned
+    static bool gButtonsRowInGroup = false;
 
     static size_t LongestLine(const std::string& code)
     {
@@ -424,8 +428,9 @@ namespace Snippets
                 buttonsRightMargin += style.ScrollbarSize;
         }
         float buttonsLeft = width - buttonsRightMargin - buttonsWidth;  // from the editor's left
-        bool buttonsAbove = showButtons
+        state.codeReachesButtons = showButtons
             && _CodeReachesUnder(editor, buttonsLeft, pad + buttonHeight, editorLineHeight, glyphWidth);
+        bool buttonsAbove = state.codeReachesButtons || (showButtons && gButtonsRowInGroup);
         auto drawButtons = [&]()
         {
             if (hasLongLines)
@@ -486,6 +491,8 @@ namespace Snippets
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + width - buttonsWidth);
             drawButtons();
         }
+        else if (gButtonsRowInGroup)
+            ImGui::Dummy(ImVec2(0.f, buttonHeight));
 
         // A read-only snippet is not a widget to "enter": no keyboard navigation outline when it is focused
         if (snippetData.ReadOnly)
@@ -629,6 +636,16 @@ namespace Snippets
 
         float editorWidth = _EditorWidth(nbSideBySideEditors);
 
+        // A snippet whose buttons went above its code at the last frame: all keep that row (the ID is the one of
+        // ShowCodeSnippet, whose label is the code)
+        gButtonsRowInGroup = false;
+        for (const auto& snippet: snippets)
+        {
+            auto it = gSnippetEditors.find(ImGui::GetID(snippet.Code.c_str()));
+            if (it != gSnippetEditors.end() && it->second.codeReachesButtons)
+                gButtonsRowInGroup = true;
+        }
+
         for (const auto& snippet: snippets)
         {
             bool show = !hideIfEmpty || !snippet.Code.empty();
@@ -639,6 +656,7 @@ namespace Snippets
             }
         }
         ImGui::NewLine();
+        gButtonsRowInGroup = false;
     }
 
 
