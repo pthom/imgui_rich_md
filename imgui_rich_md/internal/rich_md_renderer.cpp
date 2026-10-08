@@ -174,6 +174,7 @@ void Renderer::BLOCK_LI(const MD_BLOCK_LI_DETAIL* d, bool e)
 				ImGui::SameLine();
 			}
 		}
+		m_list_block_mark = ImGui::GetItemRectMin();  // the marker: the item's first block stays on its line
 
 		ImGui::Indent();
 	} else {
@@ -513,7 +514,9 @@ void Renderer::BLOCK_QUOTE(bool e)
 		// so suppress the dispatcher's gap for that first child. The flag is
 		// cleared by the first child's dispatch, so later children still get
 		// normal inter-block gaps.
-		m_skip_next_block_gap = true;
+		// (in a list, the first child gets no centralized gap: the flag would stay for the next top-level block)
+		if (m_list_stack.empty())
+			m_skip_next_block_gap = true;
 		// Remember the indented column (X, Y) at quote entry, so we can draw
 		// the vertical bar on the left at exit — by then the cursor has
 		// moved to the end of the last rendered word.
@@ -1867,6 +1870,28 @@ int Renderer::block(MD_BLOCKTYPE type, void* d, bool e)
 				if (steps > 0)
 					ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * style.headerGapStep * (float)steps));
 			}
+		}
+	}
+
+	// Inside a list, the blocks get no centralized gap (LI spaces the items): a block that follows content of its
+	// item (the item's text, a paragraph, a quote) starts on its own line, below a gap. The nested lists end the line
+	// themselves (LI).
+	if (e && !m_list_stack.empty()) {
+		switch (type) {
+		case MD_BLOCK_P:
+		case MD_BLOCK_H:
+		case MD_BLOCK_QUOTE:
+		case MD_BLOCK_HR:
+		case MD_BLOCK_CODE:
+		case MD_BLOCK_TABLE: {
+			ImVec2 last = ImGui::GetItemRectMin();
+			if (last.x != m_list_block_mark.x || last.y != m_list_block_mark.y)
+				add_block_gap(style.blockGap);
+			m_list_block_mark = ImGui::GetItemRectMin();
+			break;
+		}
+		default:
+			break;
 		}
 	}
 

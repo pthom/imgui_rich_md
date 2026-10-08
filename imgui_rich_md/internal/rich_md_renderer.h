@@ -274,6 +274,7 @@ protected:
 	bool m_is_latex_display = false;
 	std::string m_latex_buffer;
 	bool m_skip_next_block_gap = true;
+	ImVec2 m_list_block_mark;  // in a list: the last item drawn when a block of an item started (or its marker)
 	int m_quote_depth = 0;
 	std::vector<ImVec2> m_quote_start;  // position (screen coords) of the indented content column at quote entry; used at exit to draw the vertical bar
 

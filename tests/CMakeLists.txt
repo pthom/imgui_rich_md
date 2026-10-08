@@ -46,6 +46,12 @@ target_include_directories(imgui_rich_md_document_test PRIVATE ${IMGUI_DIR}/back
 target_link_libraries(imgui_rich_md_document_test PRIVATE imgui_rich_md)
 add_test(NAME document_test COMMAND imgui_rich_md_document_test)
 
+# The lists test: the blocks of a list item, each on its own line
+add_executable(imgui_rich_md_lists_test ${CMAKE_CURRENT_LIST_DIR}/lists_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
+target_include_directories(imgui_rich_md_lists_test PRIVATE ${IMGUI_DIR}/backends)
+target_link_libraries(imgui_rich_md_lists_test PRIVATE imgui_rich_md)
+add_test(NAME lists_test COMMAND imgui_rich_md_lists_test)
+
 # The search test: the matching of the search (no ImGui)
 add_executable(imgui_rich_md_search_test ${CMAKE_CURRENT_LIST_DIR}/search_test.cpp)
 target_link_libraries(imgui_rich_md_search_test PRIVATE imgui_rich_md)
