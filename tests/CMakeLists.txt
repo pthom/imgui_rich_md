@@ -52,6 +52,12 @@ target_include_directories(imgui_rich_md_lists_test PRIVATE ${IMGUI_DIR}/backend
 target_link_libraries(imgui_rich_md_lists_test PRIVATE imgui_rich_md)
 add_test(NAME lists_test COMMAND imgui_rich_md_lists_test)
 
+# The font scale test: the markdown follows a size pushed with ImGui::PushFont(NULL, size)
+add_executable(imgui_rich_md_font_scale_test ${CMAKE_CURRENT_LIST_DIR}/font_scale_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
+target_include_directories(imgui_rich_md_font_scale_test PRIVATE ${IMGUI_DIR}/backends)
+target_link_libraries(imgui_rich_md_font_scale_test PRIVATE imgui_rich_md)
+add_test(NAME font_scale_test COMMAND imgui_rich_md_font_scale_test)
+
 # The search test: the matching of the search (no ImGui)
 add_executable(imgui_rich_md_search_test ${CMAKE_CURRENT_LIST_DIR}/search_test.cpp)
 target_link_libraries(imgui_rich_md_search_test PRIVATE imgui_rich_md)

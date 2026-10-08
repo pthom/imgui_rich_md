@@ -442,6 +442,21 @@ namespace RichMd
     // ImGui::GetStyle().FontScaleDpi (set by HelloImGui from dpiWindowSizeFactor),
     // so we must *not* pre-multiply font sizes by the DPI factor here anymore.
 
+    // The markdown follows a size pushed with ImGui::PushFont(NULL, size), relative to the frame's base size (the
+    // first entry of ImGui's font stack, pushed by NewFrame()). A render locks the scale until it ends: the renders
+    // inside it (a fenced block's markdown, a code block) see its own fonts pushed, and must not scale them again.
+    static int gRenderDepth = 0;           // the renders in progress (see RenderRaw())
+    static float gRenderFontScale = 1.f;   // the scale they locked
+    static float _FontScale()
+    {
+        if (gRenderDepth > 0)
+            return gRenderFontScale;
+        ImGuiContext* g = ImGui::GetCurrentContext();
+        if (g == nullptr || g->FontStack.Size == 0 || g->FontStack[0].FontSizeBeforeScaling <= 0.f)
+            return 1.f;
+        return g->FontSizeBase / g->FontStack[0].FontSizeBeforeScaling;
+    }
+
     namespace RichMdFonts
     {
         struct MarkdownEmphasis
@@ -515,7 +530,7 @@ namespace RichMd
 
             SizedFont GetFontCode() const
             {
-                return {mFontCode, mMarkdownFontOptions.regularSize};
+                return {mFontCode, mMarkdownFontOptions.regularSize * _FontScale()};
             }
 
             SizedFont GetDefaultFont() const
@@ -530,7 +545,8 @@ namespace RichMd
                 if (markdownTextStyle.headerLevel < 0)
                     markdownTextStyle.headerLevel = 0;
 
-                float fontSize = MarkdownFontOptions_FontSize(mMarkdownFontOptions, markdownTextStyle.headerLevel);
+                float fontSize = MarkdownFontOptions_FontSize(mMarkdownFontOptions, markdownTextStyle.headerLevel)
+                                 * _FontScale();
 
                 for (auto pair: mFonts)
                 {
@@ -1125,6 +1141,13 @@ namespace RichMd
         renderer->selectableText = context->selectableTextStack.empty()
             ? context->options.selectableText : context->selectableTextStack.back();
         _SetFoldOptions(context, renderer);
+        // The outermost render locks the font scale (see _FontScale()), until it ends, even by an exception (a Python
+        // fenced block renderer that raises)
+        struct RenderDepth
+        {
+            RenderDepth() { if (gRenderDepth == 0) gRenderFontScale = _FontScale(); ++gRenderDepth; }
+            ~RenderDepth() { --gRenderDepth; }
+        } inRender;
         renderer->Render(markdownString);
         ImGui::PopID();
         _SweepDestroyedTextures();

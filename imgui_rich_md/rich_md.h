@@ -30,6 +30,8 @@ namespace RichMd
     // Renders a markdown string. Its common indentation is removed first (so that a string written
     // inside an indented function renders as expected; no-op on flush-left text), then its transclusions
     // are resolved (see ResolveTransclusions; the files are read through the host's ReadAsset).
+    // Its size follows a size pushed with ImGui::PushFont(NULL, size), relative to the frame's base size:
+    // PushFont(NULL, ImGui::GetStyle().FontSizeBase * 0.8f) renders it at 80%.
     void Render(const std::string& markdownString);
     // Renders a markdown string as is (no unindent, no transclusion)
     void RenderRaw(const std::string& markdownString);
@@ -406,6 +408,7 @@ namespace RichMd
     // The colors and spacing of the current context. C++ only.
     Style& GetStyle();
 
+    // The markdown's fonts, at the size that a render would use now (see Render(): they follow a pushed size)
     SizedFont GetCodeFont();
 
     struct MarkdownFontSpec

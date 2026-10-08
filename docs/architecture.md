@@ -50,6 +50,13 @@ void RenderRaw(const std::string& markdownString)
     renderer->selectableText = context->selectableTextStack.empty()
         ? context->options.selectableText : context->selectableTextStack.back();
     _SetFoldOptions(context, renderer);
+    // The outermost render locks the font scale (see _FontScale()), until it ends, even by an exception (a Python
+    // fenced block renderer that raises)
+    struct RenderDepth
+    {
+        RenderDepth() { if (gRenderDepth == 0) gRenderFontScale = _FontScale(); ++gRenderDepth; }
+        ~RenderDepth() { --gRenderDepth; }
+    } inRender;
     renderer->Render(markdownString);
     ImGui::PopID();
     _SweepDestroyedTextures();
