@@ -252,6 +252,22 @@ namespace Snippets
         return true;
     }
 
+    // True when the code's rows under the buttons (from the editor's top to `bottom`) reach the buttons' left edge,
+    // `left` from the editor's left (the line numbers' margin estimated to 7 glyphs, as for the long lines). Wrapped,
+    // from the last render: a line on several rows fills its first ones.
+    static bool _CodeReachesUnder(const TextEditor& editor, float left, float bottom, float rowHeight, float glyphWidth)
+    {
+        size_t row = 0;
+        for (size_t line = 0; line < editor.GetLineCount() && (float)row * rowHeight < bottom; ++line)
+        {
+            TextEditor::VisPos end = editor.DocPos2VisPos(TextEditor::DocPos(line, editor.GetLineText(line).size()));
+            if (end.row > row || (float)(end.column + 7) * glyphWidth > left)
+                return true;
+            row = end.row + 1;
+        }
+        return false;
+    }
+
     // The search of a document in a snippet (ShowCodeSnippetWithMatches)
     struct SnippetSearch
     {
@@ -339,10 +355,12 @@ namespace Snippets
         float lineHeight;
         float editorLineHeight;  // the editor's line pitch: it renders with ItemSpacing (0, 0)
         float glyphWidth;
+        float buttonHeight;      // the frame height, with the code font (the buttons are drawn with it)
         {
             auto codeFont = RichMd::GetCodeFont();
             ImGui::PushFont(codeFont.font, codeFont.size);
             lineHeight = ImGui::GetTextLineHeightWithSpacing();
+            buttonHeight = ImGui::GetFrameHeight();
             editorLineHeight = ImGui::GetTextLineHeight() * editor.GetLineSpacing();
             glyphWidth = ImGui::CalcTextSize("M").x;
             ImGui::PopFont();
@@ -381,6 +399,59 @@ namespace Snippets
             editorSize.y = editorLineHeight * (float)nbVisibleLines + ImGui::GetStyle().ScrollbarSize;
         }
 
+        // The buttons: the copy button, and the wrap button when a line overflows. They float over the editor's top
+        // right corner (left of its vertical scrollbar), or take a row above it when the code reaches under them.
+        const ImGuiStyle& style = ImGui::GetStyle();
+        bool showButtons = snippetData.ShowCopyButton || hasLongLines;
+        int nbButtons = (snippetData.ShowCopyButton ? 1 : 0) + (hasLongLines ? 1 : 0);
+        float buttonWidth = lineHeight * 1.25f, pad = style.FramePadding.y;
+        float buttonsWidth = buttonWidth * (float)nbButtons + style.ItemSpacing.x * (float)(nbButtons - 1);
+        float buttonsRightMargin = pad;
+        {
+            // A vertical scrollbar when the lines exceed the height, less the room of a horizontal scrollbar when the
+            // long lines are not wrapped
+            float usableHeight = editorSize.y - style.ScrollbarSize;
+            if (hasLongLines && !wrapped)
+                usableHeight -= style.ScrollbarSize;
+            int rows = editor.GetLineCount() > 0 ? (int)editor.GetLineCount() : 1;
+            if (wrapped)
+            {
+                size_t lastLine = editor.GetLineCount() - 1;
+                TextEditor::DocPos end(lastLine, editor.GetLineText(lastLine).size());
+                rows = (int)editor.DocPos2VisPos(end).row + 1;
+            }
+            if ((float)rows * editorLineHeight > usableHeight)
+                buttonsRightMargin += style.ScrollbarSize;
+        }
+        float buttonsLeft = width - buttonsRightMargin - buttonsWidth;  // from the editor's left
+        bool buttonsAbove = showButtons
+            && _CodeReachesUnder(editor, buttonsLeft, pad + buttonHeight, editorLineHeight, glyphWidth);
+        auto drawButtons = [&]()
+        {
+            if (hasLongLines)
+            {
+                if (WrapButton(lineHeight, wrapped))
+                    gWordWrap = !gWordWrap;
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip(wrapped ? "Unwrap the long lines" : "Wrap the long lines");
+                if (snippetData.ShowCopyButton)
+                    ImGui::SameLine();
+            }
+            if (snippetData.ShowCopyButton)
+            {
+                if (CopyButton(lineHeight))
+                {
+                    state.timeClickCopyButton = ImGui::GetTime();
+                    ImGui::SetClipboardText(snippetData.Code.c_str());
+                }
+                bool wasCopiedRecently = (ImGui::GetTime() - state.timeClickCopyButton) < 0.7;
+                if (wasCopiedRecently)
+                    ImGui::SetTooltip("Copied!");
+                else if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Copy");
+            }
+        };
+
         if (hasTitleLine)
         {
             ImVec2 topLeft = ImGui::GetCursorPos();
@@ -409,6 +480,12 @@ namespace Snippets
 
         auto codeFont = RichMd::GetCodeFont();
         ImGui::PushFont(codeFont.font, codeFont.size);
+
+        if (buttonsAbove)  // right aligned with the editor
+        {
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + width - buttonsWidth);
+            drawButtons();
+        }
 
         // A read-only snippet is not a widget to "enter": no keyboard navigation outline when it is focused
         if (snippetData.ReadOnly)
@@ -439,56 +516,19 @@ namespace Snippets
             hostContext = snippetData.OnContextMenu && ImGui::IsItemClicked(ImGuiMouseButton_Right);
         }
 
-        if (snippetData.ShowCopyButton || hasLongLines)
+        if (showButtons && !buttonsAbove)
         {
-            // The copy button (and the wrap button, when a line overflows) float over the editor's top right corner,
-            // in a small child window of their own, begun after the editor (so it is drawn above it and gets the
-            // hover). The parent's cursor is restored afterwards: the overlay must not take room in the layout.
+            // Over the editor, in a small child window of their own, begun after the editor (so it is drawn above it
+            // and gets the hover). The parent's cursor is restored afterwards: the overlay must not take room in the
+            // layout.
             ImVec2 parentCursor = ImGui::GetCursorPos();
             ImVec2 editorMin = ImGui::GetItemRectMin(), editorMax = ImGui::GetItemRectMax();
-            const ImGuiStyle& style = ImGui::GetStyle();
-            float buttonWidth = lineHeight * 1.25f, buttonHeight = ImGui::GetFrameHeight(), pad = style.FramePadding.y;
-            int nbButtons = (snippetData.ShowCopyButton ? 1 : 0) + (hasLongLines ? 1 : 0);
-            float overlayWidth = buttonWidth * (float)nbButtons + style.ItemSpacing.x * (float)(nbButtons - 1);
-            float right = editorMax.x - pad;
-            // Left of the vertical scrollbar when the editor has one: the lines exceed the height, less the room of a
-            // horizontal scrollbar when the long lines are not wrapped
-            float usableHeight = editorSize.y - style.ScrollbarSize - (hasLongLines && !wrapped ? style.ScrollbarSize : 0.f);
-            int rows = editor.GetLineCount() > 0 ? (int)editor.GetLineCount() : 1;
-            if (wrapped)
-            {
-                size_t lastLine = editor.GetLineCount() - 1;
-                rows = (int)editor.DocPos2VisPos(TextEditor::DocPos(lastLine, editor.GetLineText(lastLine).size())).row + 1;
-            }
-            if ((float)rows * editorLineHeight > usableHeight)
-                right -= style.ScrollbarSize;
-            ImGui::SetCursorScreenPos(ImVec2(right - overlayWidth, editorMin.y + pad));
-            ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav;
-            if (ImGui::BeginChild("copy_overlay", ImVec2(overlayWidth, buttonHeight), ImGuiChildFlags_None, overlayFlags))
-            {
-                if (hasLongLines)
-                {
-                    if (WrapButton(lineHeight, wrapped))
-                        gWordWrap = !gWordWrap;
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip(wrapped ? "Unwrap the long lines" : "Wrap the long lines");
-                    if (snippetData.ShowCopyButton)
-                        ImGui::SameLine();
-                }
-                if (snippetData.ShowCopyButton)
-                {
-                    if (CopyButton(lineHeight))
-                    {
-                        state.timeClickCopyButton = ImGui::GetTime();
-                        ImGui::SetClipboardText(snippetData.Code.c_str());
-                    }
-                    bool wasCopiedRecently = (ImGui::GetTime() - state.timeClickCopyButton) < 0.7;
-                    if (wasCopiedRecently)
-                        ImGui::SetTooltip("Copied!");
-                    else if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Copy");
-                }
-            }
+            ImGui::SetCursorScreenPos(ImVec2(editorMin.x + buttonsLeft, editorMin.y + pad));
+            ImGuiWindowFlags overlayFlags =
+                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav;
+            ImVec2 overlaySize(buttonsWidth, buttonHeight);
+            if (ImGui::BeginChild("copy_overlay", overlaySize, ImGuiChildFlags_None, overlayFlags))
+                drawButtons();
             ImGui::EndChild();
             ImGui::SetCursorPos(parentCursor);
         }
