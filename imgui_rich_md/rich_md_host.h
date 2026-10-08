@@ -147,6 +147,12 @@ namespace RichMd
         // Whether the system asks for reduced motion (macOS and iOS "Reduce motion", Windows "Show animations", a
         // browser's prefers-reduced-motion): the documents then scroll without animation. Default: none (no preference).
         std::function<bool()> PrefersReducedMotion;
+
+        // In a browser, on a touch screen: makes a tap on this rectangle (screen coordinates) open the url in a new
+        // tab. Called at each frame for each visible part of a link to a site, when OnOpenLink is the default. A
+        // browser allows a new tab only from inside its touch handler, and ImGui sees a tap two frames later: the page
+        // opens the tab itself, and the tap then does nothing more. Default: none (a tap opens the link as a click).
+        std::function<void(ImVec2 rectMin, ImVec2 rectMax, const std::string& url)> TapOpensUrl;
     };
 
     // Sets the host services (call before CreateContext). Empty fields keep their default.

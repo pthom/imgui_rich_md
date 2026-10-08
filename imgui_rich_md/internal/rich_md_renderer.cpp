@@ -1168,7 +1168,9 @@ void Renderer::render_text(const char* str, const char* str_end)
 		}
 
 		if (!m_href.empty()) {
-			if (link_item(style, m_href.c_str())) {
+			bool tapOpened = !m_is_wikilink && tap_opens_url()
+				&& ImGui::GetIO().MouseSource == ImGuiMouseSource_TouchScreen;
+			if (link_item(style, m_href.c_str()) && !tapOpened) {
 				if (m_is_wikilink)
 					open_wikilink();
 				else
@@ -2179,6 +2181,11 @@ void Renderer::draw_loading_spinner()
 		dl->AddLine(p1, p2, c, thickness);
 	}
 	ImGui::Dummy(ImVec2(size, size));
+}
+
+bool Renderer::tap_opens_url() const
+{
+	return false;
 }
 
 void Renderer::open_url() const

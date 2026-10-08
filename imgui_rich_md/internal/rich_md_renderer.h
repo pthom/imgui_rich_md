@@ -193,6 +193,9 @@ protected:
 
 	//url == m_href
 	virtual void open_url() const;
+	// A part of a link to m_href was just drawn: returns true when a tap on it opens the url by itself (in a browser,
+	// on a touch screen): the tap then does nothing more
+	virtual bool tap_opens_url() const;
 	// A wikilink [[target]] or [[target|label]] was clicked (m_href == target; MD_FLAG_WIKILINKS)
 	virtual void open_wikilink() const;
 	// A heading was rendered (its text without markup)

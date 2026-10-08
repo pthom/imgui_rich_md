@@ -708,6 +708,25 @@ namespace RichMd
                 mMarkdownOptions->callbacks.OnOpenLink(m_href);
         }
 
+        // Only for the default OnOpenLink: a callback of the application decides what a link does
+        bool tap_opens_url() const override
+        {
+            const HostServices& host = GetHostServices();
+            using OpenLinkFn = void (*)(const std::string&);
+            const OpenLinkFn* onOpenLink = mMarkdownOptions->callbacks.OnOpenLink.target<OpenLinkFn>();
+            bool isDefault = onOpenLink != nullptr && *onOpenLink == OnOpenLink_Default;
+            bool isSite = m_href.rfind("http://", 0) == 0 || m_href.rfind("https://", 0) == 0;
+            bool touchScreen = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
+            if (!host.TapOpensUrl || !isDefault || !isSite || !touchScreen)
+                return false;
+            const ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImRect visible(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());  // a link scrolled out of a child: none
+            visible.ClipWith(ImRect(drawList->GetClipRectMin(), drawList->GetClipRectMax()));
+            if (visible.GetWidth() > 0.f && visible.GetHeight() > 0.f)
+                host.TapOpensUrl(visible.Min, visible.Max, m_href);
+            return true;
+        }
+
         void open_wikilink() const override
         {
             if (mMarkdownOptions->callbacks.OnWikiLink)
