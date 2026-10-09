@@ -129,9 +129,10 @@ bool DocumentHeading(int level, const std::string& text, bool drawTitle = true);
 
 ## Folding text
 
-A text that folds to its first paragraph: an introduction above a demo, which leaves the room to the demo once
-read. A link at its end folds or unfolds it, with a short slide. With `foldOnClickElsewhere`, it folds as soon as
-the user clicks (or taps) elsewhere in the window: on the demo below it.
+A text that folds to its first paragraph, or to a line `<!--more-->` (as Jekyll and Hugo mark an excerpt: an HTML
+comment, which other renderers show as nothing): an introduction above a demo, which leaves the room to the demo
+once read. A link at its end folds or unfolds it, with a short slide. With `foldOnClickElsewhere`, it folds as soon
+as the user clicks (or taps) elsewhere in the window: on the demo below it.
 
 ```cpp
 // The options of a folding text
@@ -141,8 +142,9 @@ struct FoldingTextOptions
     bool foldOnClickElsewhere = false;   // it folds when the user clicks or taps elsewhere in the window
     float animationSeconds = 0.25f;      // the slide (none when the system asks for reduced motion)
 };
-// Renders a markdown text, folded to its first paragraph (the headings before it stay), or open; a link at its end
-// folds or unfolds it. id: keeps its state, in the current window. Returns whether it is open.
+// Renders a markdown text, folded to its first paragraph (the headings before it stay) or to a line <!--more-->,
+// or open; a link at its end folds or unfolds it. id: keeps its state, in the current window. Returns whether it
+// is open.
 bool RenderFolding(const char* id, const std::string& markdown,
                    const FoldingTextOptions& options = FoldingTextOptions());
 ```

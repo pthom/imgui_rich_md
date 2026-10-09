@@ -2152,11 +2152,42 @@ namespace RichMd
         return text.size();
     }
 
+    // The line <!--more--> (spaces allowed inside the comment), as Jekyll and Hugo mark the end of an excerpt: its
+    // start and its end in the text, or npos
+    static std::pair<size_t, size_t> _FindMoreDivider(const std::string& text)
+    {
+        for (size_t pos = 0; pos < text.size();)
+        {
+            size_t end = text.find('\n', pos);
+            if (end == std::string::npos)
+                end = text.size();
+            std::string line = text.substr(pos, end - pos);
+            line.erase(std::remove_if(line.begin(), line.end(), [](char c) { return std::isspace((unsigned char)c); }),
+                       line.end());
+            if (line == "<!--more-->")
+                return {pos, end};
+            pos = end + 1;
+        }
+        return {std::string::npos, std::string::npos};
+    }
+
     bool RenderFolding(const char* id, const std::string& markdown, const FoldingTextOptions& options)
     {
         std::string text = _ResolveTransclusionsCached(_Unindent(markdown, false));
-        size_t foldedLength = _FoldedPartLength(text);
-        std::string foldedPart = text.substr(0, foldedLength), rest = text.substr(foldedLength);
+        // The folded part ends at <!--more-->, else after the first paragraph
+        std::string foldedPart, rest;
+        auto [moreBegin, moreEnd] = _FindMoreDivider(text);
+        if (moreBegin != std::string::npos)
+        {
+            foldedPart = text.substr(0, moreBegin);
+            rest = text.substr(ImMin(moreEnd + 1, text.size()));
+        }
+        else
+        {
+            size_t foldedLength = _FoldedPartLength(text);
+            foldedPart = text.substr(0, foldedLength);
+            rest = text.substr(foldedLength);
+        }
         bool canFold = rest.find_first_not_of(" \t\r\n") != std::string::npos;
 
         // The state, in the current window: open or folded, and the slide between them (0: folded, 1: open), with the
@@ -2188,25 +2219,48 @@ namespace RichMd
         float eased = slide * slide * (3.f - 2.f * slide);  // smoothstep: slow at both ends
         float foldedHeight = storage->GetFloat(foldedHeightId), fullHeight = storage->GetFloat(fullHeightId);
 
-        // The whole text in a child as tall as the visible part: what is beyond it is clipped
+        // The text, and the heights of its two parts. Measured, it is drawn in a child as tall as the visible part:
+        // what is beyond it is clipped. The first time, it is drawn as is (the whole text), to be measured: a child
+        // that sizes itself to its content would take one frame to do it, and the layout below would jump.
+        auto renderParts = [&]() -> std::pair<float, float> {
+            float top = ImGui::GetCursorPosY();
+            RenderRaw(foldedPart);
+            float folded = ImGui::GetCursorPosY() - top;
+            if (canFold)
+            {
+                // The gap that one render puts between two blocks (the two parts are two renders)
+                ImGui::Dummy(ImVec2(0.f, ImGui::GetFontSize() * GetStyle().blockGap));
+                RenderRaw(rest);
+            }
+            return {folded, ImGui::GetCursorPosY() - top};
+        };
         bool measured = fullHeight > 0.f;
-        float height = measured ? foldedHeight + (fullHeight - foldedHeight) * eased : 0.f;
-        ImGuiChildFlags childFlags = measured ? ImGuiChildFlags_None : ImGuiChildFlags_AutoResizeY;
-        ImGui::BeginChild("text", ImVec2(0.f, height), childFlags,
-                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        ImVec2 textMin = ImGui::GetWindowPos(), textMax(textMin.x + ImGui::GetWindowWidth(),
-                                                          textMin.y + ImGui::GetWindowHeight());
-        float top = ImGui::GetCursorPosY();
-        RenderRaw(foldedPart);
-        storage->SetFloat(foldedHeightId, ImGui::GetCursorPosY() - top);
-        if (canFold)
+        ImVec2 textMin, textMax;
+        if (!measured)
         {
-            // The gap that one render puts between two blocks (the two parts are two renders)
-            ImGui::Dummy(ImVec2(0.f, ImGui::GetFontSize() * GetStyle().blockGap));
-            RenderRaw(rest);
+            textMin = ImGui::GetCursorScreenPos();
+            auto [folded, full] = renderParts();
+            storage->SetFloat(foldedHeightId, folded);
+            storage->SetFloat(fullHeightId, full);
+            textMax = ImVec2(textMin.x + ImGui::GetContentRegionAvail().x, textMin.y + full);
         }
-        storage->SetFloat(fullHeightId, ImGui::GetCursorPosY() - top);
-        ImGui::EndChild();
+        else
+        {
+            float height = foldedHeight + (fullHeight - foldedHeight) * eased;
+            bool visible = ImGui::BeginChild("text", ImVec2(0.f, height), ImGuiChildFlags_None,
+                                             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            textMin = ImGui::GetWindowPos();
+            textMax = ImVec2(textMin.x + ImGui::GetWindowWidth(), textMin.y + ImGui::GetWindowHeight());
+            auto [folded, full] = renderParts();
+            // A child scrolled out of view draws nothing, and measures nothing: its heights stay (else it would
+            // shrink to nothing, come back into view, grow, and so on: the page would shake)
+            if (visible)
+            {
+                storage->SetFloat(foldedHeightId, folded);
+                storage->SetFloat(fullHeightId, full);
+            }
+            ImGui::EndChild();
+        }
 
         if (canFold)
         {
