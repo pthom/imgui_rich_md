@@ -13,6 +13,14 @@ A second paragraph, hidden when the text is folded.
 
 A third one.
 )";
+// The same, with a setext heading (underlined with =): the fold keeps the first paragraph below it too
+static const char* kSetextText = R"(A title
+=======
+
+The first paragraph, shown when the text is folded.
+
+A second paragraph, hidden when the text is folded.
+)";
 
 struct Result
 {
@@ -54,12 +62,13 @@ int main(int, char**)
 
     RichMd::FoldingTextOptions openOptions, foldedOptions;
     foldedOptions.startFolded = true;
-    Result open, folded, single;
+    Result open, folded, single, setext;
     for (int frame = 0; frame < 4; ++frame)  // the first frames load the fonts and measure the parts
     {
         open = DrawFrame("Open", kText, openOptions);
         folded = DrawFrame("Folded", kText, foldedOptions);
         single = DrawFrame("Single", "Only one paragraph.", foldedOptions);
+        setext = DrawFrame("Setext", kSetextText, foldedOptions);
     }
 
     printf("open: %d, %.1f; folded: %d, %.1f; single: %d\n", open.open, open.height, folded.open, folded.height,
@@ -69,6 +78,8 @@ int main(int, char**)
     ok = Expect("folded, it takes less height", folded.height < open.height * 0.75f) && ok;
     ok = Expect("folded, it keeps its first paragraph", folded.height > ImGui::GetFontSize() * 2.f) && ok;
     ok = Expect("a single paragraph cannot fold", single.open) && ok;
+    ok = Expect("under a setext heading, the fold keeps the first paragraph", !setext.open
+                && setext.height > folded.height * 0.9f && setext.height < folded.height * 1.3f) && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

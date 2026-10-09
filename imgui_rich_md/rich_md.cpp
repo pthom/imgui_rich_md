@@ -2116,24 +2116,38 @@ namespace RichMd
         RenderRaw(_ResolveTransclusionsCached(_Unindent(markdownString, false)));
     }
 
-    // The part of a text shown when it is folded: its first paragraph, and the headings and blank lines before it
+    // The part of a text shown when it is folded: its first paragraph, and the headings and blank lines before it.
+    // A heading is a line that starts with #, or a line followed by a line of = or - (a setext heading)
     static size_t _FoldedPartLength(const std::string& text)
     {
-        size_t pos = 0;
-        bool inParagraph = false;
-        while (pos < text.size())
+        std::vector<std::pair<size_t, std::string>> lines;  // each line, with its start
+        for (size_t pos = 0; pos < text.size();)
         {
             size_t end = text.find('\n', pos);
             if (end == std::string::npos)
                 end = text.size();
-            std::string line = text.substr(pos, end - pos);
-            bool blank = line.find_first_not_of(" \t\r") == std::string::npos;
-            bool heading = !blank && line[line.find_first_not_of(" \t")] == '#';
-            if (inParagraph && blank)
-                return pos;  // the end of the first paragraph
-            if (!blank && !heading)
-                inParagraph = true;
+            lines.emplace_back(pos, text.substr(pos, end - pos));
             pos = end + 1;
+        }
+        auto isBlank = [](const std::string& l) { return l.find_first_not_of(" \t\r") == std::string::npos; };
+        auto isUnderline = [&](const std::string& l) {
+            return !isBlank(l) && l.find_first_not_of("=- \t\r") == std::string::npos;
+        };
+        bool inParagraph = false;
+        for (size_t i = 0; i < lines.size(); ++i)
+        {
+            const std::string& line = lines[i].second;
+            bool blank = isBlank(line);
+            if (inParagraph && blank)
+                return lines[i].first;  // the end of the first paragraph
+            if (blank)
+                continue;
+            bool atxHeading = line[line.find_first_not_of(" \t")] == '#';
+            bool setextHeading = !inParagraph && i + 1 < lines.size() && isUnderline(lines[i + 1].second);
+            if (setextHeading)
+                ++i;  // its underline too
+            else if (!atxHeading)
+                inParagraph = true;
         }
         return text.size();
     }
