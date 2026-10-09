@@ -969,8 +969,10 @@ void Renderer::render_latex_span(bool display)
 		ImGui::Image(tex.texture, ImVec2(logical_w, logical_h));
 		record_run(m_latex_source_begin, m_latex_source_end, source);
 	} else {
-		// An inline formula that does not fit on the rest of the line starts a new one, like a word
-		if (logical_w > ImGui::GetContentRegionAvail().x && line_is_open())
+		// An inline formula that does not fit on the rest of the line starts a new one, like a word, with the
+		// punctuation glued after it ("$k$.")
+		float glued = m_latex_source_end ? glued_width(m_latex_source_end + delimiter.size()) : 0.0f;
+		if (logical_w + glued > ImGui::GetContentRegionAvail().x && line_is_open())
 			ImGui::NewLine();
 		// Inline math: the formula's baseline on the text baseline. ImGui::Text() draws from
 		// cursor.y with the baseline at cursor.y + ascent, so the image top goes at
@@ -1095,6 +1097,17 @@ void Renderer::render_text(const char* str, const char* str_end)
 			float wl = ImGui::GetContentRegionAvail().x;
 			te = ImGui::GetFont()->CalcWordWrapPosition(
 				size, str, str_end, wl);
+			// ImGui cuts anywhere a word wider than the width it is given: here, the rest of a line that other
+			// spans began ("Pan: right-dra" / "g"). The word goes whole to the next line, where only a word
+			// wider than a line is cut.
+			if (line_is_open() && te > str && te < str_end && !is_blank(te[-1]) && !is_blank(*te)) {
+				while (te > str && !is_blank(te[-1]))
+					--te;
+				if (te == str) {
+					ImGui::NewLine();
+					continue;
+				}
+			}
 			if (te == str) ++te;
 			// The last word of the span is glued to the next span ("... way (" + "alignment"): if both do not fit,
 			// the line breaks before the last word, which goes with the rest of its word to the next line

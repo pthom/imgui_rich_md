@@ -58,6 +58,12 @@ target_include_directories(imgui_rich_md_font_scale_test PRIVATE ${IMGUI_DIR}/ba
 target_link_libraries(imgui_rich_md_font_scale_test PRIVATE imgui_rich_md)
 add_test(NAME font_scale_test COMMAND imgui_rich_md_font_scale_test)
 
+# The wrap test: no word cut across two lines, at many widths
+add_executable(imgui_rich_md_wrap_test ${CMAKE_CURRENT_LIST_DIR}/wrap_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
+target_include_directories(imgui_rich_md_wrap_test PRIVATE ${IMGUI_DIR}/backends)
+target_link_libraries(imgui_rich_md_wrap_test PRIVATE imgui_rich_md)
+add_test(NAME wrap_test COMMAND imgui_rich_md_wrap_test)
+
 # The search test: the matching of the search (no ImGui)
 add_executable(imgui_rich_md_search_test ${CMAKE_CURRENT_LIST_DIR}/search_test.cpp)
 target_link_libraries(imgui_rich_md_search_test PRIVATE imgui_rich_md)
