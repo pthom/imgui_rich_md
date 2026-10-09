@@ -127,6 +127,26 @@ void RenderDocument(const char* id, const std::string& markdown, ImVec2 size = I
 bool DocumentHeading(int level, const std::string& text, bool drawTitle = true);
 ```
 
+## Folding text
+
+A text that folds to its first paragraph: an introduction above a demo, which leaves the room to the demo once
+read. A link at its end folds or unfolds it, with a short slide. With `foldOnClickElsewhere`, it folds as soon as
+the user clicks (or taps) elsewhere in the window: on the demo below it.
+
+```cpp
+// The options of a folding text
+struct FoldingTextOptions
+{
+    bool startFolded = false;            // folded at first (else open, until the user folds it)
+    bool foldOnClickElsewhere = false;   // it folds when the user clicks or taps elsewhere in the window
+    float animationSeconds = 0.25f;      // the slide (none when the system asks for reduced motion)
+};
+// Renders a markdown text, folded to its first paragraph (the headings before it stay), or open; a link at its end
+// folds or unfolds it. id: keeps its state, in the current window. Returns whether it is open.
+bool RenderFolding(const char* id, const std::string& markdown,
+                   const FoldingTextOptions& options = FoldingTextOptions());
+```
+
 ## Contexts
 
 A context holds the options, the fonts and the caches (textures, formulas, diagrams). Most applications have one.

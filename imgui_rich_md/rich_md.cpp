@@ -2116,6 +2116,108 @@ namespace RichMd
         RenderRaw(_ResolveTransclusionsCached(_Unindent(markdownString, false)));
     }
 
+    // The part of a text shown when it is folded: its first paragraph, and the headings and blank lines before it
+    static size_t _FoldedPartLength(const std::string& text)
+    {
+        size_t pos = 0;
+        bool inParagraph = false;
+        while (pos < text.size())
+        {
+            size_t end = text.find('\n', pos);
+            if (end == std::string::npos)
+                end = text.size();
+            std::string line = text.substr(pos, end - pos);
+            bool blank = line.find_first_not_of(" \t\r") == std::string::npos;
+            bool heading = !blank && line[line.find_first_not_of(" \t")] == '#';
+            if (inParagraph && blank)
+                return pos;  // the end of the first paragraph
+            if (!blank && !heading)
+                inParagraph = true;
+            pos = end + 1;
+        }
+        return text.size();
+    }
+
+    bool RenderFolding(const char* id, const std::string& markdown, const FoldingTextOptions& options)
+    {
+        std::string text = _ResolveTransclusionsCached(_Unindent(markdown, false));
+        size_t foldedLength = _FoldedPartLength(text);
+        std::string foldedPart = text.substr(0, foldedLength), rest = text.substr(foldedLength);
+        bool canFold = rest.find_first_not_of(" \t\r\n") != std::string::npos;
+
+        // The state, in the current window: open or folded, and the slide between them (0: folded, 1: open), with the
+        // heights of the two parts, measured at the last frame
+        ImGui::PushID(id);
+        ImGuiStorage* storage = ImGui::GetStateStorage();
+        ImGuiID openId = ImGui::GetID("open"), slideId = ImGui::GetID("slide"), initId = ImGui::GetID("init");
+        ImGuiID foldedHeightId = ImGui::GetID("foldedHeight"), fullHeightId = ImGui::GetID("fullHeight");
+        if (!storage->GetBool(initId, false))
+        {
+            storage->SetBool(initId, true);
+            storage->SetBool(openId, !options.startFolded);
+            storage->SetFloat(slideId, options.startFolded ? 0.f : 1.f);
+        }
+        bool open = storage->GetBool(openId) || !canFold;
+        float seconds = options.animationSeconds;
+        if (gHostServices.PrefersReducedMotion && gHostServices.PrefersReducedMotion())
+            seconds = 0.f;
+        float slide = storage->GetFloat(slideId);
+        float target = open ? 1.f : 0.f;
+        if (seconds <= 0.f)
+            slide = target;
+        else if (slide != target)
+        {
+            float step = ImGui::GetIO().DeltaTime / seconds;
+            slide = open ? ImMin(1.f, slide + step) : ImMax(0.f, slide - step);
+        }
+        storage->SetFloat(slideId, slide);
+        float eased = slide * slide * (3.f - 2.f * slide);  // smoothstep: slow at both ends
+        float foldedHeight = storage->GetFloat(foldedHeightId), fullHeight = storage->GetFloat(fullHeightId);
+
+        // The whole text in a child as tall as the visible part: what is beyond it is clipped
+        bool measured = fullHeight > 0.f;
+        float height = measured ? foldedHeight + (fullHeight - foldedHeight) * eased : 0.f;
+        ImGuiChildFlags childFlags = measured ? ImGuiChildFlags_None : ImGuiChildFlags_AutoResizeY;
+        ImGui::BeginChild("text", ImVec2(0.f, height), childFlags,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImVec2 textMin = ImGui::GetWindowPos(), textMax(textMin.x + ImGui::GetWindowWidth(),
+                                                          textMin.y + ImGui::GetWindowHeight());
+        float top = ImGui::GetCursorPosY();
+        RenderRaw(foldedPart);
+        storage->SetFloat(foldedHeightId, ImGui::GetCursorPosY() - top);
+        if (canFold)
+        {
+            // The gap that one render puts between two blocks (the two parts are two renders)
+            ImGui::Dummy(ImVec2(0.f, ImGui::GetFontSize() * GetStyle().blockGap));
+            RenderRaw(rest);
+        }
+        storage->SetFloat(fullHeightId, ImGui::GetCursorPosY() - top);
+        ImGui::EndChild();
+
+        if (canFold)
+        {
+            // The link that folds or unfolds it, at the right
+            const char* label = open ? "Less" : "More...";
+            float width = ImGui::CalcTextSize(label).x;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImMax(0.f, ImGui::GetContentRegionAvail().x - width));
+            ImGui::PushStyleColor(ImGuiCol_TextLink, LinkColor());
+            if (ImGui::TextLink(label))
+                open = !open;
+            ImGui::PopStyleColor();
+            // A click elsewhere in the window (on the demo) folds it
+            ImVec2 mouse = ImGui::GetMousePos();
+            bool inText = mouse.x >= textMin.x && mouse.x < textMax.x && mouse.y >= textMin.y && mouse.y < textMax.y;
+            ImGuiHoveredFlags windowFlags =
+                ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem;
+            if (options.foldOnClickElsewhere && open && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !inText
+                && !ImGui::IsItemHovered() && ImGui::IsWindowHovered(windowFlags))
+                open = false;
+            storage->SetBool(openId, open);
+        }
+        ImGui::PopID();
+        return open;
+    }
+
     void RenderFile(const std::string& path, const std::string& target)
     {
         RenderRaw(_ResolveTransclusionsCached("![[" + path + (target.empty() ? "" : "#" + target) + "]]"));

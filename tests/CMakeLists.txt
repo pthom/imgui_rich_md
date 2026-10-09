@@ -64,6 +64,12 @@ target_include_directories(imgui_rich_md_wrap_test PRIVATE ${IMGUI_DIR}/backends
 target_link_libraries(imgui_rich_md_wrap_test PRIVATE imgui_rich_md)
 add_test(NAME wrap_test COMMAND imgui_rich_md_wrap_test)
 
+# The folding text test: RenderFolding() folded and open
+add_executable(imgui_rich_md_folding_text_test ${CMAKE_CURRENT_LIST_DIR}/folding_text_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
+target_include_directories(imgui_rich_md_folding_text_test PRIVATE ${IMGUI_DIR}/backends)
+target_link_libraries(imgui_rich_md_folding_text_test PRIVATE imgui_rich_md)
+add_test(NAME folding_text_test COMMAND imgui_rich_md_folding_text_test)
+
 # The search test: the matching of the search (no ImGui)
 add_executable(imgui_rich_md_search_test ${CMAKE_CURRENT_LIST_DIR}/search_test.cpp)
 target_link_libraries(imgui_rich_md_search_test PRIVATE imgui_rich_md)

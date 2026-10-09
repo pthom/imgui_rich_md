@@ -143,6 +143,29 @@ namespace RichMd
     // ::endcode
 
     // =================================================================================================================
+    //                                        Folding text
+    // =================================================================================================================
+    /*::md Folding text
+    A text that folds to its first paragraph: an introduction above a demo, which leaves the room to the demo once
+    read. A link at its end folds or unfolds it, with a short slide. With `foldOnClickElsewhere`, it folds as soon as
+    the user clicks (or taps) elsewhere in the window: on the demo below it.
+    ::code
+    */
+
+    // The options of a folding text
+    struct FoldingTextOptions
+    {
+        bool startFolded = false;            // folded at first (else open, until the user folds it)
+        bool foldOnClickElsewhere = false;   // it folds when the user clicks or taps elsewhere in the window
+        float animationSeconds = 0.25f;      // the slide (none when the system asks for reduced motion)
+    };
+    // Renders a markdown text, folded to its first paragraph (the headings before it stay), or open; a link at its end
+    // folds or unfolds it. id: keeps its state, in the current window. Returns whether it is open.
+    bool RenderFolding(const char* id, const std::string& markdown,
+                       const FoldingTextOptions& options = FoldingTextOptions());
+    // ::endcode
+
+    // =================================================================================================================
     //                                        Options and callbacks
     // =================================================================================================================
     /*::md Options and callbacks

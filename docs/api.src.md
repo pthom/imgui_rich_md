@@ -21,6 +21,10 @@ its source is [api.src.md](api.src.md).
 ![[../imgui_rich_md/rich_md.h#Documents]]
 ![[../imgui_rich_md/rich_md.h#Documents#code]]
 
+## Folding text
+![[../imgui_rich_md/rich_md.h#Folding text]]
+![[../imgui_rich_md/rich_md.h#Folding text#code]]
+
 ## Contexts
 ![[../imgui_rich_md/rich_md.h#Contexts]]
 ![[../imgui_rich_md/rich_md.h#Contexts#code]]
