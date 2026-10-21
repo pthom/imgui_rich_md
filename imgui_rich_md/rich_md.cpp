@@ -2499,6 +2499,16 @@ namespace RichMd
                 return _BrokenImage(image_path);
             }
         }
+        if (_IsUrl(image_path))  // no download service: say why the image is broken, once per run
+        {
+            static bool warned = false;
+            if (!warned)
+                std::cerr << "rich_md: this build cannot download images from URLs (" << image_path << ").\n"
+                          << "    Build with IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES=ON; on the desktop it needs libcurl "
+                          << "(Linux: apt install libcurl4-openssl-dev, Windows: vcpkg install curl).\n";
+            warned = true;
+            return _BrokenImage(image_path);
+        }
 
         // Handle local asset images
         MarkdownTexture tex = _LoadTextureFromAsset(image_path);
