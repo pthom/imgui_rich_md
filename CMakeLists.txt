@@ -193,8 +193,9 @@ if(IMGUI_RICHMD_EMBED_ASSETS)
     target_compile_definitions(imgui_rich_md PUBLIC IMGUI_RICHMD_EMBED_ASSETS)
 endif()
 
-# --- install (headers under include/imgui_rich_md, targets exported by the parent or here)
-if(_richmd_standalone OR IMGUI_RICHMD_INSTALL)
+# --- install (headers under include/imgui_rich_md, for a parent's package, e.g. Dear ImGui Bundle's; the parent
+# exports the targets). Standalone, no package yet: use FetchContent or add_subdirectory.
+if(IMGUI_RICHMD_INSTALL)
     install(FILES ${_richmd_dir}/rich_md.h ${_richmd_dir}/rich_md_host.h ${_richmd_dir}/narrative_programming.h
             DESTINATION include/imgui_rich_md)
     if(IMGUI_RICHMD_WITH_CODE_EDITOR)
