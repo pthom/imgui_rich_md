@@ -24,6 +24,8 @@ FetchContent_MakeAvailable(imgui_rich_md)
 target_link_libraries(my_app PRIVATE imgui_rich_md)
 ```
 
+`v1.0.0` is the first release. The changes of each release are in [CHANGELOG.md](CHANGELOG.md).
+
 C++:
 
 ```cpp

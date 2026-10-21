@@ -13,6 +13,10 @@
 #include <optional>
 #include <array>
 
+// The library's version: the release tag, and the CMake project's VERSION
+#define IMGUI_RICHMD_VERSION "1.0.0"
+#define IMGUI_RICHMD_VERSION_NUM 10000  // major * 10000 + minor * 100 + patch
+
 
 namespace RichMd
 {

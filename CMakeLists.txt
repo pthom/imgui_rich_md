@@ -5,7 +5,7 @@
 # backends, either the targets (`imgui_color_text_edit`, `freetype`) or the directories below.
 # Standalone (this file as the top-level project): the examples fetch Dear ImGui themselves.
 cmake_minimum_required(VERSION 3.20)
-project(imgui_rich_md LANGUAGES C CXX)
+project(imgui_rich_md VERSION 1.0.0 LANGUAGES C CXX)  # keep in sync with IMGUI_RICHMD_VERSION in rich_md.h
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(_richmd_standalone ON)
@@ -41,7 +41,14 @@ endif()
 set(_richmd_dir ${CMAKE_CURRENT_LIST_DIR}/imgui_rich_md)
 set(_md4c_dir ${CMAKE_CURRENT_LIST_DIR}/external/md4c/src)
 if(NOT EXISTS ${_md4c_dir}/md4c.c)
-    message(FATAL_ERROR "imgui_rich_md: md4c is missing (git submodule update --init external/md4c)")
+    # A source archive (GitHub's zip, a packager's tarball) has no submodules: md4c is fetched, at the submodule's commit
+    message(STATUS "imgui_rich_md: external/md4c is empty: fetching md4c")
+    include(FetchContent)
+    FetchContent_Declare(imgui_richmd_md4c GIT_REPOSITORY https://github.com/mity/md4c.git
+        GIT_TAG 481fbfbdf72daab2912380d62bb5f2187d438408  # keep in sync with the submodule external/md4c
+        SOURCE_SUBDIR no_cmake)  # its sources only: not its own CMakeLists
+    FetchContent_MakeAvailable(imgui_richmd_md4c)
+    set(_md4c_dir ${imgui_richmd_md4c_SOURCE_DIR}/src)
 endif()
 
 add_library(imgui_rich_md STATIC
