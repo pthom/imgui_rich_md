@@ -1,6 +1,6 @@
 # Changelog
 
-# v1.0.0 - WIP
+# v1.0.0 (2026-10-21)
 
 The first release of imgui_rich_md as a library of its own: rich Markdown for Dear ImGui, with text you can select and search, tables, code, images, LaTeX math and Mermaid diagrams, rendered inside your ImGui windows, between your widgets. It works with a stock Dear ImGui 1.92+ (C++17). The [README](README.md#features) lists its features.
 
