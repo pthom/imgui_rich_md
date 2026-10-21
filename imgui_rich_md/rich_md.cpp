@@ -96,13 +96,38 @@ namespace
         return out;
     }
 
+#if defined(__EMSCRIPTEN__)
+    // The url as a JS string literal. Escaped: a link of the markdown could otherwise end the string and run as code.
+    std::string _JsStringLiteral(const char* s)
+    {
+        std::string r = "\"";
+        for (const char* p = s; *p; ++p)
+        {
+            unsigned char c = static_cast<unsigned char>(*p);
+            if (c == '"' || c == '\\')
+            {
+                r += '\\';
+                r += static_cast<char>(c);
+            }
+            else if (c < 0x20)
+            {
+                char escaped[8];
+                snprintf(escaped, sizeof(escaped), "\\u%04x", c);
+                r += escaped;
+            }
+            else
+                r += static_cast<char>(c);
+        }
+        return r + "\"";
+    }
+#endif
+
     // Opens an url in the default browser (no shell involved: the url is passed as a raw argument)
     void _OpenUrlInBrowser(const char* url)
     {
 #if defined(__EMSCRIPTEN__)
-        char js_command[1024];
-        snprintf(js_command, 1024, "window.open(\"%s\");", url);
-        emscripten_run_script(js_command);
+        std::string js_command = "window.open(" + _JsStringLiteral(url) + ");";
+        emscripten_run_script(js_command.c_str());
 #elif defined(_WIN32)
         ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
 #elif TARGET_OS_IPHONE
