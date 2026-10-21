@@ -1,12 +1,17 @@
 # imgui_rich_md
 
-Rich Markdown for [Dear ImGui](https://github.com/ocornut/imgui): text, tables, code, images and LaTeX formulas,
-rendered inside your ImGui windows, between your widgets. Works on stock Dear ImGui 1.92+ (C++17).
+Rich Markdown for [Dear ImGui](https://github.com/ocornut/imgui): text you can select and search, tables, code, images, LaTeX math and Mermaid diagrams, rendered inside your ImGui windows, between your widgets. It works with a stock Dear ImGui 1.92+ (C++17).
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/readme_light.png">
+  <img src="docs/images/readme_dark.png" alt="imgui_rich_md in a Dear ImGui window: styled text, a table, a code block, a tip, a formula and a Mermaid flowchart">
+</picture>
 
 **[Try the examples in your browser](https://pthom.github.io/imgui_rich_md/)**
 
-Part of the [Dear ImGui Bundle](https://github.com/pthom/imgui_bundle) family: in Python, it comes with
-`pip install imgui-bundle`, as `imgui_bundle.rich_md` (see [Python](#python)).
+Part of the [Dear ImGui Bundle](https://github.com/pthom/imgui_bundle) family: in Python, it comes with `pip install imgui-bundle`, as `imgui_bundle.rich_md` (see [Python](#python)).
+
+Inside Dear ImGui Bundle (C++ or Python), it also works on phones and tablets, with nothing to write: Hello ImGui turns a swipe into a scroll, a hold then a drag into a text selection, and a tap on a link into a new browser tab.
 
 ## Quickstart
 
@@ -14,7 +19,7 @@ CMake, in a project that has a target named `imgui`:
 
 ```cmake
 include(FetchContent)
-FetchContent_Declare(imgui_rich_md GIT_REPOSITORY https://github.com/pthom/imgui_rich_md.git GIT_TAG main)
+FetchContent_Declare(imgui_rich_md GIT_REPOSITORY https://github.com/pthom/imgui_rich_md.git GIT_TAG v1.0.0)
 FetchContent_MakeAvailable(imgui_rich_md)
 target_link_libraries(my_app PRIVATE imgui_rich_md)
 ```
@@ -40,6 +45,7 @@ RichMd::DestroyContext();              // before the backends shut down
 | | |
 |---|---|
 | Text | headings, emphasis, strikethrough, `<u>`, `<mark>`, `<kbd>`, `<sub>`/`<sup>`, links and autolinks, lists, quotes |
+| Selection | select with the mouse (a double click selects a word, a triple click a paragraph), copy with Ctrl+C or Cmd+C; a right click menu: Copy, Copy as Markdown, Select All, Copy Link |
 | Tables | column alignment, resizable columns |
 | Code | inline code; code blocks with a copy button, and syntax highlighting with the code editor option |
 | Images | from files or assets, from URLs with the download option, sized with `<img width=...>`, a spinner while loading |
@@ -49,6 +55,7 @@ RichMd::DestroyContext();              // before the backends shut down
 | Documents | several renders and widgets in one scroll area: a table of contents, links between them, a search (Ctrl+F) that also finds the text of code blocks and collapsed sections |
 | Callbacks | links, wikilinks (`[[target]]`), headings (tables of contents), your own renderer for a fenced block language |
 | Narrative programming | a source file carries markdown sections and code regions (`::md Name`, `::code`) that a document transcludes (`![[file.py#Name]]`): a program can be its own narrative ([specification](docs/narrative_programming/narrative_programming_spec.md)) |
+| Touch screens | with `ImGuiConfigFlags_IsTouchScreen`: taller rows in the lists, a wider splitter, fold arrows always shown, a button for the search; a tapped link opens in a new browser tab through `HostServices::TapOpensUrl` |
 | Fonts | Roboto and Inconsolata included; CJK, emoji or icon fonts merged into every markdown font |
 | Hosts | textures, assets, downloads and logging go through replaceable services (`RichMd::HostServices`) |
 
@@ -60,7 +67,7 @@ The [tour](https://pthom.github.io/imgui_rich_md/tour.html) shows each feature w
 |---|---|---|
 | `IMGUI_RICHMD_WITH_CODE_EDITOR` | OFF | syntax highlighting ([ImGuiColorTextEdit](https://github.com/goossens/ImGuiColorTextEdit): fetched, or `IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR`) |
 | `IMGUI_RICHMD_WITH_LATEX` | OFF | formulas ([MicroTeX](https://github.com/NanoMichael/MicroTeX): fetched, or `IMGUI_RICHMD_MICROTEX_DIR`; needs FreeType: a `freetype` target, or `find_package(Freetype)`) |
-| `IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES` | OFF | images from URLs (libcurl on desktop, the browser's fetch with Emscripten) |
+| `IMGUI_RICHMD_WITH_DOWNLOAD_IMAGES` | OFF | images from URLs (libcurl on desktop, the browser's fetch with Emscripten); on Linux: `apt install libcurl4-openssl-dev` |
 | `IMGUI_RICHMD_WITH_MERMAID` | ON | Mermaid diagrams: flowcharts, sequence and class diagrams (no dependency) |
 | `IMGUI_RICHMD_EMBED_ASSETS` | ON | the fonts and images are embedded in the library; OFF: they are read from the assets folder (`RichMd::SetAssetsFolder`) |
 | `IMGUI_RICHMD_STB_IMAGE_IMPLEMENTATION` | ON | compiles stb_image; set it OFF if your project already does (e.g. HelloImGui) |
@@ -78,15 +85,12 @@ The [tour](https://pthom.github.io/imgui_rich_md/tour.html) shows each feature w
 | custom_host | the library on an application's own textures, assets and log | [run](https://pthom.github.io/imgui_rich_md/custom_host.html), [source](examples/custom_host/main.cpp) |
 | fonts | CJK, emoji and icon fonts merged into every markdown font | [run](https://pthom.github.io/imgui_rich_md/fonts.html), [source](examples/fonts/main.cpp) |
 
-They build against stock Dear ImGui, fetched by CMake: `cmake -S examples -B build && cmake --build build`
-(with Emscripten: `emcmake cmake -S examples -B build_web`, one page per example).
+They build against stock Dear ImGui, fetched by CMake: `cmake -S examples -B build && cmake --build build` (with Emscripten: `emcmake cmake -S examples -B build_web`, one page per example).
 
 ## API
 
-The public API is in [imgui_rich_md/rich_md.h](imgui_rich_md/rich_md.h) (initialization, rendering, options, callbacks,
-fonts) and, for applications that provide their own textures, assets or downloads,
-[imgui_rich_md/rich_md_host.h](imgui_rich_md/rich_md_host.h). [docs/api.md](docs/api.md) presents it, assembled from the
-headers.
+The public API is in [imgui_rich_md/rich_md.h](imgui_rich_md/rich_md.h) (initialization, rendering, options, callbacks, fonts) and, for applications that provide their own textures, assets or downloads, [imgui_rich_md/rich_md_host.h](imgui_rich_md/rich_md_host.h). [docs/api.md](docs/api.md) presents it, assembled from the headers.
+
 How the library works inside, for contributors: [docs/architecture.md](docs/architecture.md).
 
 ## Python
@@ -102,18 +106,15 @@ def gui():
 immapp.run(gui, with_markdown=True)   # with_latex=True for the formulas
 ```
 
-Try it without installing anything, in the [Dear ImGui Bundle playground](https://imgui-bundle.pages.dev/playground/).
+Try it without installing anything, in the Dear ImGui Bundle playground: [a document](https://imgui-bundle.pages.dev/playground/?demo=demo_imgui_md_document.py), with its table of contents and its search.
 
 ## Credits
 
-- The renderer started as [imgui_md](https://github.com/mekhontsev/imgui_md) by Dmitry Mekhontsev, and was extensively
-  rewritten.
+- The renderer started as [imgui_md](https://github.com/mekhontsev/imgui_md) by Dmitry Mekhontsev, and was extensively rewritten.
 - [md4c](https://github.com/mity/md4c) by Martin Mitáš parses the markdown.
 - [MicroTeX](https://github.com/NanoMichael/MicroTeX) lays out the formulas.
-- [ImGuiColorTextEdit](https://github.com/goossens/ImGuiColorTextEdit) (by BalazsJako, rewritten by Johan A. Goossens)
-  highlights the code.
-- [stb_image](https://github.com/nothings/stb) by Sean Barrett decodes the images; the fonts are Roboto, Inconsolata and
-  Latin Modern Math.
+- [ImGuiColorTextEdit](https://github.com/goossens/ImGuiColorTextEdit) (by BalazsJako, rewritten by Johan A. Goossens) highlights the code.
+- [stb_image](https://github.com/nothings/stb) by Sean Barrett decodes the images; the fonts are Roboto, Inconsolata and Latin Modern Math.
 
 ## License
 
