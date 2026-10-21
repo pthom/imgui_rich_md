@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: The tour
+    url: https://pthom.github.io/imgui_rich_md/tour.html
+    about: Every feature of imgui_rich_md, with the markdown that produces it. It runs in your browser.
+  - name: The API
+    url: https://github.com/pthom/imgui_rich_md/blob/main/docs/api.md
+    about: The public API, assembled from the headers.
+  - name: Questions and discussions
+    url: https://github.com/pthom/imgui_bundle/discussions
+    about: Ask in Dear ImGui Bundle's discussions. imgui_rich_md is part of the Dear ImGui Bundle family.
