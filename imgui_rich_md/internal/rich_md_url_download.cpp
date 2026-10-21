@@ -70,7 +70,11 @@ namespace RichMd {
             curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
             curl_easy_setopt(curl, CURLOPT_USERAGENT, "imgui_bundle_md/1.0");
             // Restrict to http/https only (prevent file://, ftp://, gopher:// etc.)
+#if LIBCURL_VERSION_NUM >= 0x075500  // 7.85 brought CURLOPT_PROTOCOLS_STR, and deprecated CURLOPT_PROTOCOLS
             curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https,http");
+#else  // e.g. Ubuntu 22.04's libcurl 7.81
+            curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTPS | CURLPROTO_HTTP));
+#endif
             // Explicit TLS verification
             curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
             curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
