@@ -7,6 +7,8 @@ Rich Markdown for [Dear ImGui](https://github.com/ocornut/imgui): text you can s
   <img src="docs/images/readme_dark.png" alt="imgui_rich_md in a Dear ImGui window: styled text, a table, a code block, a tip, a formula and a Mermaid flowchart">
 </picture>
 
+https://github.com/user-attachments/assets/c358b584-3d5f-4ebd-8cf5-e127eb340fd5
+
 **[Try the examples in your browser](https://pthom.github.io/imgui_rich_md/)**
 
 Part of the [Dear ImGui Bundle](https://github.com/pthom/imgui_bundle) family: in Python, it comes with `pip install imgui-bundle`, as `imgui_bundle.rich_md` (see [Python](#python)).
