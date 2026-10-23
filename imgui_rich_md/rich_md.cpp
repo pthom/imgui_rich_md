@@ -2396,6 +2396,14 @@ namespace RichMd
         return path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0;
     }
 
+    // A path that names a host (\\host\share\a.png, //host/share/a.png): on Windows, opening it connects to that host
+    // (SMB, then WebDAV) and sends the user's credentials' hash to it. A document never gets to do that.
+    static bool _IsNetworkPath(const std::string& path)
+    {
+        return (path.size() >= 2 && (path[0] == '\\' || path[0] == '/') && (path[1] == '\\' || path[1] == '/'))
+               || path.rfind("file:", 0) == 0;
+    }
+
     static std::optional<MarkdownImage> _MakeMarkdownImage(const MarkdownTexture& tex)
     {
         MarkdownImage r;
@@ -2510,6 +2518,8 @@ namespace RichMd
             return _BrokenImage(image_path);
         }
 
+        if (_IsNetworkPath(image_path))
+            return _BrokenImage(image_path);
         // Handle local asset images
         MarkdownTexture tex = _LoadTextureFromAsset(image_path);
         if (!tex.Valid())
