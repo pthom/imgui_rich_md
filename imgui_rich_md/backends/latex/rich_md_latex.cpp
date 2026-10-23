@@ -2,7 +2,9 @@
 #include "rich_md_latex.h"
 #include "internal/graphic_freetype.h"
 #include "microtex.h"
+#include <cstdint>
 #include <functional>
+#include <string>
 #include <vector>
 
 #include <cstdlib>
@@ -128,6 +130,8 @@ void AddReleaseCallback(std::function<void()> callback) {
 // Level 1: LaTeX -> RGBA pixel buffer
 // ============================================================================
 
+static constexpr int64_t kMaxPixels = 8192 * 8192;  // the largest formula drawn: 64 M pixels, 256 MB of RGBA
+
 RenderedFormula Render(const std::string& latex, float fontSize, ImU32 color, TexStyle style) {
     std::lock_guard<std::mutex> lock(sMutex);
     if (!sInitialized) {
@@ -155,6 +159,12 @@ RenderedFormula Render(const std::string& latex, float fontSize, ImU32 color, Te
     int pad = 2;
     int imgW = w + 2 * pad;
     int imgH = h + 2 * pad;
+    // A formula can ask for any size (\rule{2200em}{2200em}): past this, the buffer's byte count would overflow an
+    // int (and the memory a screen's worth of formulas); the formula shows as its source instead
+    if (w <= 0 || h <= 0 || (int64_t)imgW * (int64_t)imgH > kMaxPixels) {
+        delete mtRender;
+        throw std::runtime_error("the formula is too large to draw (" + std::to_string(w) + " x " + std::to_string(h) + " px)");
+    }
 
     Internal::PixelBuffer buf(imgW, imgH);
     microtex::Graphics2D_freetype g2(buf);

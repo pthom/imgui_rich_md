@@ -22,11 +22,11 @@ struct PixelBuffer {
   std::vector<uint8_t> pixels;  // RGBA
 
   PixelBuffer() = default;
-  PixelBuffer(int w, int h) : width(w), height(h), pixels(w * h * 4, 0) {}
+  PixelBuffer(int w, int h) : width(w), height(h), pixels((size_t)w * (size_t)h * 4, 0) {}
 
   void setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     if (x < 0 || x >= width || y < 0 || y >= height) return;
-    int idx = (y * width + x) * 4;
+    size_t idx = ((size_t)y * (size_t)width + (size_t)x) * 4;
     if (a == 255) {
       pixels[idx + 0] = r;
       pixels[idx + 1] = g;
