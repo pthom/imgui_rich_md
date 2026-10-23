@@ -2380,11 +2380,27 @@ namespace RichMd
     }
 
 
+    // Only a web address opens: a document can name anything else (a local program on Windows, through a path
+    // such as http/../../calc.exe, which ShellExecute would start; a javascript: URL in the browser)
+    bool IsWebUrl(const std::string& url)
+    {
+        auto startsWithNoCase = [&url](const char* prefix) {
+            size_t n = strlen(prefix);
+            if (url.size() < n)
+                return false;
+            for (size_t i = 0; i < n; ++i)
+                if (std::tolower((unsigned char)url[i]) != prefix[i])
+                    return false;
+            return true;
+        };
+        return startsWithNoCase("http://") || startsWithNoCase("https://");
+    }
+
     void OnOpenLink_Default(const std::string& url)
     {
-        if (strncmp(url.c_str(), "http", strlen("http")) != 0)
+        if (!IsWebUrl(url))
         {
-            std::cerr << "RichMd::OnOpenLink_Default url \"" << url << "\" should start with http!\n";
+            std::cerr << "RichMd::OnOpenLink_Default url \"" << url << "\" should start with http:// or https://\n";
             return;
         }
         _OpenUrlInBrowser(url.c_str());

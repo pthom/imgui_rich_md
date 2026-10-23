@@ -214,6 +214,8 @@ namespace RichMd
 
     std::optional<MarkdownImage> OnImage_Default(const std::string& image_path);
     void OnOpenLink_Default(const std::string& url);
+    // Whether a link is a web address (http:// or https://, any case): the only ones OnOpenLink_Default opens
+    bool IsWebUrl(const std::string& url);
 
 
     struct MarkdownCallbacks
