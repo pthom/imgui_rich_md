@@ -126,7 +126,8 @@ namespace
     void _OpenUrlInBrowser(const char* url)
     {
 #if defined(__EMSCRIPTEN__)
-        std::string js_command = "window.open(" + _JsStringLiteral(url) + ");";
+        // The new tab gets no handle on this one (w.opener): it could otherwise replace the app's page
+        std::string js_command = "{ const w = window.open(" + _JsStringLiteral(url) + "); if (w) w.opener = null; }";
         emscripten_run_script(js_command.c_str());
 #elif defined(_WIN32)
         ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
