@@ -13,6 +13,7 @@
 
 namespace RichMd::Mermaid
 {
+    constexpr size_t kMaxNodes = 500, kMaxEdges = 5000;  // a diagram past this is an error, not a freeze
     namespace
     {
         using std::string_view;
@@ -547,6 +548,14 @@ namespace RichMd::Mermaid
                 if (!ok)
                 {
                     d.error = LineError(line.number, "cannot parse `" + std::string(line.text) + "`");
+                    return;
+                }
+                // A & B & ... --> C & D & ... makes every pair an edge: a 12 KB line can ask for a million, and the
+                // layout's crossing count is quadratic in them (and its visits recurse along chains of nodes)
+                if (graph.nodes.size() > kMaxNodes || graph.edges.size() > kMaxEdges)
+                {
+                    d.error = LineError(line.number, "the diagram is too large (at most " + std::to_string(kMaxNodes)
+                                                         + " nodes and " + std::to_string(kMaxEdges) + " links)");
                     return;
                 }
             }
