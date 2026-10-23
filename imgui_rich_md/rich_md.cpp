@@ -2117,12 +2117,12 @@ namespace RichMd
 
     // A text with its transclusions resolved, cached per text. It is resolved again when one of its files changes:
     // a running program shows the new version of its own narrative.
-    static const std::string& _ResolveTransclusionsCached(const std::string& text)
+    static const std::string& _ResolveTransclusionsCached(const std::string& text, const std::string& currentFile = "")
     {
         if (text.find("![[") == std::string::npos)
             return text;
         auto& cache = gCurrentContext->resolvedTransclusions;
-        auto it = cache.find(text);
+        auto it = cache.find(text);  // RenderFile's texts name their file: one entry per file
         if (it != cache.end() && !_FilesChanged(it->second))
             return it->second.markdown;
         ResolvedText& resolved = cache[text];
@@ -2131,7 +2131,7 @@ namespace RichMd
             resolved.files.push_back({path, _ModificationTime(path)});
             return _ReadTextAssetOrFile(path);
         };
-        resolved.markdown = ResolveTransclusions(text, readAndRecord);
+        resolved.markdown = ResolveTransclusions(text, readAndRecord, currentFile);
         resolved.lastCheck = ImGui::GetTime();
         return resolved.markdown;
     }
@@ -2313,7 +2313,8 @@ namespace RichMd
 
     void RenderFile(const std::string& path, const std::string& target)
     {
-        RenderRaw(_ResolveTransclusionsCached("![[" + path + (target.empty() ? "" : "#" + target) + "]]"));
+        // The program names its own file (__FILE__): the embeds may reach its folder
+        RenderRaw(_ResolveTransclusionsCached("![[" + path + (target.empty() ? "" : "#" + target) + "]]", path));
     }
 
     void PushSelectableText(bool selectable)

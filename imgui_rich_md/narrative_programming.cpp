@@ -14,6 +14,7 @@ namespace RichMd
 namespace
 {
     constexpr int kMaxDepth = 8;
+    constexpr size_t kMaxTranscludedBytes = 8 * 1024 * 1024;  // of one text's transclusions: a file embedded 10,000 times
     constexpr size_t npos = std::string::npos;
 
     std::string Trim(const std::string& s)
@@ -127,6 +128,20 @@ namespace
     bool IsAbsolute(const std::string& path)
     {
         return (!path.empty() && (path[0] == '/' || path[0] == '\\')) || (path.size() > 1 && path[1] == ':');
+    }
+
+    // A document names only files beside it or below it: a markdown editor opens documents from anyone, and
+    // ![[/Users/x/.ssh/config]] would show that file. `file` is normalized; `root` is the folder the embeds may
+    // reach, normalized, with its trailing slash: the first document's by default (a transcluded file may name its
+    // own siblings: they are below it too), "" for a text from no file (relative paths, below the assets), "/" for
+    // any file (a caller that trusts the text).
+    bool IsConfined(const std::string& file, const std::string& root)
+    {
+        if (root == "/")
+            return true;
+        if (file.empty() || file == ".." || file.rfind("../", 0) == 0)
+            return false;
+        return root.empty() ? !IsAbsolute(file) : file.rfind(root, 0) == 0;
     }
 
     // "a/b/../c/./d" -> "a/c/d", lexically (a leading ".." stays); the separators become '/'
@@ -645,6 +660,8 @@ namespace
         const ReadTextFile& readFile;
         std::map<std::string, std::optional<std::string>> files;  // read once
         std::vector<std::string> visiting;                        // the transclusions being expanded ("file#target")
+        std::string root;                                         // the folder the embeds may reach (IsConfined)
+        size_t bytes = 0;                                         // transcluded so far, against kMaxTranscludedBytes
 
         const std::optional<std::string>& Read(const std::string& path)
         {
@@ -702,6 +719,8 @@ namespace
                 return error("transclusions nested too deeply");
             std::string file = path.empty() ? currentFile : (IsAbsolute(path) ? path : DirectoryOf(currentFile) + path);
             file = NormalizePath(file);
+            if (!IsConfined(file, root))
+                return error("a transclusion names a file beside or below the document only: " + file);
             std::string key = file + target.substr(path.size());
             if (std::find(visiting.begin(), visiting.end(), key) != visiting.end())
                 return error("transclusion cycle: " + key);
@@ -711,6 +730,9 @@ namespace
             visiting.push_back(key);
             std::string block = TranscludeFrom(file, SplitLines(*content), steps, codeSelector, line, depth);
             visiting.pop_back();
+            bytes += block.size();
+            if (bytes > kMaxTranscludedBytes)
+                return error("the transclusions of this text exceed 8 MB");
             return block;
         }
 
@@ -770,11 +792,13 @@ namespace
     };
 }  // namespace
 
-std::string ResolveTransclusions(const std::string& markdown, const ReadTextFile& readFile, const std::string& currentFile)
+std::string ResolveTransclusions(const std::string& markdown, const ReadTextFile& readFile, const std::string& currentFile,
+                                 const std::string& root)
 {
     if (markdown.find("![[") == std::string::npos)
         return markdown;
-    Resolver resolver{readFile, {}, {}};
+    std::string folder = NormalizePath(root.empty() ? DirectoryOf(currentFile) : root);
+    Resolver resolver{readFile, {}, {}, (folder.empty() || folder == "/") ? folder : folder + "/"};
     return resolver.Resolve(SplitLines(markdown), currentFile, 0);
 }
 

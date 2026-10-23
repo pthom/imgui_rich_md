@@ -211,6 +211,8 @@ using MarkdownImageFunction = std::function<std::optional<MarkdownImage>(const s
 
 std::optional<MarkdownImage> OnImage_Default(const std::string& image_path);
 void OnOpenLink_Default(const std::string& url);
+// Whether a link is a web address (http:// or https://, any case): the only ones OnOpenLink_Default opens
+bool IsWebUrl(const std::string& url);
 
 
 struct MarkdownCallbacks
@@ -363,8 +365,11 @@ using ReadTextFile = std::function<std::optional<std::string>(const std::string&
 
 // ResolveTransclusions replaces the embeds of a markdown text: readFile reads a file (or returns std::nullopt);
 // currentFile is the file the text comes from, if any. Render() calls it with the host's ReadAsset.
+// The embeds name files beside or below the document only (root empty: the folder of currentFile; for a text
+// from no file, relative paths, below the assets): a document from anyone must not show a file of the machine.
+// A caller that trusts the text widens it: root is the folder the embeds may reach, "/" for any file.
 std::string ResolveTransclusions(const std::string& markdown, const ReadTextFile& readFile,
-                                 const std::string& currentFile = "");
+                                 const std::string& currentFile = "", const std::string& root = "");
 ```
 
 `RenderFile()` renders a section, a code region or a whole file: a program renders its own narrative with

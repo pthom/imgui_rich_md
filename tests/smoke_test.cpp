@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -163,14 +164,14 @@ static bool CheckContexts()
     return ok;
 }
 
-// A running program shows the new version of its narrative: Render() resolves a text again when a file it
-// transcludes changes
+// A running program shows the new version of its narrative: RenderFile() resolves a text again when a file it
+// transcludes changes (the program names its own file, so its folder is reachable; see CheckHostileDocument)
 static bool CheckLiveStory()
 {
     namespace fs = std::filesystem;
     fs::path file = fs::temp_directory_path() / "rich_md_smoke_test_live_story.md";
     std::ofstream(file, std::ios::binary) << "first version\n";
-    const std::string embed = "![[" + file.generic_string() + "]]";
+    const std::string path = file.generic_string();
     RichMd::CreateContext();
     auto renderFrames = [&](int count) {
         for (int i = 0; i < count; ++i)
@@ -178,7 +179,7 @@ static bool CheckLiveStory()
             ImGui_ImplNull_NewFrame();
             ImGui::NewFrame();
             ImGui::Begin("Live story");
-            RichMd::Render(embed);
+            RichMd::RenderFile(path);
             ImGui::End();
             ImGui::Render();
             ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
@@ -220,6 +221,72 @@ static Drawn DrawMarkdown(const char* markdown)
         drawn.vertices = ImGui::GetDrawData()->TotalVtxCount;
     }
     return drawn;
+}
+
+// A document from anyone must not crash the app, freeze it, show a file of the machine or reach a host: each of
+// these is drawn (an error, or nothing) in bounded time. The link check is the function OnOpenLink_Default uses.
+static bool CheckHostileDocument()
+{
+    using Clock = std::chrono::steady_clock;
+    std::string chain = "flowchart LR\n";
+    for (int i = 0; i < 400; ++i)
+        chain += "  N" + std::to_string(i) + " --> N" + std::to_string(i + 1) + "\n";
+    std::string groupA, groupB;
+    for (int i = 0; i < 1000; ++i)
+    {
+        groupA += (i ? " & A" : "A") + std::to_string(i);
+        groupB += (i ? " & B" : "B") + std::to_string(i);
+    }
+    const char* parts[] = {
+        "A huge formula: $\\rule{2200em}{2200em}$ and a display one:\n\n$$\n\\rule{3000em}{3000em}\n$$\n\n",
+        "A macro that expands to itself: $\\newcommand{\\a}{\\a}\\a$ and one that doubles: $\\newcommand{\\b}{\\b\\b}\\b$\n\n",
+        "A cut-off macro: $\\frac$\n\n",
+        "", "",  // the diagrams, below
+        "Images on a host: ![](//attacker.example/s/a.png) ![](\\\\attacker\\s\\a.png) <img src=\"file:///etc/passwd\">\n\n",
+        "A file of the machine, and one above the assets (an embed is alone on its line):\n\n![[/etc/passwd]]\n\n![[../../../etc/passwd]]\n",
+    };
+    std::string million = "A million links:\n\n```mermaid\nflowchart LR\n  " + groupA + " --> " + groupB + "\n```\n\n";
+    std::string longChain = "A long chain:\n\n```mermaid\n" + chain + "```\n\n";
+    const char* only = getenv("RICHMD_HOSTILE_PART");  // one part alone, to find which one misbehaves
+    std::string hostile = "# Hostile\n\n";
+    for (int i = 0; i < 7; ++i)
+        if (only == nullptr || atoi(only) == i)
+            hostile += i == 3 ? million : i == 4 ? longChain : parts[i];
+    RichMd::CreateContext();
+    auto start = Clock::now();
+    Drawn drawn = DrawMarkdown(hostile.c_str());
+    double seconds = std::chrono::duration<double>(Clock::now() - start).count();
+    const auto& resolved = RichMd::GetCurrentContext()->resolvedTransclusions;
+    bool embedsRefused = resolved.size() == 1
+                         && resolved.begin()->second.markdown.find("beside or below the document only") != std::string::npos
+                         && resolved.begin()->second.markdown.find("passwd\n") == std::string::npos;
+    RichMd::DestroyContext();
+    bool ok = drawn.vertices > 0;
+    if (!ok)
+        printf("smoke test failed: the hostile document drew nothing\n");
+    if (seconds > 10.0)
+    {
+        printf("smoke test failed: the hostile document took %.1f s to draw\n", seconds);
+        ok = false;
+    }
+    if (!embedsRefused)
+    {
+        printf("smoke test failed: a transclusion reached a file of the machine\n");
+        ok = false;
+    }
+    const char* notWeb[] = {"http/../../calc.exe", "javascript:alert(1)", "file:///etc/passwd", "httpx://x", "ftp://x", ""};
+    for (const char* url : notWeb)
+        if (RichMd::IsWebUrl(url))
+        {
+            printf("smoke test failed: \"%s\" passes as a web address\n", url);
+            ok = false;
+        }
+    if (!RichMd::IsWebUrl("https://example.com") || !RichMd::IsWebUrl("HTTP://example.com"))
+    {
+        printf("smoke test failed: a web address is refused\n");
+        ok = false;
+    }
+    return ok;
 }
 
 // An HTML comment is not shown and takes no space: a document with comments draws as many vertices, and is as high,
@@ -357,7 +424,7 @@ static int RunOneCycle()
     ImGui::GetIO().IniFilename = nullptr;
     ImGui_ImplNull_Init();
     if (!CheckContexts() || !CheckLiveStory() || !CheckHtmlComments() || !CheckParagraphGap()
-        || !CheckLineState() || !CheckGluedWords())
+        || !CheckLineState() || !CheckGluedWords() || !CheckHostileDocument())
         return 0;
 
     RichMd::MarkdownOptions options;

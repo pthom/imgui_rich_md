@@ -42,7 +42,7 @@ int main(int argc, char** argv)
         return 2;
     }
     std::string result = "<!-- Generated from " + FileName(input) + " by narrative_resolve: do not edit -->\n"
-                         + RichMd::ResolveTransclusions(*source, ReadFile, input);
+                         + RichMd::ResolveTransclusions(*source, ReadFile, input, "/");
 
     // The errors are rendered as <md-error title="reason">`![[...]]`</md-error>, one per line
     int errors = 0;

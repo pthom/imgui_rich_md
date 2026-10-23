@@ -60,7 +60,10 @@ namespace RichMd
 
     // ResolveTransclusions replaces the embeds of a markdown text: readFile reads a file (or returns std::nullopt);
     // currentFile is the file the text comes from, if any. Render() calls it with the host's ReadAsset.
+    // The embeds name files beside or below the document only (root empty: the folder of currentFile; for a text
+    // from no file, relative paths, below the assets): a document from anyone must not show a file of the machine.
+    // A caller that trusts the text widens it: root is the folder the embeds may reach, "/" for any file.
     std::string ResolveTransclusions(const std::string& markdown, const ReadTextFile& readFile,
-                                     const std::string& currentFile = "");
+                                     const std::string& currentFile = "", const std::string& root = "");
     // ::endcode
 }
