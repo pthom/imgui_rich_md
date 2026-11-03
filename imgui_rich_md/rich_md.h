@@ -127,6 +127,9 @@ namespace RichMd
         bool search = true;
         ScrollAnimation scrollAnimation = ScrollAnimation::FollowSystem;
         float scrollAnimationSeconds = 0.3f;  // the duration of an animated scroll, whatever its distance
+        // While the reader does not scroll, the block at the top of the view keeps its place when the content above it
+        // changes height (a picture that loads, a section opened), as in a web browser
+        bool scrollAnchoring = true;
         // The headings of this document fold (also when the context's MarkdownOptions::foldableHeadings is off)
         bool foldableHeadings = false;
     };

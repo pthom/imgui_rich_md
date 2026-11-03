@@ -352,6 +352,7 @@ private:
 	const char* m_fragment_begin = nullptr;
 	const char* m_fragment_end = nullptr;
 	int m_block_number = 0;
+	int m_top_block_count = 0;  // the top-level blocks of the fragment so far, the hidden ones included
 	const char* m_latex_source_begin = nullptr;  // the source of the formula being read
 	const char* m_latex_source_end = nullptr;
 	size_t m_cell_run_start = 0;                 // the first run of an aligned cell or of a <center>, shifted with it

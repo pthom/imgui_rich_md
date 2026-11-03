@@ -51,6 +51,15 @@ namespace RichMd
         bool inRuns = true;               // drawn as text runs (not in a code block): it can become the selection
     };
 
+    // A block at the top level of a render of a document (a paragraph, a heading, a list, a table...): the document
+    // keeps the reader's place by the first one at the top of the view
+    struct DocumentBlock
+    {
+        int fragment = 0;  // the rank of its render in the document
+        int index = 0;     // its rank among the top-level blocks of its render, the hidden ones included
+        float y = 0.f;     // its top, in the content's coordinates
+    };
+
     // What the renders of the document being drawn (between BeginDocument() and EndDocument()) share: their headings
     // (their slugs unique in the document), the anchor clicked in one of them in this frame, and the search (set by
     // BeginDocument(): each render adds its matches)
@@ -78,6 +87,7 @@ namespace RichMd
         int currentFragment = -1;   // the current match, as of the last frame: its render and its first byte
         size_t currentBegin = 0;
         std::vector<DocumentMatch> matches;
+        std::vector<DocumentBlock> blocks;  // the shown blocks at the top level, in the order of the document
         int selectFragment = -1;    // the find bar closed on a match of the render of this rank: it gets selected
         size_t selectBegin = 0, selectEnd = 0;
     };
@@ -144,6 +154,10 @@ namespace RichMd
         size_t selectBegin = 0, selectEnd = 0;
         float findBarBottom = 0.f;              // the bottom of the find bar below the content's top (a jump aims below)
         int foldAll = 0;                        // asked by the table of contents: done at the next frame
+        // The block that keeps its place on the screen when the content above it changes height (none: index < 0),
+        // and the scroll it was chosen at: another scroll (the reader's) chooses again
+        DocumentBlock keptBlock{0, -1, 0.f};
+        float keptScroll = 0.f;
     };
 
     // ::md Context

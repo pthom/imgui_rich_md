@@ -1832,6 +1832,22 @@ int Renderer::block(MD_BLOCKTYPE type, void* d, bool e)
 	    && (int)((MD_BLOCK_H_DETAIL*)d)->level <= m_fold_level)
 		m_fold_level = 0;
 
+	// The blocks at the top level go to the document, which keeps the reader's place by them. They are counted also
+	// when hidden, so that a section opened above keeps the ranks of the blocks below it.
+	if (e && document && m_container_depth == (type == MD_BLOCK_QUOTE ? 1 : 0)) {
+		switch (type) {
+		case MD_BLOCK_P: case MD_BLOCK_H: case MD_BLOCK_QUOTE: case MD_BLOCK_HR: case MD_BLOCK_CODE:
+		case MD_BLOCK_HTML: case MD_BLOCK_TABLE: case MD_BLOCK_UL: case MD_BLOCK_OL: {
+			int index = m_top_block_count++;
+			if (!hidden())
+				document->blocks.push_back({document->fragmentCount, index, ImGui::GetCursorPosY()});
+			break;
+		}
+		default:
+			break;
+		}
+	}
+
 	// Suppress block rendering while inside a collapsed <details>.
 	// BLOCK_HTML pairs still arrive (the tags themselves land as
 	// MD_TEXT_HTML in text(), which is allowed through), so we just
@@ -2046,6 +2062,7 @@ int Renderer::print(const char* str, const char* str_end)
     m_fragment_begin = str;
     m_fragment_end = str_end;
     m_block_number = 0;
+    m_top_block_count = 0;
 
     // The fragment's selection is drawn behind its text: the text goes to channel 1, the highlight to channel 0
     ImGuiID selectionId = ImGui::GetID("##rich_md_selection");

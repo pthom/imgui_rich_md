@@ -1366,6 +1366,35 @@ namespace RichMd
         }
     }
 
+    // Scroll anchoring, in the content's window: the block chosen at the last frame (the last one whose top is at or
+    // above the top of the view) keeps its place on the screen when the content above it changed height. Only when the
+    // scroll is still the one it was chosen at: the reader's scroll, or a scroll the document makes, chooses another
+    // one. At the top of the content, none is chosen: the reader sees the start of the document, which keeps its place.
+    static void _KeepPlace(const DocumentFrame& frame, DocumentState& state)
+    {
+        DocumentBlock& kept = state.keptBlock;
+        float scroll = frame.scrollY;
+        const bool scrolling = !state.scroll.anchor.slug.empty() || state.scroll.matchFragment >= 0;
+        if (kept.index >= 0 && !scrolling && ImFabs(scroll - state.keptScroll) < 0.5f)
+            for (const DocumentBlock& b : frame.renders.blocks)
+                if (b.fragment == kept.fragment && b.index == kept.index) {
+                    if (ImFabs(b.y - kept.y) >= 1.f) {
+                        scroll = ImFloor(ImMax(scroll + b.y - kept.y, 0.f) + 0.5f);
+                        ImGui::SetScrollY(scroll);  // applied at the next frame
+                    }
+                    break;
+                }
+        kept = DocumentBlock{0, -1, 0.f};
+        state.keptScroll = scroll;
+        if (!frame.options.scrollAnchoring || scroll <= 0.f)
+            return;
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        const float viewTop = scroll + window->DecoOuterSizeY1 + window->DecoInnerSizeY1 + 1.f;
+        for (const DocumentBlock& b : frame.renders.blocks)
+            if (b.y <= viewTop)
+                kept = b;
+    }
+
     // The current match, kept by its render and its first byte: found again at each frame. A new query (or a text that
     // changed) makes the first match below the top of the view current; a step goes to the next or the previous one,
     // and wraps around. The view scrolls to a new current match when it does not show it.
@@ -1982,6 +2011,7 @@ namespace RichMd
             _ScrollToHeading(state, frame.renders.clickedAnchor);
         _UpdateCurrentMatch(frame, state);
         _UpdateScroll(context, frame, state);
+        _KeepPlace(frame, state);
 
         // The entries of the table of contents, and the current section: the last shown heading at or above the top
         // of the view
