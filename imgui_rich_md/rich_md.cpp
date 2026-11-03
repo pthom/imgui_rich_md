@@ -1274,13 +1274,13 @@ namespace RichMd
             frame->renders.query = state.query;
             frame->renders.searchOptions = state.searchOptions;
             frame->renders.highlightAll = state.highlightAll;
-            frame->renders.currentFragment = state.currentFragment;
+            frame->renders.currentFragmentIndex = state.currentFragmentIndex;
             frame->renders.currentBegin = state.currentBegin;
         }
-        frame->renders.selectFragment = state.selectFragment;  // once
+        frame->renders.selectFragmentIndex = state.selectFragmentIndex;  // once
         frame->renders.selectBegin = state.selectBegin;
         frame->renders.selectEnd = state.selectEnd;
-        state.selectFragment = -1;
+        state.selectFragmentIndex = -1;
         context->document = std::move(frame);
         context->documentFrame = ImGui::GetFrameCount();
         if (MarkdownRenderer* renderer = _Renderer())
@@ -1294,10 +1294,10 @@ namespace RichMd
         state.scroll.anchor.slug = slug;
         state.scroll.frames = 8;
     }
-    static void _ScrollToMatch(DocumentState& state, int fragment, size_t begin)
+    static void _ScrollToMatch(DocumentState& state, int fragmentIndex, size_t begin)
     {
         state.scroll = DocumentScroll();
-        state.scroll.matchFragment = fragment;
+        state.scroll.matchFragmentIndex = fragmentIndex;
         state.scroll.matchBegin = begin;
         state.scroll.frames = 8;
     }
@@ -1349,10 +1349,10 @@ namespace RichMd
                 s = DocumentScroll();
             } else if (i >= 0 && _ScrollToward(s, ScrollToShowAtTop(renders.headings[(size_t)i].y), seconds))
                 s = DocumentScroll();
-        } else if (s.matchFragment >= 0) {
+        } else if (s.matchFragmentIndex >= 0) {
             const DocumentMatch* match = nullptr;
             for (const DocumentMatch& m : frame.renders.matches)
-                if (m.fragment == s.matchFragment && m.begin == s.matchBegin)
+                if (m.fragmentIndex == s.matchFragmentIndex && m.begin == s.matchBegin)
                     match = &m;
             if (match != nullptr && match->details != 0 && --s.frames > 0) {
                 ImGui::GetStateStorage()->SetInt(match->details, 1);  // the section opens at the next frame
@@ -1374,10 +1374,10 @@ namespace RichMd
     {
         DocumentBlock& kept = state.keptBlock;
         float scroll = frame.scrollY;
-        const bool scrolling = !state.scroll.anchor.slug.empty() || state.scroll.matchFragment >= 0;
-        if (kept.index >= 0 && !scrolling && ImFabs(scroll - state.keptScroll) < 0.5f)
+        const bool scrolling = !state.scroll.anchor.slug.empty() || state.scroll.matchFragmentIndex >= 0;
+        if (kept.blockIndex >= 0 && !scrolling && ImFabs(scroll - state.keptScroll) < 0.5f)
             for (const DocumentBlock& b : frame.renders.blocks)
-                if (b.fragment == kept.fragment && b.index == kept.index) {
+                if (b.fragmentIndex == kept.fragmentIndex && b.blockIndex == kept.blockIndex) {
                     if (ImFabs(b.y - kept.y) >= 1.f) {
                         scroll = ImFloor(ImMax(scroll + b.y - kept.y, 0.f) + 0.5f);
                         ImGui::SetScrollY(scroll);  // applied at the next frame
@@ -1412,7 +1412,8 @@ namespace RichMd
         }
         int current = -1;
         for (int i = 0; i < (int)matches.size(); ++i)
-            if (matches[(size_t)i].fragment == state.currentFragment && matches[(size_t)i].begin == state.currentBegin)
+            if (matches[(size_t)i].fragmentIndex == state.currentFragmentIndex
+                && matches[(size_t)i].begin == state.currentBegin)
                 current = i;
         const float viewTop = frame.scrollY + state.findBarBottom;
         const float viewBottom = frame.scrollY + ImGui::GetWindowHeight();
@@ -1440,10 +1441,10 @@ namespace RichMd
         const DocumentMatch& match = matches[(size_t)current];
         state.matchMoved = current != state.currentMatch;
         state.currentMatch = current;
-        state.currentFragment = match.fragment;
+        state.currentFragmentIndex = match.fragmentIndex;
         state.currentBegin = match.begin;
         if (scroll && (match.details != 0 || match.y < viewTop || match.bottom > viewBottom))
-            _ScrollToMatch(state, match.fragment, match.begin);
+            _ScrollToMatch(state, match.fragmentIndex, match.begin);
     }
 
     // The icons of the document's buttons, drawn (the fonts need no glyph)
@@ -1498,7 +1499,7 @@ namespace RichMd
         if (state.currentMatch >= 0 && state.currentMatch < (int)frame.renders.matches.size()
             && frame.renders.matches[(size_t)state.currentMatch].inRuns) {
             const DocumentMatch& match = frame.renders.matches[(size_t)state.currentMatch];
-            state.selectFragment = match.fragment;
+            state.selectFragmentIndex = match.fragmentIndex;
             state.selectBegin = match.begin;
             state.selectEnd = match.end;
         }
@@ -1507,9 +1508,9 @@ namespace RichMd
     static void _GoToMatch(DocumentState& state, const DocumentMatch& match)
     {
         state.wrapMessage = nullptr;
-        state.currentFragment = match.fragment;
+        state.currentFragmentIndex = match.fragmentIndex;
         state.currentBegin = match.begin;
-        _ScrollToMatch(state, match.fragment, match.begin);
+        _ScrollToMatch(state, match.fragmentIndex, match.begin);
     }
 
     // The height of a row of the lists (the table of contents, the matches): a finger needs a taller one

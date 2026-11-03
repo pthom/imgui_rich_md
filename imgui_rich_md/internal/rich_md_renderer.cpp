@@ -2092,10 +2092,10 @@ int Renderer::print(const char* str, const char* str_end)
 	save_document_fold();
 	if (ownMargin)
 		ImGui::Unindent(m_fold_margin);
-	const int fragmentRank = document ? document->fragmentCount++ : -1;
+	const int fragmentIndex = document ? document->fragmentCount++ : -1;
 	if (!document)
 		resolve_anchor(selectionId);
-	else if (selectableText && document->selectFragment == fragmentRank)  // the find bar closed on a match of it
+	else if (selectableText && document->selectFragmentIndex == fragmentIndex)  // the find bar closed on a match of it
 		select_range(selectionId, document->selectBegin, document->selectEnd);
 
     if (selectableText)
@@ -2103,7 +2103,7 @@ int Renderer::print(const char* str, const char* str_end)
     if (drawSelection || drawSearch) {
         m_selection_splitter.SetCurrentChannel(drawList, 0);
         if (drawSearch)
-            search_fragment(fragmentRank);
+            search_fragment(fragmentIndex);
         if (drawSelection)
             draw_selection();
         m_selection_splitter.Merge(drawList);
@@ -2613,7 +2613,7 @@ static std::string context_after(const std::string& text, size_t at)
 	return text.substr(at, end - at) + (cut ? "..." : "");
 }
 
-void Renderer::search_fragment(int fragment)
+void Renderer::search_fragment(int fragmentIndex)
 {
 	DocumentRenders& d = *document;
 	std::string text;
@@ -2627,7 +2627,7 @@ void Renderer::search_fragment(int fragment)
 	std::vector<DocumentMatch> matches;
 	for (const TextMatch& found : FindMatches(text, d.query, d.searchOptions)) {
 		DocumentMatch match;
-		match.fragment = fragment;
+		match.fragmentIndex = fragmentIndex;
 		match.begin = sources[found.begin].first;
 		match.end = sources[found.end - 1].second;
 		if (!matches.empty() && matches.back().begin == match.begin && matches.back().end == match.end)
@@ -2641,7 +2641,7 @@ void Renderer::search_fragment(int fragment)
 		match.before = context_before(text, found.begin);
 		match.text = text.substr(found.begin, found.end - found.begin);
 		match.after = context_after(text, found.end);
-		bool current = fragment == d.currentFragment && match.begin == d.currentBegin;
+		bool current = fragmentIndex == d.currentFragmentIndex && match.begin == d.currentBegin;
 		if (current || d.highlightAll)
 			for (const ImRect& r : rects)
 				if (ImGui::IsRectVisible(r.Min, r.Max))
@@ -2651,7 +2651,7 @@ void Renderer::search_fragment(int fragment)
 	for (const HiddenText& hidden : m_hidden_texts)
 		for (const TextMatch& found : FindMatches(hidden.text, d.query, d.searchOptions)) {
 			DocumentMatch match;
-			match.fragment = fragment;
+			match.fragmentIndex = fragmentIndex;
 			match.begin = hidden.sources[found.begin];
 			match.end = hidden.sources[found.end - 1] + 1;
 			match.y = hidden.y;
@@ -2714,12 +2714,13 @@ std::vector<CodeBlockMatch> Renderer::code_block_matches(const std::string& code
 	std::vector<CodeBlockMatch> matches;
 	if (!document || document->query.empty())
 		return matches;
-	const int fragment = document->fragmentCount;  // the rank of this fragment, counted at its end
+	const int fragmentIndex = document->fragmentCount;  // this fragment's, counted at its end
 	for (const TextMatch& found : FindMatches(code, document->query, document->searchOptions)) {
 		CodeBlockMatch match;
 		match.begin = found.begin;
 		match.end = found.end;
-		bool current = fragment == document->currentFragment && code_block_source(found.begin) == document->currentBegin;
+		bool current = fragmentIndex == document->currentFragmentIndex
+		               && code_block_source(found.begin) == document->currentBegin;
 		match.current = current;
 		if (current || document->highlightAll)
 			match.color = ImGui::GetColorU32(current ? style.searchMatchCurrent : style.searchMatch);
@@ -2734,7 +2735,7 @@ void Renderer::add_code_block_matches(const std::string& code, const std::vector
 	const float toContent = ImGui::GetScrollY() - ImGui::GetWindowPos().y;
 	for (size_t i = 0; i < matches.size(); ++i) {
 		DocumentMatch match;
-		match.fragment = document->fragmentCount;
+		match.fragmentIndex = document->fragmentCount;
 		match.begin = code_block_source(matches[i].begin);
 		match.end = code_block_source(matches[i].end - 1) + 1;
 		const bool known = i < rects.size();

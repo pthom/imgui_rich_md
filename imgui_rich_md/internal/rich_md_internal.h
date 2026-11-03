@@ -43,7 +43,7 @@ namespace RichMd
     // A match of the search, in a render of a document
     struct DocumentMatch
     {
-        int fragment = 0;                 // the rank of its render in the document
+        int fragmentIndex = 0;            // its fragment (the text of a Render() call) in the document: 0, 1, 2...
         size_t begin = 0, end = 0;        // its bytes in the render's text
         float y = 0.f, bottom = 0.f;      // its top and bottom, in the content's coordinates
         std::string before, text, after;  // its context, for the lists of matches
@@ -55,9 +55,9 @@ namespace RichMd
     // keeps the reader's place by the first one at the top of the view
     struct DocumentBlock
     {
-        int fragment = 0;  // the rank of its render in the document
-        int index = 0;     // its rank among the top-level blocks of its render, the hidden ones included
-        float y = 0.f;     // its top, in the content's coordinates
+        int fragmentIndex = 0;  // its fragment (the text of a Render() call) in the document: 0, 1, 2...
+        int blockIndex = 0;     // its rank among the top-level blocks of its fragment, the hidden ones included
+        float y = 0.f;          // its top, in the content's coordinates
     };
 
     // What the renders of the document being drawn (between BeginDocument() and EndDocument()) share: their headings
@@ -84,11 +84,11 @@ namespace RichMd
         std::string query;          // empty: no search
         SearchOptions searchOptions;
         bool highlightAll = true;
-        int currentFragment = -1;   // the current match, as of the last frame: its render and its first byte
+        int currentFragmentIndex = -1;   // the current match, as of the last frame: its render and its first byte
         size_t currentBegin = 0;
         std::vector<DocumentMatch> matches;
         std::vector<DocumentBlock> blocks;  // the shown blocks at the top level, in the order of the document
-        int selectFragment = -1;    // the find bar closed on a match of the render of this rank: it gets selected
+        int selectFragmentIndex = -1;    // the find bar closed on a match of the render of this rank: it gets selected
         size_t selectBegin = 0, selectEnd = 0;
     };
 
@@ -114,7 +114,7 @@ namespace RichMd
     struct DocumentScroll
     {
         PendingAnchor anchor;          // a heading, when its slug is not empty
-        int matchFragment = -1;        // else a match (its render and its first byte), when matchFragment >= 0
+        int matchFragmentIndex = -1;   // else a match (its fragment and its first byte), when >= 0
         size_t matchBegin = 0;
         int frames = 0;                // the frames left for the correction
         float from = 0.f;              // the animation: the scroll at its start, and its start time (-1: none yet)
@@ -139,7 +139,7 @@ namespace RichMd
         char query[256] = "";
         SearchOptions searchOptions;
         bool highlightAll = true;
-        int currentFragment = -1;
+        int currentFragmentIndex = -1;
         size_t currentBegin = 0;
         int step = 0;             // the find bar asked for the next (1) or the previous (-1) match
         bool jumpToFirst = false; // the query changed: the first match below the top of the view becomes current
@@ -150,11 +150,11 @@ namespace RichMd
         ImVec2 tickPopupPos;
         const char* wrapMessage = nullptr;      // the last step went past an end: the bar says it wrapped around
         float findBarHeight = 0.f;              // a narrow document: the room the find bar takes above the content
-        int selectFragment = -1;                // the find bar closed on a match: its render selects it
+        int selectFragmentIndex = -1;                // the find bar closed on a match: its render selects it
         size_t selectBegin = 0, selectEnd = 0;
         float findBarBottom = 0.f;              // the bottom of the find bar below the content's top (a jump aims below)
         int foldAll = 0;                        // asked by the table of contents: done at the next frame
-        // The block that keeps its place on the screen when the content above it changes height (none: index < 0),
+        // The block that keeps its place on the screen when the content above it changes height (none: blockIndex < 0),
         // and the scroll it was chosen at: another scroll (the reader's) chooses again
         DocumentBlock keptBlock{0, -1, 0.f};
         float keptScroll = 0.f;

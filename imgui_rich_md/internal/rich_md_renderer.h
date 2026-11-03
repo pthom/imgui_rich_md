@@ -420,7 +420,7 @@ private:
 	// The rectangles (on the screen) of the text between two offsets of the fragment: one per run
 	void range_rects(size_t b, size_t e, std::vector<ImRect>& out) const;
 	// The matches of the document's search in this fragment: added to the document, drawn behind the text
-	void search_fragment(int fragment);
+	void search_fragment(int fragmentIndex);
 
 	// The search in the text a fragment does not draw as runs: the collapsed sections' (their matches are at their
 	// header), the code blocks' (drawn by the code block)
