@@ -80,8 +80,8 @@ inline int RunApp(const char* title, ImVec2 size, const RichMd::MarkdownOptions&
     ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
 #endif
     ImGui_ImplOpenGL3_Init(glslVersion);
-    ImGuiTouch::Setup();            // a finger drags the content, a long press is a right click, a pinch scales
-    ImGuiKit::SetupWheelSession();  // the wheel stays with the page it scrolls (a page scrolled over a code block)
+    ImGuiTouch::Setup();              // a finger drags the content, a long press is a right click, a pinch scales
+    ImGuiTouch::SetupWheelSession();  // the wheel stays with the page it scrolls (a page scrolled over a code block)
 #ifdef __EMSCRIPTEN__
     ImGuiTouch::SetupEmscripten();          // in a browser: which pointer is a finger, the fingers
     ImGuiTouch::SetupEmscriptenKeyboard();  // in a browser: the phone's keyboard, for the text fields
