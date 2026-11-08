@@ -1,11 +1,12 @@
-// The window of the examples: Dear ImGui with GLFW + OpenGL3, and imgui_rich_md (examples/minimal shows the
-// same setup in full). The gui function draws inside an ImGui window that fills the application window.
+// The window of the examples: Dear ImGui with GLFW + OpenGL3, imgui_rich_md, and imgui_kit's touch layer (examples/minimal
+// shows the same setup in full, without the kit). The gui function draws inside an ImGui window that fills the application window.
 // IMGUI_RICHMD_SHOT=<file.ppm> in the environment: writes a screenshot after 60 frames and exits.
 #pragma once
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_rich_md/rich_md.h"
+#include "imgui_kit.h"  // a phone's gestures, the wheel session, the phone's keyboard
 #if defined(__EMSCRIPTEN__)
 #include <GLES2/gl2.h>                 // WebGL, through the OpenGL ES 2 API
 #include "emscripten_mainloop_stub.h"  // from Dear ImGui's examples/libs/emscripten
@@ -79,6 +80,12 @@ inline int RunApp(const char* title, ImVec2 size, const RichMd::MarkdownOptions&
     ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
 #endif
     ImGui_ImplOpenGL3_Init(glslVersion);
+    ImGuiTouch::Setup();            // a finger drags the content, a long press is a right click, a pinch scales
+    ImGuiKit::SetupWheelSession();  // the wheel stays with the page it scrolls (a page scrolled over a code block)
+#ifdef __EMSCRIPTEN__
+    ImGuiTouch::SetupEmscripten();          // in a browser: which pointer is a finger, the fingers
+    ImGuiTouch::SetupEmscriptenKeyboard();  // in a browser: the phone's keyboard, for the text fields
+#endif
     RichMd::CreateContext(options);
 
     const char* shot = std::getenv("IMGUI_RICHMD_SHOT");
@@ -94,9 +101,11 @@ inline int RunApp(const char* title, ImVec2 size, const RichMd::MarkdownOptions&
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // The window fills the application's, out of the phone's keyboard
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGuiTouchKeyboardInsets keyboard = ImGuiTouch::GetKeyboardInsets();
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + keyboard.Top));
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - keyboard.Top - keyboard.Bottom));
         ImGui::Begin("##app", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
         gui();
         ImGui::End();

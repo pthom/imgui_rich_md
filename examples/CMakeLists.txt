@@ -1,4 +1,5 @@
-# The examples: stock Dear ImGui (fetched, v1.92.9) + GLFW + OpenGL3, no other framework, the assets embedded.
+# The examples: stock Dear ImGui (fetched, v1.93.0) + GLFW + OpenGL3, no other framework, the assets embedded.
+# imgui_kit (fetched) gives them a phone's gestures, the wheel session, and the phone's keyboard in a browser.
 #   cmake -S examples -B build && cmake --build build   (or IMGUI_RICHMD_BUILD_EXAMPLES=ON at the root)
 #   For the web: emcmake cmake -S examples -B build_web && cmake --build build_web   (one .html page per example)
 cmake_minimum_required(VERSION 3.20)
@@ -36,6 +37,12 @@ if(NOT TARGET imgui)
         ${IMGUI_DIR}/examples/libs/emscripten)  # emscripten_mainloop_stub.h
     target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32)  # characters above U+FFFF, e.g. most emoji (fonts)
     target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
+endif()
+if(NOT TARGET imgui_kit)  # the touch layer, the wheel session, the phone's keyboard (https://github.com/pthom/imgui_kit)
+    include(FetchContent)
+    FetchContent_Declare(imgui_kit GIT_REPOSITORY https://github.com/pthom/imgui_kit.git
+        GIT_TAG c518e78ffef4c870bc3518e1137d73f18c2e7abe)
+    FetchContent_MakeAvailable(imgui_kit)
 endif()
 if(EMSCRIPTEN AND IMGUI_RICHMD_WITH_LATEX AND NOT TARGET freetype)
     # LaTeX needs FreeType: built from its sources, since the library compiles it with its wasm exceptions
@@ -83,7 +90,7 @@ foreach(example ${_examples})
     add_executable(imgui_rich_md_${example} ${CMAKE_CURRENT_LIST_DIR}/${example}/main.cpp)
     target_include_directories(imgui_rich_md_${example} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
     target_compile_options(imgui_rich_md_${example} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)  # UTF-8 sources
-    target_link_libraries(imgui_rich_md_${example} PRIVATE imgui_rich_md glfw OpenGL::GL)
+    target_link_libraries(imgui_rich_md_${example} PRIVATE imgui_rich_md imgui_kit glfw OpenGL::GL)
     if(EMSCRIPTEN)  # a page per example: <example>.html (+ .js, .wasm)
         set_target_properties(imgui_rich_md_${example} PROPERTIES OUTPUT_NAME ${example}
             LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/web/shell.html)
@@ -105,6 +112,6 @@ endif()
 if(NOT EMSCRIPTEN)
     add_executable(imgui_rich_md_mermaid_review ${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid/mermaid_review.cpp)
     target_include_directories(imgui_rich_md_mermaid_review PRIVATE ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid)
-    target_link_libraries(imgui_rich_md_mermaid_review PRIVATE imgui_rich_md glfw OpenGL::GL)
+    target_link_libraries(imgui_rich_md_mermaid_review PRIVATE imgui_rich_md imgui_kit glfw OpenGL::GL)
     target_compile_definitions(imgui_rich_md_mermaid_review PRIVATE MERMAID_CORPUS_DIR="${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid/corpus")
 endif()
