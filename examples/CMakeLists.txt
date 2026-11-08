@@ -41,7 +41,7 @@ endif()
 if(NOT TARGET imgui_kit)  # the touch layer, the wheel session, the phone's keyboard (https://github.com/pthom/imgui_kit)
     include(FetchContent)
     FetchContent_Declare(imgui_kit GIT_REPOSITORY https://github.com/pthom/imgui_kit.git
-        GIT_TAG 485702a638ed453a50d9e9ada905ccb2079a9493)
+        GIT_TAG 7c81c9b061f7c1ff58767dbeee8dd83731829339)
     FetchContent_MakeAvailable(imgui_kit)
 endif()
 if(EMSCRIPTEN AND IMGUI_RICHMD_WITH_LATEX AND NOT TARGET freetype)
