@@ -12,6 +12,7 @@
 
 #include "imgui.h"
 #include "imgui_internal.h"  // RegisterUserTexture
+#include <cstring>
 #include "internal/rich_md_renderer.h"
 
 // Platform includes for OpenUrlInBrowser
@@ -126,6 +127,13 @@ namespace
     void _OpenUrlInBrowser(const char* url)
     {
 #if defined(__EMSCRIPTEN__)
+        // The application's opener when it has one (Dear ImGui's TextLinkOpenURL uses it too): it knows the browser
+        // (a new tab where allowed, else the page itself)
+        if (ImGui::GetCurrentContext() && ImGui::GetPlatformIO().Platform_OpenInShellFn)
+        {
+            ImGui::GetPlatformIO().Platform_OpenInShellFn(ImGui::GetCurrentContext(), url);
+            return;
+        }
         // The new tab gets no handle on this one (w.opener): it could otherwise replace the app's page
         std::string js_command = "{ const w = window.open(" + _JsStringLiteral(url) + "); if (w) w.opener = null; }";
         emscripten_run_script(js_command.c_str());
@@ -2588,7 +2596,12 @@ namespace RichMd
         ImGui::PushStyleColor(ImGuiCol_Text, LinkColor());
         ImGui::TextUnformatted(text);
         ImGui::PopStyleColor();
-        if (Renderer::link_item(style, url))
+        // In a browser, the page opens the url from the click's own handler (the host says whether it does)
+        const HostServices& host = GetHostServices();
+        bool isSite = strncmp(url, "http://", 7) == 0 || strncmp(url, "https://", 8) == 0;
+        bool pageOpens = host.TapOpensUrl && isSite
+                         && host.TapOpensUrl(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), url);
+        if (Renderer::link_item(style, url) && !pageOpens)
             _OpenUrlInBrowser(url);
     }
 
