@@ -758,15 +758,11 @@ namespace RichMd
             const OpenLinkFn* onOpenLink = mMarkdownOptions->callbacks.OnOpenLink.target<OpenLinkFn>();
             bool isDefault = onOpenLink != nullptr && *onOpenLink == OnOpenLink_Default;
             bool isSite = m_href.rfind("http://", 0) == 0 || m_href.rfind("https://", 0) == 0;
-            bool touchScreen = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen) != 0;
-            if (!host.TapOpensUrl || !isDefault || !isSite || !touchScreen)
+            if (!host.TapOpensUrl || !isDefault || !isSite)
                 return false;
-            const ImDrawList* drawList = ImGui::GetWindowDrawList();
-            ImRect visible(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());  // a link scrolled out of a child: none
-            visible.ClipWith(ImRect(drawList->GetClipRectMin(), drawList->GetClipRectMax()));
-            if (visible.GetWidth() > 0.f && visible.GetHeight() > 0.f)
-                host.TapOpensUrl(visible.Min, visible.Max, m_href);
-            return true;
+            // The page opens it from the tap's or the click's own handler, whatever the browser and the pointer (the
+            // host clips it to what shows); false outside a browser: the click opens it here
+            return host.TapOpensUrl(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), m_href);
         }
 
         void open_wikilink() const override

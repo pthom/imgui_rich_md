@@ -1181,9 +1181,8 @@ void Renderer::render_text(const char* str, const char* str_end)
 		}
 
 		if (!m_href.empty()) {
-			bool tapOpened = !m_is_wikilink && tap_opens_url()
-				&& ImGui::GetIO().MouseSource == ImGuiMouseSource_TouchScreen;
-			if (link_item(style, m_href.c_str()) && !tapOpened) {
+			bool pageOpens = !m_is_wikilink && tap_opens_url();  // the page itself, from the click (a browser)
+			if (link_item(style, m_href.c_str()) && !pageOpens) {
 				if (m_is_wikilink)
 					open_wikilink();
 				else
