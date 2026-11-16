@@ -565,7 +565,8 @@ namespace RichMd
 
             SizedFont GetFontCode() const
             {
-                return {mFontCode, mMarkdownFontOptions.regularSize * _FontScale()};
+                float factor = ImMax(mMarkdownFontOptions.codeSizeFactor, 0.1f);  // 0 or less: no font size at all
+                return {mFontCode, mMarkdownFontOptions.regularSize * factor * _FontScale()};
             }
 
             SizedFont GetDefaultFont() const

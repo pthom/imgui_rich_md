@@ -189,6 +189,9 @@ struct MarkdownFontOptions
     // Multipliers for header sizes, from h1 to h6
     float headerSizeFactors[6] = { 1.42f, 1.33f, 1.24f, 1.15f, 1.10f, 1.05f };
 
+    // Multiplier for the code font size, relative to regularSize
+    float codeSizeFactor = 1.f;
+
     // Fonts merged into every markdown font (asset paths), e.g. an icon or a CJK font.
     // Since Dear ImGui 1.92 glyphs are loaded on demand, so merging a large font costs nothing until it is used.
     std::vector<std::string> mergeFonts;

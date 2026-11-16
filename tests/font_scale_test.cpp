@@ -47,6 +47,29 @@ static Measures DrawFrame(float scale)
     return m;
 }
 
+// The lowest glyph pixel of a render: the baseline of "x", which has no descender
+static float GlyphBottom(const char* markdown)
+{
+    for (int i = 0; i < 2; ++i) {  // the first frame loads the fonts
+        ImGui_ImplNull_NewFrame();
+        ImGui::NewFrame();
+        ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(600.f, 400.f), ImGuiCond_Always);
+        ImGui::Begin("Font scale", nullptr, ImGuiWindowFlags_NoTitleBar);
+        RichMd::Render(markdown);
+        ImGui::End();
+        ImGui::Render();
+        ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+    }
+    const ImVec2 white = ImGui::GetIO().Fonts->TexUvWhitePixel;  // the window's background and border
+    float bottom = 0.f;
+    for (const ImDrawList* list : ImGui::GetDrawData()->CmdLists)
+        for (const ImDrawVert& vertex : list->VtxBuffer)
+            if (vertex.uv.x != white.x || vertex.uv.y != white.y)
+                bottom = ImMax(bottom, vertex.pos.y);
+    return bottom;
+}
+
 static bool Expect(const char* what, bool condition)
 {
     if (!condition)
@@ -87,6 +110,25 @@ int main(int, char**)
     ok = Expect("a render inside a render keeps the outer scale (half)", Near(half.nestedFontSize, half.fontSize)) && ok;
 
     RichMd::DestroyContext();
+
+    RichMd::MarkdownOptions smallCode;
+    smallCode.fontOptions.codeSizeFactor = 0.6f;
+    RichMd::CreateContext(smallCode);
+    float textBottom = GlyphBottom("x");
+    float codeBottom = GlyphBottom("`x`");
+    Measures small = DrawFrame(1.f);
+    printf("codeSizeFactor 0.6: code font %.1f, baseline %.1f / %.1f\n", small.codeFontSize, textBottom, codeBottom);
+    ok = Expect("codeSizeFactor scales the code font", Near(small.codeFontSize, normal.codeFontSize * 0.6f)) && ok;
+    ok = Expect("smaller inline code sits on the text's baseline", ImAbs(codeBottom - textBottom) <= 1.f) && ok;
+    RichMd::DestroyContext();
+
+    RichMd::MarkdownOptions noCode;
+    noCode.fontOptions.codeSizeFactor = 0.f;
+    RichMd::CreateContext(noCode);
+    DrawFrame(1.f);
+    ok = Expect("a codeSizeFactor of 0 still gives a code font", DrawFrame(1.f).codeFontSize > 0.f) && ok;
+    RichMd::DestroyContext();
+
     ImGui_ImplNull_Shutdown();
     ImGui::DestroyContext();
     printf(ok ? "font scale test: OK\n" : "font scale test: FAILED\n");

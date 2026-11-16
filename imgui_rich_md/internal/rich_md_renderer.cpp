@@ -1067,6 +1067,7 @@ void Renderer::render_text(const char* str, const char* str_end, const char* sou
 		pushed_small_font = true;
 		sub_sup_y_offset = m_is_sup ? 0.0f : (base_font_size - small);
 	}
+	sub_sup_y_offset += m_code_y_offset;
 	const float size = ImGui::GetFontSize();
 	const float glued = (m_is_image || m_is_table_header) ? 0.0f : glued_width(source_end ? source_end : str_end);
 
@@ -1729,9 +1730,13 @@ void Renderer::pop_code_style()
 
 void Renderer::render_inline_code(const char *str, const char *str_end)
 {
+    // Shares the baseline of the text around it, whatever the size of the code font
+    const float text_ascent = ImGui::GetFontBaked()->Ascent;
     m_is_code = true;
     push_code_style();
+    m_code_y_offset = text_ascent - ImGui::GetFontBaked()->Ascent;
     render_text(str, str_end);
+    m_code_y_offset = 0.0f;
     pop_code_style();
     m_is_code = false;
 }

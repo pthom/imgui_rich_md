@@ -276,6 +276,7 @@ protected:
 	float m_center_width = 0.0f;
 	bool m_is_code = false; // true for block code and inline code
     bool m_is_code_block = false;
+	float m_code_y_offset = 0.0f;
 	bool m_is_latex_inline = false; // LaTeX math state (populated when EnableLatex() has been called)
 	bool m_is_latex_display = false;
 	std::string m_latex_buffer;
