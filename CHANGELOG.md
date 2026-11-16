@@ -2,6 +2,7 @@
 
 # Unreleased
 
+- The entities (`&amp;`, `&copy;`, `&#169;`, `&#x2192;`) show as their characters, in the text, the headings and their slugs, and the search; an invalid codepoint is U+FFFD, as in CommonMark.
 - In a browser, `RenderTextAsLink()` lets the page open the link from the click's own handler, as the markdown links do (the host's `TapOpensUrl`): a new tab in Safari too. A link no handler takes goes through the application's `Platform_OpenInShellFn` when it has one.
 
 # v1.0.0 (2026-10-21)

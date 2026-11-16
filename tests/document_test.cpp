@@ -506,6 +506,23 @@ static bool CheckSearchEverywhere()
     return ok;
 }
 
+// The search finds an entity by its character, shown or in a collapsed section
+static bool CheckSearchEntities()
+{
+    const std::string md = "Tom &amp; Jerry\n\n<details>\n<summary>More</summary>\n\nTom &amp; Jerry\n\n</details>\n";
+    auto content = [&]() { RichMd::RenderDocument("entities", md, ImVec2(0.f, 200.f)); };
+    DrawFrame(content);
+    DrawFrame(content);
+    RichMd::DocumentState& state = DocumentStateOf("entities");
+    state.searchOpen = true;
+    ImStrncpy(state.query, "Tom & Jerry", sizeof(state.query));
+    DrawFrame(content);
+    DrawFrame(content);
+    const bool ok = Expect("an entity is searched by its character, also in a collapsed section", state.matchCount == 2);
+    state.searchOpen = false;
+    return ok;
+}
+
 // The user errors are reported, and the next document works
 static bool CheckUserErrors()
 {
@@ -571,6 +588,7 @@ int main(int, char**)
     ok = CheckTableOfContents() && ok;
     ok = CheckSearch() && ok;
     ok = CheckSearchEverywhere() && ok;
+    ok = CheckSearchEntities() && ok;
     ok = CheckUserErrors() && ok;
 
     RichMd::DestroyContext();

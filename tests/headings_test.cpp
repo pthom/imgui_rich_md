@@ -225,6 +225,18 @@ int main(int, char**)
 
     ok = CheckAnchorLinks() && ok;
 
+    Frame entities = DrawFrame("Entities", "# A &amp; B &copy; &#169; &#x2192; &nosuchname;", 600.f);
+    ok = Expect("the entities of a heading are decoded", entities.headings.size() == 1
+                && entities.headings[0].text == "A & B \xC2\xA9 \xC2\xA9 \xE2\x86\x92 &nosuchname;") && ok;
+    entities = DrawFrame("Entities in a collapsed section",
+                         "<details>\n<summary>More</summary>\n\n## Tom &amp; Jerry\n\n</details>\n", 600.f);
+    ok = Expect("the entities of a collapsed heading are decoded", entities.headings.size() == 1
+                && entities.headings[0].hidden && entities.headings[0].text == "Tom & Jerry"
+                && entities.headings[0].slug == "tom--jerry") && ok;
+    entities = DrawFrame("Invalid codepoints", "# &#0; &#xD800; &#x110000;", 600.f);
+    ok = Expect("an invalid codepoint is U+FFFD", entities.headings.size() == 1
+                && entities.headings[0].text == "\xEF\xBF\xBD \xEF\xBF\xBD \xEF\xBF\xBD") && ok;
+
     // An empty render has no headings (none left from the render before)
     ImGui_ImplNull_NewFrame();
     ImGui::NewFrame();

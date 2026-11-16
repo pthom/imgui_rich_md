@@ -53,6 +53,7 @@ endif()
 
 add_library(imgui_rich_md STATIC
     ${_md4c_dir}/md4c.c ${_md4c_dir}/md4c.h
+    ${_md4c_dir}/entity.c ${_md4c_dir}/entity.h  # the named entities
     ${_richmd_dir}/rich_md.cpp ${_richmd_dir}/rich_md.h
     ${_richmd_dir}/narrative_programming.cpp ${_richmd_dir}/narrative_programming.h
     ${_richmd_dir}/rich_md_host.h
