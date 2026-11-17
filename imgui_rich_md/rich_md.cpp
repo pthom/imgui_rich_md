@@ -164,17 +164,18 @@ namespace
     std::string _Unindent(const std::string& text, bool isCode)
     {
         auto lines = _SplitLines(text);
-        size_t indent = 0;
+        // The indentation of the first line that is not blank: its spaces, and in code its tabs too (md4c keeps them)
+        std::string indent;
         for (const auto& line : lines)
             if (_TrimWhitespace(line).size() > 0)
             {
-                indent = line.find_first_not_of(' ');
+                indent = line.substr(0, line.find_first_not_of(isCode ? " \t" : " "));
                 break;
             }
         std::vector<std::string> processed;
         for (const auto& line : lines)
         {
-            std::string processedLine = line.compare(0, indent, std::string(indent, ' ')) == 0 ? line.substr(indent) : line;
+            std::string processedLine = line.compare(0, indent.size(), indent) == 0 ? line.substr(indent.size()) : line;
             if (isCode)
                 processedLine.erase(processedLine.find_last_not_of(' ') + 1);
             processed.push_back(processedLine);
@@ -697,6 +698,9 @@ namespace RichMd
             set_flag(MD_FLAG_PERMISSIVEAUTOLINKS, mMarkdownOptions->autolinks);
             set_flag(MD_FLAG_HARD_SOFT_BREAKS, mMarkdownOptions->hardSoftBreaks);
             set_flag(MD_FLAG_WIKILINKS, (bool)mMarkdownOptions->callbacks.OnWikiLink);
+            set_flag(MD_FLAG_SUBSCRIPTS, mMarkdownOptions->subscripts);
+            set_flag(MD_FLAG_SUPERSCRIPTS, mMarkdownOptions->superscripts);
+            set_flag(MD_FLAG_HIGHLIGHT, mMarkdownOptions->highlight);
         }
 
         std::map<std::string, MarkdownTexture >& ImageCache()

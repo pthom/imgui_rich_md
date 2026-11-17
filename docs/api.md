@@ -309,6 +309,13 @@ struct MarkdownOptions
     // A newline in the source is a line break (as in GitHub comments and chat messages)
     bool hardSoftBreaks = false;
 
+    // ~x~ is a subscript (H~2~O), and a strikethrough needs ~~x~~. Off: ~x~ strikes through, as on GitHub
+    bool subscripts = false;
+    // ^x^ is a superscript (E = mc^2^). Off by default: math written as plain text (x^2 + y^2) would be raised
+    bool superscripts = false;
+    // ==x== is highlighted, as in Obsidian and Typora
+    bool highlight = true;
+
     // The text can be selected with the mouse and copied (SetSelectableTextDefault changes it later,
     // PushSelectableText for some renders)
     bool selectableText = true;

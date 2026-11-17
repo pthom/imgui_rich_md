@@ -1008,6 +1008,21 @@ void Renderer::SPAN_DEL(bool e)
 	m_is_strikethrough = e;
 }
 
+void Renderer::SPAN_SUPERSCRIPT(bool e)
+{
+	m_is_sup = e;
+}
+
+void Renderer::SPAN_SUBSCRIPT(bool e)
+{
+	m_is_sub = e;
+}
+
+void Renderer::SPAN_MARK(bool e)
+{
+	m_is_mark = e;
+}
+
 static bool is_blank(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
 // The width of the rest of the word that goes on after str_end in the source, across the markup: "(**alignment**),"
@@ -2019,6 +2034,15 @@ int Renderer::span(MD_SPANTYPE type, void* d, bool e)
 		break;
 	case MD_SPAN_U:
 		SPAN_U(e);
+		break;
+	case MD_SPAN_SUPERSCRIPT:
+		SPAN_SUPERSCRIPT(e);
+		break;
+	case MD_SPAN_SUBSCRIPT:
+		SPAN_SUBSCRIPT(e);
+		break;
+	case MD_SPAN_MARK:
+		SPAN_MARK(e);
 		break;
 	default:
 		assert(false);

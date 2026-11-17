@@ -45,7 +45,7 @@ if(NOT EXISTS ${_md4c_dir}/md4c.c)
     message(STATUS "imgui_rich_md: external/md4c is empty: fetching md4c")
     include(FetchContent)
     FetchContent_Declare(imgui_richmd_md4c GIT_REPOSITORY https://github.com/mity/md4c.git
-        GIT_TAG 481fbfbdf72daab2912380d62bb5f2187d438408  # keep in sync with the submodule external/md4c
+        GIT_TAG f9e5eb232b95b737373ae706648cb75bd259ed1a  # keep in sync with the submodule external/md4c
         SOURCE_SUBDIR no_cmake)  # its sources only: not its own CMakeLists
     FetchContent_MakeAvailable(imgui_richmd_md4c)
     set(_md4c_dir ${imgui_richmd_md4c_SOURCE_DIR}/src)

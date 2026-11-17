@@ -193,8 +193,9 @@ namespace RichMd
 
 namespace RichMd { namespace Internal
 {
-    // Removes the common indentation (that of the first non-empty line) and the leading / trailing
-    // empty lines. Code: trailing spaces are trimmed; markdown: they are kept (two are a hard line break).
+    // Removes the common indentation (that of the first non-empty line: its spaces, and its tabs in code) and the
+    // leading / trailing empty lines. Code: trailing spaces are trimmed; markdown: they are kept (two are a hard
+    // line break).
     std::string Unindent(const std::string& text, bool isCode);
 }}
 

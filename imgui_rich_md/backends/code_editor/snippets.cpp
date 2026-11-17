@@ -217,14 +217,15 @@ namespace Snippets
         size_t from = lineStart;
         if (deIndented)
         {
-            size_t firstLine = 0, start = 0, indent = 0;  // the first line that is not blank, and its indentation
+            size_t firstLine = 0, start = 0;  // the first line that is not blank
+            std::string indent;               // its indentation: spaces and tabs
             while (true)
             {
                 size_t end = code.find('\n', start);
                 std::string lineText = code.substr(start, end == std::string::npos ? std::string::npos : end - start);
                 if (lineText.find_first_not_of(" \t\r") != std::string::npos)
                 {
-                    indent = lineText.find_first_not_of(' ');
+                    indent = lineText.substr(0, lineText.find_first_not_of(" \t"));
                     break;
                 }
                 if (end == std::string::npos)
@@ -233,8 +234,8 @@ namespace Snippets
                 ++firstLine;
             }
             line = line >= firstLine ? line - firstLine : 0;
-            if (code.compare(lineStart, indent, std::string(indent, ' ')) == 0)
-                from = lineStart + indent;
+            if (code.compare(lineStart, indent.size(), indent) == 0)
+                from = lineStart + indent.size();
         }
         size_t glyphs = 0;
         for (size_t i = from; i < offset && i < code.size(); ++i)

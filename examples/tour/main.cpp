@@ -30,7 +30,7 @@ This page is a tour of what it renders, each feature with its source.
 All the usual inline styling works:
 
 - *emphasis*, **bold**, ***both***, ~~strikethrough~~, <u>underlined</u>
-- <mark>highlighted passages</mark>, for what must stand out
+- ==highlighted passages==, for what must stand out
 - inline `code`, for tokens, flags and short snippets
 
 HTML-like spans render natively too, with no callback:
@@ -38,15 +38,17 @@ HTML-like spans render natively too, with no callback:
 - keyboard shortcuts: press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, or <kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac
 - chemistry: H<sub>2</sub>O, CO<sub>2</sub>, C<sub>8</sub>H<sub>10</sub>N<sub>4</sub>O<sub>2</sub>
 - exponents: x<sup>2</sup> + y<sup>2</sup> = r<sup>2</sup>
+- <mark>highlighted</mark>, the same as `==highlighted==`
 
-For an HTML span outside this set, wire `MarkdownCallbacks::OnHtmlSpan`.
+For an HTML span outside this set, wire `MarkdownCallbacks::OnHtmlSpan`. Two options give subscripts and
+superscripts a shorter form, `H~2~O` and `x^2^`: see [Subscripts and superscripts](#subscripts-and-superscripts).
 
 <details>
 <summary>Show source</summary>
 
 ```
 *emphasis*, **bold**, ***both***, ~~strikethrough~~, <u>underlined</u>
-<mark>highlighted</mark>, inline `code`
+==highlighted==, inline `code`
 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>
 H<sub>2</sub>O, x<sup>2</sup> + y<sup>2</sup> = r<sup>2</sup>
 ```
@@ -622,6 +624,39 @@ A wikilink to [[Home]] and one with a label: [[Notes/todo|my todo list]].
 
 </details>
 
+### Subscripts and superscripts
+
+Two more options of `MarkdownOptions`, off by default, give `<sub>` and `<sup>` a shorter form, as Pandoc and
+Typora write them:
+
+- **Subscripts**: with `subscripts = true`, `~x~` is a subscript: H~2~O, CO~2~, C~8~H~10~N~4~O~2~. A
+  strikethrough then needs two tildes, `~~x~~`. Off, `~x~` strikes through, as on GitHub.
+- **Superscripts**: with `superscripts = true`, `^x^` is a superscript: E = mc^2^, the 1^st^ of July, 10^-3^ m.
+  Off by default, because math written as plain text breaks: in `x^2 + y^2`, the text from one caret to the next
+  would be raised. Formulas are safer in LaTeX, `$x^2 + y^2$`.
+
+*(Enabled in this tour. Superscripts only in a build with LaTeX: without it, the carets of the formulas would pair
+up.)*
+
+A third one, `highlight`, is on by default: `==x==` is ==highlighted==, as in Obsidian and Typora.
+
+<details>
+<summary>Show source</summary>
+
+```cpp
+RichMd::MarkdownOptions options;
+options.subscripts = true;    // ~x~ is a subscript, and a strikethrough needs ~~x~~
+options.superscripts = true;  // ^x^ is a superscript
+RichMd::CreateContext(options);
+```
+
+```
+H~2~O, CO~2~, C~8~H~10~N~4~O~2~
+E = mc^2^, the 1^st^ of July, 10^-3^ m
+```
+
+</details>
+
 ### The headings callback
 
 `callbacks.OnHeading(level, text)` is called after each heading is drawn: a table of contents of your own, the
@@ -766,8 +801,10 @@ static void Gui()
 int main(int, char**)
 {
     RichMd::MarkdownOptions options;
+    options.subscripts = true;  // H~2~O
 #ifdef IMGUI_RICHMD_WITH_LATEX
     options.withLatex = true;
+    options.superscripts = true;  // x^2^, safe only with LaTeX: otherwise the carets of the formulas pair up
 #endif
     options.callbacks.OnWikiLink = [](const std::string& target) { printf("wikilink clicked: %s\n", target.c_str()); };
     options.callbacks.OnHeading = [](int level, const std::string& text) {

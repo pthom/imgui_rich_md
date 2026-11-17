@@ -4,6 +4,10 @@
 
 - In a browser, `RenderTextAsLink()` lets the page open the link from the click's own handler, as the markdown links do (the host's `TapOpensUrl`): a new tab in Safari too. A link no handler takes goes through the application's `Platform_OpenInShellFn` when it has one.
 - Every item of an unordered list gets the dot, whatever its marker (`-`, `*` or `+`), as CommonMark and GitHub render them: `-` and `+` showed their character. By Mark Jansen ([imgui_md#2](https://github.com/pthom/imgui_md/pull/2)).
+- `==x==` is highlighted, as in Obsidian and Typora: `MarkdownOptions::highlight`, on by default.
+- Two options, off by default, give `<sub>` and `<sup>` a shorter form: `subscripts` (`H~2~O`; a strikethrough then needs `~~x~~`) and `superscripts` (`E = mc^2^`). The tour shows them. By Mark Jansen ([imgui_md#3](https://github.com/pthom/imgui_md/pull/3)).
+- md4c, the parser, follows its master of 2026-10-19, after v0.6.0. URLs with a port, a query or parentheses are whole links (`http://localhost:8080/`), and code blocks keep their tabs.
+- The code editor shows a code block indented with tabs flush left, as one indented with spaces.
 
 # v1.0.0 (2026-10-21)
 

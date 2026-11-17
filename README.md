@@ -48,7 +48,7 @@ RichMd::DestroyContext();              // before the backends shut down
 
 | | |
 |---|---|
-| Text | headings, emphasis, strikethrough, `<u>`, `<mark>`, `<kbd>`, `<sub>`/`<sup>`, links and autolinks, lists, quotes |
+| Text | headings, emphasis, strikethrough, highlight (`==x==`), `<u>`, `<mark>`, `<kbd>`, `<sub>`/`<sup>` (or `~x~`/`^x^`, two options), links and autolinks, lists, quotes |
 | Selection | select with the mouse (a double click selects a word, a triple click a paragraph), copy with Ctrl+C or Cmd+C; a right click menu: Copy, Copy as Markdown, Select All, Copy Link |
 | Tables | column alignment, resizable columns |
 | Code | inline code; code blocks with a copy button, and syntax highlighting with the code editor option |

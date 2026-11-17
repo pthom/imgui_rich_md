@@ -128,6 +128,9 @@ protected:
 	virtual void SPAN_LATEXMATH_DISPLAY(bool);
 	virtual void SPAN_WIKILINK(const MD_SPAN_WIKILINK_DETAIL*, bool);
 	virtual void SPAN_U(bool);
+	virtual void SPAN_SUPERSCRIPT(bool);
+	virtual void SPAN_SUBSCRIPT(bool);
+	virtual void SPAN_MARK(bool);
 
 	////////////////////////////////////////////////////////////////////////////
 
@@ -229,7 +232,7 @@ protected:
 	bool m_is_strikethrough = false;
 	bool m_is_em = false;
 	bool m_is_strong = false;
-	// Inline HTML span state (driven by <sub>, <sup>, <kbd>, <mark>)
+	// Inline span state (driven by <sub>, <sup>, <kbd>, <mark>, and by md4c's ~sub~, ^sup^ and ==mark==)
 	bool m_is_sub = false;
 	bool m_is_sup = false;
 	bool m_is_kbd = false;

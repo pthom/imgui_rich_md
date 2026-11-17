@@ -58,6 +58,12 @@ target_include_directories(imgui_rich_md_lists_test PRIVATE ${IMGUI_DIR}/backend
 target_link_libraries(imgui_rich_md_lists_test PRIVATE imgui_rich_md)
 add_test(NAME lists_test COMMAND imgui_rich_md_lists_test)
 
+# The spans test: ~sub~, ^sup^ and ==mark==, each with its option; the unindent of code with tabs
+add_executable(imgui_rich_md_spans_test ${CMAKE_CURRENT_LIST_DIR}/spans_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
+target_include_directories(imgui_rich_md_spans_test PRIVATE ${IMGUI_DIR}/backends)
+target_link_libraries(imgui_rich_md_spans_test PRIVATE imgui_rich_md)
+add_test(NAME spans_test COMMAND imgui_rich_md_spans_test)
+
 # The font scale test: the markdown follows a size pushed with ImGui::PushFont(NULL, size)
 add_executable(imgui_rich_md_font_scale_test ${CMAKE_CURRENT_LIST_DIR}/font_scale_test.cpp ${IMGUI_DIR}/backends/imgui_impl_null.cpp)
 target_include_directories(imgui_rich_md_font_scale_test PRIVATE ${IMGUI_DIR}/backends)
