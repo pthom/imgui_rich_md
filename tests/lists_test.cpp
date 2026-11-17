@@ -1,11 +1,13 @@
 // Lists test: the blocks of a list item, each on its own line, through Dear ImGui's null backend. A quote or a second
 // paragraph below the item's text takes a line of its own (it did not: it was drawn over the text), and the block
-// after a list keeps its gap (a quote in an item no longer leaves a "skip the next gap" behind).
+// after a list keeps its gap (a quote in an item no longer leaves a "skip the next gap" behind). The three markers of
+// an unordered list (-, * and +) draw the same dot.
 #include "imgui.h"
 #include "imgui_impl_null.h"
 #include "imgui_rich_md/rich_md.h"
 
 #include <cstdio>
+#include <vector>
 
 // The height of a render, in a window wide enough for each line
 static float RenderHeight(const char* markdown)
@@ -39,6 +41,29 @@ static bool ExpectLines(const char* what, const char* markdown, int lines, float
     return ok;
 }
 
+// The positions of the vertices a render draws: two renders that look the same give the same list
+static std::vector<float> DrawnVertices(const char* markdown)
+{
+    for (int i = 0; i < 2; ++i) {  // the first frame loads the fonts
+        ImGui_ImplNull_NewFrame();
+        ImGui::NewFrame();
+        ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(600.f, 400.f), ImGuiCond_Always);
+        ImGui::Begin("Markers", nullptr, ImGuiWindowFlags_NoTitleBar);
+        RichMd::Render(markdown);
+        ImGui::End();
+        ImGui::Render();
+        ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+    }
+    std::vector<float> positions;
+    for (const ImDrawList* list : ImGui::GetDrawData()->CmdLists)
+        for (const ImDrawVert& vertex : list->VtxBuffer) {
+            positions.push_back(vertex.pos.x);
+            positions.push_back(vertex.pos.y);
+        }
+    return positions;
+}
+
 int main(int, char**)
 {
     ImGui::CreateContext();
@@ -53,6 +78,12 @@ int main(int, char**)
                      lineHeight) && ok;
     ok = ExpectLines("the block after a list with a quote", "* An item\n  > a quote\n\nAfter the list.", 4,
                      lineHeight) && ok;
+
+    const std::vector<float> star = DrawnVertices("* An item\n* Another");
+    if (DrawnVertices("- An item\n- Another") != star || DrawnVertices("+ An item\n+ Another") != star) {
+        printf("lists test failed: the markers -, * and + of an unordered list draw differently\n");
+        ok = false;
+    }
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();

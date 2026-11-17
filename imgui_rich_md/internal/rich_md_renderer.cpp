@@ -164,15 +164,11 @@ void Renderer::BLOCK_LI(const MD_BLOCK_LI_DETAIL* d, bool e)
 			ImGui::Text("%d%c", nfo.cur_ol++, nfo.delim);
 			ImGui::SameLine();
 		} else {
-			if (nfo.delim == '*') {
-				float cx = ImGui::GetCursorPosX();
-				cx -= ImGui::GetStyle().FramePadding.x * 2;
-				ImGui::SetCursorPosX(cx);
-				ImGui::Bullet();
-			} else {
-				ImGui::Text("%c", nfo.delim);
-				ImGui::SameLine();
-			}
+			// The same dot for every unordered item, whatever its marker (-, * or +), as in CommonMark
+			float cx = ImGui::GetCursorPosX();
+			cx -= ImGui::GetStyle().FramePadding.x * 2;
+			ImGui::SetCursorPosX(cx);
+			ImGui::Bullet();
 		}
 		m_list_block_mark = ImGui::GetItemRectMin();  // the marker: the item's first block stays on its line
 
