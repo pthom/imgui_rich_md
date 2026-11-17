@@ -235,6 +235,14 @@ int main(int, char**)
     ImGui::Render();
 
     RichMd::DestroyContext();
+
+    options.superscripts = options.subscripts = options.highlight = true;
+    RichMd::CreateContext(options);
+    Frame spans = DrawFrame("Spans", "# E=mc^2^ in H~2~O is ==famous==", 600.f);
+    ok = Expect("^superscript^, ~subscript~ and ==highlight== are spans with their options",
+                spans.headings.size() == 1 && spans.headings[0].text == "E=mc2 in H2O is famous") && ok;
+    RichMd::DestroyContext();
+
     ImGui_ImplNull_Shutdown();
     ImGui::DestroyContext();
     printf(ok ? "headings test: ok\n" : "headings test: FAILED\n");
