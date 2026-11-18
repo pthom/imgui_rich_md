@@ -636,10 +636,22 @@ namespace RichMd
                     "fonts/Inconsolata-Medium.ttf and images/markdown_broken_image.png "
                     "(see imgui_bundle/imgui_bundle_assets/).";
                 float defaultFontLoadingSize = 16.f;  // size at loading time (then Fonts can be resized to any size)
+                const MarkdownFontOptions& o = mMarkdownFontOptions;
                 for (auto emphasisVariant: AllEmphasisVariants())
                 {
                     std::string fontFile = MarkdownFontOptions_FontFilename(mMarkdownFontOptions, emphasisVariant);
-                    ImFont* font = LoadMarkdownFont(fontFile, defaultFontLoadingSize);
+                    ImFont* font = nullptr;
+                    if (o.regularFont != nullptr)  // the host's family or RichMd's, never mixed
+                    {
+                        font = emphasisVariant.bold ? (emphasisVariant.italic ? o.boldItalicFont : o.boldFont)
+                                                    : (emphasisVariant.italic ? o.italicFont : o.regularFont);
+                        if (font == nullptr && emphasisVariant.bold)
+                            font = o.boldFont;
+                        if (font == nullptr)
+                            font = o.regularFont;
+                    }
+                    else
+                        font = LoadMarkdownFont(fontFile, defaultFontLoadingSize);
                     if (font == nullptr)
                     {
                         GetHostServices().Log("Markdown font file \"" + fontFile + "\" not found! " + help);
@@ -649,7 +661,9 @@ namespace RichMd
                 }
 
                 float fontSize = MarkdownFontOptions_FontSize(mMarkdownFontOptions, 0);
-                mFontCode = LoadMarkdownFont("fonts/Inconsolata-Medium.ttf", fontSize);
+                mFontCode = o.codeFont;
+                if (mFontCode == nullptr)
+                    mFontCode = LoadMarkdownFont("fonts/Inconsolata-Medium.ttf", fontSize);
                 if (mFontCode == nullptr) {
                     // SourceCodePro-Regular was the old default font for code
                     // we try to load it, to be nice with older users

@@ -201,6 +201,15 @@ namespace RichMd
         // Fonts merged into every markdown font (asset paths), e.g. an icon or a CJK font.
         // Since Dear ImGui 1.92 glyphs are loaded on demand, so merging a large font costs nothing until it is used.
         std::vector<std::string> mergeFonts;
+
+        // Optional application fonts. When regularFont is set, the four styles come from these instead of the font
+        // files (boldItalicFont falls back to boldFont, then regularFont); otherwise they are ignored. codeFont is
+        // independent. mergeFonts are not merged into these: the host merges its own (an icon font, for example).
+        ImFont* regularFont = nullptr;
+        ImFont* boldFont = nullptr;
+        ImFont* italicFont = nullptr;
+        ImFont* boldItalicFont = nullptr;
+        ImFont* codeFont = nullptr;
     };
 
 
@@ -456,8 +465,8 @@ namespace RichMd
     Style& GetStyle();
 
     // The font options of the current context. Their sizes (regularSize, headerSizeFactors, codeSizeFactor,
-    // codeBlockSizeFactor) may change at any time: the next render follows. The font files (and mergeFonts) are read
-    // once, when the fonts are loaded.
+    // codeBlockSizeFactor) may change at any time: the next render follows. The rest is read once, when the fonts
+    // are loaded.
     MarkdownFontOptions& GetFontOptions();
 
     // The markdown's fonts, at the size that a render would use now (see Render(): they follow a pushed size).
