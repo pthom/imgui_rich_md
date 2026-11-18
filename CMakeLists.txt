@@ -90,6 +90,7 @@ if(IMGUI_RICHMD_WITH_CODE_EDITOR)
         endif()
         file(GLOB _cte_sources ${IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR}/*.cpp)
         add_library(imgui_color_text_edit STATIC ${_cte_sources})
+        target_compile_features(imgui_color_text_edit PUBLIC cxx_std_17)  # ImGuiColorTextEdit needs C++17
         target_include_directories(imgui_color_text_edit PUBLIC ${IMGUI_RICHMD_COLOR_TEXT_EDIT_DIR}/..)
         target_link_libraries(imgui_color_text_edit PUBLIC imgui)
     endif()
