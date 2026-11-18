@@ -14,6 +14,7 @@
 - `RichMd::GetFontOptions()`: the font options of the current context. Their sizes (`regularSize`, `headerSizeFactors`, `codeSizeFactor`, `codeBlockSizeFactor`) may change at any time, and the next render follows: since Dear ImGui 1.92, a font renders at any size. They were fixed at `CreateContext()`. The font files are read once, when the fonts are loaded.
 - The selection's highlight over inline code, `<sub>` and `<sup>` is as tall as the line, as over the text around them. By Mark Jansen, for inline code.
 - `IMGUI_RICHMD_WITH_CODE_EDITOR` builds with RichMd as the top-level project: the fetched ImGuiColorTextEdit is compiled as C++17. It failed (`std::clamp`), since nothing set its standard.
+- `MarkdownFontOptions` takes the application's own fonts (`regularFont`, `boldFont`, ..., `codeFont`) instead of the font files. By Mark Jansen.
 
 # v1.0.0 (2026-10-21)
 
