@@ -2,6 +2,7 @@
 
 # Unreleased
 
+- The entities (`&amp;`, `&copy;`, `&#169;`, `&#x2192;`) show as their characters, in the text, the headings and their slugs, and the search; an invalid codepoint is U+FFFD, as in CommonMark.
 - In a browser, `RenderTextAsLink()` lets the page open the link from the click's own handler, as the markdown links do (the host's `TapOpensUrl`): a new tab in Safari too. A link no handler takes goes through the application's `Platform_OpenInShellFn` when it has one.
 - Every item of an unordered list gets the dot, whatever its marker (`-`, `*` or `+`), as CommonMark and GitHub render them: `-` and `+` showed their character. By Mark Jansen ([imgui_md#2](https://github.com/pthom/imgui_md/pull/2)).
 - `==x==` is highlighted, as in Obsidian and Typora: `MarkdownOptions::highlight`, on by default.

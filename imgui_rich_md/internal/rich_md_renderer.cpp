@@ -31,6 +31,10 @@
 #include "rich_md_renderer.h"
 #include "imgui_internal.h"
 
+extern "C" {
+#include "entity.h"  // md4c's table of the named entities
+}
+
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -1046,7 +1050,7 @@ float Renderer::glued_width(const char* str_end) const
 	return rest.empty() ? 0.0f : ImGui::CalcTextSize(rest.c_str()).x;
 }
 
-void Renderer::render_text(const char* str, const char* str_end)
+void Renderer::render_text(const char* str, const char* str_end, const char* source, const char* source_end)
 {
 	const ImGuiStyle& s = ImGui::GetStyle();
 	bool is_lf = false;
@@ -1064,7 +1068,7 @@ void Renderer::render_text(const char* str, const char* str_end)
 		sub_sup_y_offset = m_is_sup ? 0.0f : (base_font_size - small);
 	}
 	const float size = ImGui::GetFontSize();
-	const float glued = (m_is_image || m_is_table_header) ? 0.0f : glued_width(str_end);
+	const float glued = (m_is_image || m_is_table_header) ? 0.0f : glued_width(source_end ? source_end : str_end);
 
 	// Mid-word break avoidance: if a new span begins mid-line and the
 	// remaining width on the current line cannot fit even its first
@@ -1153,7 +1157,10 @@ void Renderer::render_text(const char* str, const char* str_end)
 		if (m_is_error)
 			ImGui::PushStyleColor(ImGuiCol_Text, resolve_color(style.errorColor, admonition_color(AdmonitionKind::Caution)));
 		ImGui::TextUnformatted(str, te);
-		record_run(str, te);
+		if (source)
+			record_run(source, source_end, std::string(str, te));
+		else
+			record_run(str, te);
 		if (m_is_error) {
 			ImGui::PopStyleColor();
 			if (!m_error_title.empty() && ImGui::IsItemHovered())
@@ -1221,6 +1228,28 @@ void Renderer::render_text(const char* str, const char* str_end)
     }
 }
 
+
+// The characters of an entity (&name; &#169; &#x2192;), in UTF-8: the entity as written when it has none
+static std::string decode_entity(const char* str, const char* str_end)
+{
+	unsigned codepoints[2] = { 0, 0 };  // a few named entities are two codepoints
+	if (str[1] == '#') {
+		const bool hex = str[2] == 'x' || str[2] == 'X';
+		codepoints[0] = (unsigned)strtoul(str + (hex ? 3 : 2), nullptr, hex ? 16 : 10);  // stops at the ';'
+		if (codepoints[0] == 0 || (codepoints[0] >= 0xD800 && codepoints[0] <= 0xDFFF) || codepoints[0] > 0x10FFFF)
+			codepoints[0] = 0xFFFD;  // as CommonMark
+	} else if (const ENTITY* entity = entity_lookup(str, str_end - str)) {
+		codepoints[0] = entity->codepoints[0];
+		codepoints[1] = entity->codepoints[1];
+	}
+	std::string decoded;
+	for (unsigned codepoint : codepoints) {
+		char utf8[5];
+		ImTextCharToUtf8(utf8, codepoint);  // an empty string for 0 and for what is not a codepoint
+		decoded += utf8;
+	}
+	return decoded.empty() ? std::string(str, str_end) : decoded;
+}
 
 bool Renderer::render_entity(const char* str, const char* str_end)
 {
@@ -1728,10 +1757,19 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 	// Even while hidden we keep processing raw HTML so </details>
 	// can pop the stack; everything else is discarded.
 	if (hidden() && type != MD_TEXT_HTML) {
+		const bool searching = document && !document->query.empty();
+		if (type == MD_TEXT_ENTITY) {
+			const std::string decoded = decode_entity(str, str_end);
+			if (m_hlevel > 0)
+				m_heading_text += decoded;
+			if (searching)
+				add_hidden_text(str, str_end, &decoded);
+			return 0;
+		}
 		if (m_hlevel > 0 && (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE))
 			m_heading_text.append(str, str_end);  // a heading inside a collapsed section is listed, with its text
 		bool searched = type == MD_TEXT_NORMAL || type == MD_TEXT_CODE || type == MD_TEXT_LATEXMATH;
-		if (searched && document && !document->query.empty())  // the search finds it, at the section's header
+		if (searched && searching)  // the search finds it, at the section's header
 			add_hidden_text(str, str_end);
 		return 0;
 	}
@@ -1785,11 +1823,14 @@ int Renderer::text(MD_TEXTTYPE type, const char* str, const char* str_end)
 		}
 		soft_break();
 		break;
-	case MD_TEXT_ENTITY:
-		if (!render_entity(str, str_end)) {
-			render_text(str, str_end);
-		};
+	case MD_TEXT_ENTITY: {
+		const std::string decoded = decode_entity(str, str_end);
+		if (m_hlevel > 0)
+			m_heading_text += decoded;
+		if (!render_entity(str, str_end))
+			render_text(decoded.data(), decoded.data() + decoded.size(), str, str_end);
 		break;
+	}
 	case MD_TEXT_HTML:
 		if (skip_html_comment(str, str_end, afterComment))
 			break;
@@ -2690,7 +2731,7 @@ void Renderer::search_fragment(int fragmentIndex)
 
 // The text of a collapsed section, gathered for the search: a space between two chunks where the source between them is
 // blank (a line break), nothing where it is markup
-void Renderer::add_hidden_text(const char* str, const char* str_end)
+void Renderer::add_hidden_text(const char* str, const char* str_end, const std::string* decoded)
 {
 	if (str < m_fragment_begin || str_end > m_fragment_end || str >= str_end)
 		return;  // not from the fragment's text
@@ -2712,6 +2753,12 @@ void Renderer::add_hidden_text(const char* str, const char* str_end)
 			hidden.text += ' ';
 			hidden.sources.push_back(previous);
 		}
+	}
+	if (decoded) {  // an entity: its characters stand for the whole of it
+		hidden.text += *decoded;
+		for (size_t i = 0; i < decoded->size(); ++i)
+			hidden.sources.push_back(i + 1 == decoded->size() ? end - 1 : begin);
+		return;
 	}
 	hidden.text.append(str, str_end);
 	for (size_t i = begin; i < end; ++i)

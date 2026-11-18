@@ -303,7 +303,8 @@ private:
 	int block(MD_BLOCKTYPE type, void* d, bool e);
 	int span(MD_SPANTYPE type, void* d, bool e);
 
-	void render_text(const char* str, const char* str_end);
+	// source, source_end: the bytes of the fragment that the text stands for, when it is not the text itself (an entity)
+	void render_text(const char* str, const char* str_end, const char* source = nullptr, const char* source_end = nullptr);
 	float glued_width(const char* str_end) const;
 	void render_latex_span(bool display);
     void render_inline_code(const char* str, const char* str_end);
@@ -435,7 +436,7 @@ private:
 		float y = 0.f, bottom = 0.f;  // its header, in the content's coordinates
 	};
 	std::vector<HiddenText> m_hidden_texts;
-	void add_hidden_text(const char* str, const char* str_end);
+	void add_hidden_text(const char* str, const char* str_end, const std::string* decoded = nullptr);
 	std::vector<std::pair<size_t, size_t>> m_code_block_sources;  // per chunk of m_code_block: its offset there, and in
 	                                                              // the fragment's text
 	size_t code_block_source(size_t offset) const;
