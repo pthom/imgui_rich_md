@@ -1,6 +1,7 @@
 // Wrap test: a paragraph of short spans (bold, kbd) drawn at many widths, through Dear ImGui's null backend. Dear
 // ImGui's log gives the drawn lines. No word is cut across two lines: the end of a line and the start of the next one
-// do not form a word of the paragraph ("right-dra" / "g").
+// do not form a word of the paragraph ("right-dra" / "g"). And an inline code span that wraps takes its lines, each one
+// below the previous one.
 #include "imgui.h"
 #include "imgui_internal.h"  // LogToBuffer, GImGui->LogBuffer
 #include "imgui_impl_null.h"
@@ -62,6 +63,23 @@ static std::vector<std::string> DrawFrame(float width)
     return lines;
 }
 
+// The height of the markdown, rendered in a window of the given width
+static float RenderHeight(const char* markdown, float width)
+{
+    ImGui_ImplNull_NewFrame();
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(0.f, 0.f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(width, 600.f), ImGuiCond_Always);
+    ImGui::Begin("Wrap", nullptr, ImGuiWindowFlags_NoTitleBar);
+    float y0 = ImGui::GetCursorPosY();
+    RichMd::Render(markdown);
+    float height = ImGui::GetCursorPosY() - y0;
+    ImGui::End();
+    ImGui::Render();
+    ImGui_ImplNullRender_RenderDrawData(ImGui::GetDrawData());
+    return height;
+}
+
 int main(int, char**)
 {
     ImGui::CreateContext();
@@ -93,6 +111,15 @@ int main(int, char**)
     printf("%d widths, %d of them wrapped\n", nbWidths, nbWrapped);
     if (nbWrapped < nbWidths / 2) {
         printf("wrap test failed: too few widths wrap the paragraph\n");
+        ok = false;
+    }
+
+    float oneLine = RenderHeight("`short code`", 300.f);
+    float wrapped =
+        RenderHeight("`an inline code span, long enough to wrap on two or three lines of a narrow window`", 300.f);
+    printf("inline code: one line %.1f, a wrapped span %.1f\n", oneLine, wrapped);
+    if (wrapped < 1.5f * oneLine) {
+        printf("wrap test failed: an inline code span that wraps is drawn over itself\n");
         ok = false;
     }
 

@@ -1189,8 +1189,12 @@ void Renderer::render_text(const char* str, const char* str_end, const char* sou
 #endif
 		}
 
-		// Restore Y so the next span sits on the original line.
-		if (adjusted_y) {
+		// Restore Y so the next span sits on the original line. Before a line break inside the span, only the
+		// offset is undone: the next line starts below this one.
+		if (adjusted_y && te < str_end) {
+			ImGui::SetCursorPosY(ImGui::GetCursorPosY() - sub_sup_y_offset);
+		}
+		else if (adjusted_y) {
 			float cur_x = ImGui::GetCursorPosX();
 			ImGui::SetCursorPos(ImVec2(cur_x, saved_y));
 		}
