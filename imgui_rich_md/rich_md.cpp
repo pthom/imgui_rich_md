@@ -482,6 +482,7 @@ namespace RichMd
     // inside it (a fenced block's markdown, a code block) see its own fonts pushed, and must not scale them again.
     static int gRenderDepth = 0;           // the renders in progress (see RenderRaw())
     static float gRenderFontScale = 1.f;   // the scale they locked
+    static bool gInCodeBlock = false;      // a code block's code is being drawn: GetCodeFont() gives its size
     static float _FontScale()
     {
         if (gRenderDepth > 0)
@@ -565,7 +566,10 @@ namespace RichMd
 
             SizedFont GetFontCode() const
             {
-                float factor = ImMax(mMarkdownFontOptions.codeSizeFactor, 0.1f);  // 0 or less: no font size at all
+                float factor = mMarkdownFontOptions.codeSizeFactor;
+                if (gInCodeBlock && mMarkdownFontOptions.codeBlockSizeFactor >= 0.f)  // a code block, its own factor
+                    factor = mMarkdownFontOptions.codeBlockSizeFactor;
+                factor = ImMax(factor, 0.1f);  // 0 or less: no font size at all
                 return {mFontCode, mMarkdownFontOptions.regularSize * factor * _FontScale()};
             }
 
@@ -875,6 +879,9 @@ namespace RichMd
             if (it != fenced.end())
                 it->second(code);  // a diagram, a widget: its source is not shown, nor searched
             else {
+                // The block's renderer (plain, the code editor, or the host's) gets the block's size from GetCodeFont()
+                const bool wasInCodeBlock = gInCodeBlock;
+                gInCodeBlock = true;
                 // In a document's search: the plain code block and the code editor draw its matches; another
                 // host's renderer does not, and they are at the top of the block
                 std::vector<CodeBlockMatch> matches = code_block_matches(code);
@@ -893,6 +900,7 @@ namespace RichMd
                     rects = _RenderCodeBlockPlain(code, matches);
                 if (!matches.empty())
                     add_code_block_matches(code, matches, rects, top);
+                gInCodeBlock = wasInCodeBlock;
             }
             ImGui::PopID();
         }

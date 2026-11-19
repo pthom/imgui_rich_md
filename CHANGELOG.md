@@ -10,6 +10,7 @@
 - md4c, the parser, follows its master of 2026-10-19, after v0.6.0. URLs with a port, a query or parentheses are whole links (`http://localhost:8080/`), and code blocks keep their tabs.
 - The code editor shows a code block indented with tabs flush left, as one indented with spaces.
 - `MarkdownFontOptions::codeSizeFactor` sizes the code font relative to `regularSize` (1 by default, kept above 0); inline code sits on the baseline of the text around it. By Mark Jansen.
+- `MarkdownFontOptions::codeBlockSizeFactor` sizes the code blocks apart from inline code: e.g. inline code at 0.85, to blend into the text, and the blocks at 1. Negative by default: the same as `codeSizeFactor`. `GetCodeFont()`, called while a block is drawn, gives the block's size.
 - `IMGUI_RICHMD_WITH_CODE_EDITOR` builds with RichMd as the top-level project: the fetched ImGuiColorTextEdit is compiled as C++17. It failed (`std::clamp`), since nothing set its standard.
 
 # v1.0.0 (2026-10-21)
