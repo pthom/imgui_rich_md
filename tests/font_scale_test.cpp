@@ -2,6 +2,7 @@
 // size, through Dear ImGui's null backend. Its fonts (GetFont, GetCodeFont) and the height of a rendered paragraph
 // scale with the pushed size; a render inside a render (a fenced block's markdown) keeps the outer one's scale.
 // codeSizeFactor sizes the code font, codeBlockSizeFactor the code blocks' (a negative one: as codeSizeFactor).
+// GetFontOptions() changes the sizes between two frames.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs
 #include "imgui_impl_null.h"
@@ -169,6 +170,19 @@ int main(int, char**)
                 Near(BlockCodeFontSize(), normal.codeFontSize * 0.6f)) && ok;
     RichMd::DestroyContext();
     RichMd::SetHostServices(RichMd::HostServices());
+
+    RichMd::CreateContext(RichMd::MarkdownOptions());
+    DrawFrame(1.f);
+    RichMd::GetFontOptions().regularSize *= 1.5f;
+    RichMd::GetFontOptions().codeSizeFactor = 0.5f;
+    Measures live = DrawFrame(1.f);
+    printf("GetFontOptions(), regularSize x 1.5 and codeSizeFactor 0.5: font %.1f, code font %.1f\n", live.fontSize,
+           live.codeFontSize);
+    ok = Expect("a regularSize changed at run time applies to the next frame",
+                Near(live.fontSize, normal.fontSize * 1.5f)) && ok;
+    ok = Expect("a codeSizeFactor changed at run time applies to the next frame",
+                Near(live.codeFontSize, normal.codeFontSize * 1.5f * 0.5f)) && ok;
+    RichMd::DestroyContext();
 
     ImGui_ImplNull_Shutdown();
     ImGui::DestroyContext();

@@ -661,7 +661,7 @@ namespace RichMd
                 }
             }
 
-            MarkdownFontOptions mMarkdownFontOptions;
+            const MarkdownFontOptions& mMarkdownFontOptions;  // the context's: its sizes may change at any time
             std::vector<std::pair<MarkdownEmphasis, ImFont*>> mFonts;
             ImFont* mFontCode;
             mutable std::set<std::string> mMissingMergeFonts;  // each one is logged once, not once per markdown font
@@ -2422,6 +2422,12 @@ namespace RichMd
     {
         IM_ASSERT(_Renderer() && "RichMd: call InitializeMarkdown first");
         return _Renderer()->style;
+    }
+
+    MarkdownFontOptions& GetFontOptions()
+    {
+        IM_ASSERT(gCurrentContext && "RichMd: call CreateContext first");
+        return gCurrentContext->options.fontOptions;
     }
 
     std::function<void(void)> GetFontLoaderFunction()

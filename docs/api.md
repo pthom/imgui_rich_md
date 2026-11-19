@@ -471,6 +471,11 @@ struct Style
 // The colors and spacing of the current context. C++ only.
 Style& GetStyle();
 
+// The font options of the current context. Their sizes (regularSize, headerSizeFactors, codeSizeFactor,
+// codeBlockSizeFactor) may change at any time: the next render follows. The font files (and mergeFonts) are read
+// once, when the fonts are loaded.
+MarkdownFontOptions& GetFontOptions();
+
 // The markdown's fonts, at the size that a render would use now (see Render(): they follow a pushed size).
 // GetCodeFont(), called while a code block is drawn (e.g. from a HostServices::RenderCodeBlock), gives the
 // block's size (codeBlockSizeFactor)
