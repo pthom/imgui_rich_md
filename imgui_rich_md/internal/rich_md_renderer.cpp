@@ -1054,6 +1054,8 @@ void Renderer::render_text(const char* str, const char* str_end, const char* sou
 {
 	const ImGuiStyle& s = ImGui::GetStyle();
 	bool is_lf = false;
+	// The line's height (inline code: the text's around it), for the selection of a run drawn smaller or off the line
+	const float line_height = m_code_text_height > 0.0f ? m_code_text_height : ImGui::GetTextLineHeight();
 
 	// <sub>/<sup>: render with a smaller font, offset vertically within
 	// the current line so the baseline roughly matches GitHub's look.
@@ -1136,6 +1138,8 @@ void Renderer::render_text(const char* str, const char* str_end, const char* sou
 			}
 		}
 
+		const float line_top = ImGui::GetCursorScreenPos().y;
+
 		// Vertical offset for sub/sup while keeping the surrounding
 		// line's Y intact (restored after the text is drawn).
 		float saved_y = 0.0f;
@@ -1158,10 +1162,16 @@ void Renderer::render_text(const char* str, const char* str_end, const char* sou
 		if (m_is_error)
 			ImGui::PushStyleColor(ImGuiCol_Text, resolve_color(style.errorColor, admonition_color(AdmonitionKind::Caution)));
 		ImGui::TextUnformatted(str, te);
+		// A run drawn smaller or off the line (sub, sup, inline code) is selected over the line's band
+		if (pushed_small_font || m_code_text_height > 0.0f) {
+			m_run_line_top = line_top;
+			m_run_line_height = line_height;
+		}
 		if (source)
 			record_run(source, source_end, std::string(str, te));
 		else
 			record_run(str, te);
+		m_run_line_height = 0.0f;
 		if (m_is_error) {
 			ImGui::PopStyleColor();
 			if (!m_error_title.empty() && ImGui::IsItemHovered())
@@ -2320,10 +2330,11 @@ void Renderer::record_run(const char* str, const char* str_end, const std::strin
 	TextRun run;
 	run.min = ImGui::GetItemRectMin();
 	run.max = ImGui::GetItemRectMax();
-	if (m_code_text_height > 0.0f) {
-		const float top = run.min.y - m_code_y_offset;
-		run.min.y = ImMin(run.min.y, top);
-		run.max.y = ImMax(run.max.y, top + m_code_text_height);
+	if (m_run_line_height > 0.0f) {  // the line's band; a run taller than the line (large code) keeps its height
+		const float top = m_run_line_top, bottom = m_run_line_top + m_run_line_height;
+		const bool fits = run.max.y - run.min.y <= m_run_line_height;
+		run.min.y = fits ? top : ImMin(run.min.y, top);
+		run.max.y = fits ? bottom : ImMax(run.max.y, bottom);
 	}
 	run.font = ImGui::GetFont();
 	run.fontSize = ImGui::GetFontSize();

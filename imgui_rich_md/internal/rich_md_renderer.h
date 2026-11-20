@@ -278,6 +278,8 @@ protected:
     bool m_is_code_block = false;
 	float m_code_y_offset = 0.0f;
 	float m_code_text_height = 0.0f;
+	float m_run_line_top = 0.0f;     // record_run: the run spans the line, from this top (screen coordinates)...
+	float m_run_line_height = 0.0f;  // ... with this height (0: the run's own rectangle)
 	bool m_is_latex_inline = false; // LaTeX math state (populated when EnableLatex() has been called)
 	bool m_is_latex_display = false;
 	std::string m_latex_buffer;
