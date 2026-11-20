@@ -1736,11 +1736,14 @@ void Renderer::render_inline_code(const char *str, const char *str_end)
 {
     // Shares the baseline of the text around it, whatever the size of the code font
     const float text_ascent = ImGui::GetFontBaked()->Ascent;
+    const float text_height = ImGui::GetTextLineHeight();
     m_is_code = true;
     push_code_style();
     m_code_y_offset = text_ascent - ImGui::GetFontBaked()->Ascent;
+    m_code_text_height = text_height;
     render_text(str, str_end);
     m_code_y_offset = 0.0f;
+    m_code_text_height = 0.0f;
     pop_code_style();
     m_is_code = false;
 }
@@ -2317,6 +2320,11 @@ void Renderer::record_run(const char* str, const char* str_end, const std::strin
 	TextRun run;
 	run.min = ImGui::GetItemRectMin();
 	run.max = ImGui::GetItemRectMax();
+	if (m_code_text_height > 0.0f) {
+		const float top = run.min.y - m_code_y_offset;
+		run.min.y = ImMin(run.min.y, top);
+		run.max.y = ImMax(run.max.y, top + m_code_text_height);
+	}
 	run.font = ImGui::GetFont();
 	run.fontSize = ImGui::GetFontSize();
 	run.block = m_block_number;
