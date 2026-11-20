@@ -2,7 +2,7 @@
 // size, through Dear ImGui's null backend. Its fonts (GetFont, GetCodeFont) and the height of a rendered paragraph
 // scale with the pushed size; a render inside a render (a fenced block's markdown) keeps the outer one's scale.
 // codeSizeFactor sizes the code font, codeBlockSizeFactor the code blocks' (a negative one: as codeSizeFactor).
-// GetFontOptions() changes the sizes between two frames.
+// GetFontOptions() changes the sizes between two frames. The application's own fonts are used when set.
 #include "imgui.h"
 #include "imgui_internal.h"  // ImAbs
 #include "imgui_impl_null.h"
@@ -125,6 +125,27 @@ int main(int, char**)
     ok = Expect("a render inside a render keeps the outer scale (no push)", Near(normal.nestedFontSize, normal.fontSize))
          && ok;
     ok = Expect("a render inside a render keeps the outer scale (half)", Near(half.nestedFontSize, half.fontSize)) && ok;
+
+    RichMd::Context* fileFonts = RichMd::GetCurrentContext();
+    ImFont* hostFont = ImGui::GetIO().Fonts->AddFontDefault();
+    RichMd::MarkdownOptions hostOptions;
+    hostOptions.fontOptions.boldFont = hostFont;
+    hostOptions.fontOptions.codeFont = hostFont;
+    RichMd::Context* hostFonts = RichMd::CreateContext(hostOptions);
+    RichMd::SetCurrentContext(hostFonts);
+    DrawFrame(1.f);
+    ok = Expect("the host's bold font", RichMd::GetFont(RichMd::MarkdownFontSpec(false, true)).font == hostFont) && ok;
+    ok = Expect("the host's code font", RichMd::GetCodeFont().font == hostFont) && ok;
+    ok = Expect("no host regular font: the file's", RichMd::GetFont(RichMd::MarkdownFontSpec()).font != hostFont) && ok;
+    RichMd::DestroyContext(hostFonts);
+    hostOptions.fontOptions = RichMd::MarkdownFontOptions();
+    hostOptions.fontOptions.regularFont = hostFont;
+    hostFonts = RichMd::CreateContext(hostOptions);
+    RichMd::SetCurrentContext(hostFonts);
+    DrawFrame(1.f);
+    ok = Expect("no host italic font: the host's regular", RichMd::GetFont(RichMd::MarkdownFontSpec(true, false)).font == hostFont) && ok;
+    RichMd::DestroyContext(hostFonts);
+    RichMd::SetCurrentContext(fileFonts);
 
     RichMd::DestroyContext();
 
