@@ -192,6 +192,12 @@ namespace RichMd
         // Multipliers for header sizes, from h1 to h6
         float headerSizeFactors[6] = { 1.42f, 1.33f, 1.24f, 1.15f, 1.10f, 1.05f };
 
+        // Multiplier for the code font size, relative to regularSize (0.1 at least): inline code, and the code blocks
+        // when codeBlockSizeFactor is negative
+        float codeSizeFactor = 1.f;
+        // Multiplier for the font size of the code blocks, relative to regularSize. Negative: codeSizeFactor
+        float codeBlockSizeFactor = -1.f;
+
         // Fonts merged into every markdown font (asset paths), e.g. an icon or a CJK font.
         // Since Dear ImGui 1.92 glyphs are loaded on demand, so merging a large font costs nothing until it is used.
         std::vector<std::string> mergeFonts;
@@ -449,7 +455,14 @@ namespace RichMd
     // The colors and spacing of the current context. C++ only.
     Style& GetStyle();
 
-    // The markdown's fonts, at the size that a render would use now (see Render(): they follow a pushed size)
+    // The font options of the current context. Their sizes (regularSize, headerSizeFactors, codeSizeFactor,
+    // codeBlockSizeFactor) may change at any time: the next render follows. The font files (and mergeFonts) are read
+    // once, when the fonts are loaded.
+    MarkdownFontOptions& GetFontOptions();
+
+    // The markdown's fonts, at the size that a render would use now (see Render(): they follow a pushed size).
+    // GetCodeFont(), called while a code block is drawn (e.g. from a HostServices::RenderCodeBlock), gives the
+    // block's size (codeBlockSizeFactor)
     SizedFont GetCodeFont();
 
     struct MarkdownFontSpec

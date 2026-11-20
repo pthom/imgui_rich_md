@@ -416,6 +416,44 @@ static bool CheckPressInSelection()
     return Expect("a drag from inside", gClipboard, " worl") && ok;
 }
 
+// The highlight over a line with a subscript, a superscript and inline code, drawn smaller or off the line: its
+// rectangles share the line's top and bottom
+static bool CheckHighlightHeights()
+{
+    const char* md = "H<sub>2</sub>O, mc<sup>2</sup>, `code` and H<sub>`2`</sub>O\n";
+    ImVec4& selectedBg = ImGui::GetStyle().Colors[ImGuiCol_TextSelectedBg];
+    const ImVec4 savedBg = selectedBg;
+    selectedBg = ImVec4(0.1f, 0.2f, 0.3f, 1.f);  // a color no other drawing uses
+    Frame f = DrawFrame(md, 600.f);
+    float y = f.textOrigin.y + LineHeight() * 0.5f;
+    gClipboard.clear();
+    DragAndCopy(md, 600.f, ImVec2(f.textOrigin.x + 1.f, y), ImVec2(f.textOrigin.x + 590.f, y));
+    bool ok = Expect("a line with a subscript, a superscript and inline code", gClipboard, "H2O, mc2, code and H2O");
+
+    const ImU32 color = ImGui::GetColorU32(ImGuiCol_TextSelectedBg);
+    float minTop = FLT_MAX, maxTop = -FLT_MAX, minBottom = FLT_MAX, maxBottom = -FLT_MAX;
+    int rects = 0;
+    for (const ImDrawList* list : ImGui::GetDrawData()->CmdLists)
+        for (int i = 0; i + 3 < list->VtxBuffer.Size; ++i) {
+            const ImDrawVert* v = &list->VtxBuffer[i];
+            if (v[0].col != color || v[1].col != color || v[2].col != color || v[3].col != color)
+                continue;
+            float top = ImMin(v[0].pos.y, v[2].pos.y), bottom = ImMax(v[0].pos.y, v[2].pos.y);
+            minTop = ImMin(minTop, top), maxTop = ImMax(maxTop, top);
+            minBottom = ImMin(minBottom, bottom), maxBottom = ImMax(maxBottom, bottom);
+            ++rects;
+            i += 3;  // a rectangle: 4 vertices
+        }
+    selectedBg = savedBg;
+    printf("highlight over a line: %d rectangles, top %.1f to %.1f, bottom %.1f to %.1f\n", rects, minTop, maxTop,
+           minBottom, maxBottom);
+    if (rects < 5 || maxTop - minTop > 0.5f || maxBottom - minBottom > 0.5f) {
+        printf("selection test failed: the highlight's rectangles do not share the line's top and bottom\n");
+        ok = false;
+    }
+    return ok;
+}
+
 int main(int, char**)
 {
     ImGui::CreateContext();
@@ -439,6 +477,7 @@ int main(int, char**)
     ok = CheckClicksAndSelectAll() && ok;
     ok = CheckMenu() && ok;
     ok = CheckPressInSelection() && ok;
+    ok = CheckHighlightHeights() && ok;
 
     RichMd::DestroyContext();
     ImGui_ImplNull_Shutdown();
