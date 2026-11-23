@@ -1,5 +1,6 @@
 # The examples: stock Dear ImGui (fetched, v1.93.0) + GLFW + OpenGL3, no other framework, the assets embedded.
-# imgui_kit (fetched) gives them a phone's gestures, the wheel session, and the phone's keyboard in a browser.
+# imgui_touch (fetched) gives them a phone's gestures and the phone's keyboard in a browser; imgui_kit (fetched) the
+# wheel session.
 #   cmake -S examples -B build && cmake --build build   (or IMGUI_RICHMD_BUILD_EXAMPLES=ON at the root)
 #   For the web: emcmake cmake -S examples -B build_web && cmake --build build_web   (one .html page per example)
 cmake_minimum_required(VERSION 3.20)
@@ -38,10 +39,16 @@ if(NOT TARGET imgui)
     target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32)  # characters above U+FFFF, e.g. most emoji (fonts)
     target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
 endif()
-if(NOT TARGET imgui_kit)  # the touch layer, the wheel session, the phone's keyboard (https://github.com/pthom/imgui_kit)
+if(NOT TARGET imgui_touch)  # the touch layer, the phone's keyboard (https://github.com/pthom/imgui_touch)
+    include(FetchContent)
+    FetchContent_Declare(imgui_touch GIT_REPOSITORY https://github.com/pthom/imgui_touch.git
+        GIT_TAG c6a638cbbaf682bee98fb7e837ec9ec2f8cebf50)
+    FetchContent_MakeAvailable(imgui_touch)
+endif()
+if(NOT TARGET imgui_kit)  # the wheel session (https://github.com/pthom/imgui_kit)
     include(FetchContent)
     FetchContent_Declare(imgui_kit GIT_REPOSITORY https://github.com/pthom/imgui_kit.git
-        GIT_TAG 7c81c9b061f7c1ff58767dbeee8dd83731829339)
+        GIT_TAG 309d5f4cdbf4dd88281e8f0cfad74313cbd29e71)
     FetchContent_MakeAvailable(imgui_kit)
 endif()
 if(EMSCRIPTEN AND IMGUI_RICHMD_WITH_LATEX AND NOT TARGET freetype)
@@ -90,7 +97,7 @@ foreach(example ${_examples})
     add_executable(imgui_rich_md_${example} ${CMAKE_CURRENT_LIST_DIR}/${example}/main.cpp)
     target_include_directories(imgui_rich_md_${example} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
     target_compile_options(imgui_rich_md_${example} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)  # UTF-8 sources
-    target_link_libraries(imgui_rich_md_${example} PRIVATE imgui_rich_md imgui_kit glfw OpenGL::GL)
+    target_link_libraries(imgui_rich_md_${example} PRIVATE imgui_rich_md imgui_touch imgui_kit glfw OpenGL::GL)
     if(EMSCRIPTEN)  # a page per example: <example>.html (+ .js, .wasm)
         set_target_properties(imgui_rich_md_${example} PROPERTIES OUTPUT_NAME ${example}
             LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/web/shell.html)
@@ -112,6 +119,6 @@ endif()
 if(NOT EMSCRIPTEN)
     add_executable(imgui_rich_md_mermaid_review ${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid/mermaid_review.cpp)
     target_include_directories(imgui_rich_md_mermaid_review PRIVATE ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid)
-    target_link_libraries(imgui_rich_md_mermaid_review PRIVATE imgui_rich_md imgui_kit glfw OpenGL::GL)
+    target_link_libraries(imgui_rich_md_mermaid_review PRIVATE imgui_rich_md imgui_touch imgui_kit glfw OpenGL::GL)
     target_compile_definitions(imgui_rich_md_mermaid_review PRIVATE MERMAID_CORPUS_DIR="${CMAKE_CURRENT_LIST_DIR}/../tests/mermaid/corpus")
 endif()

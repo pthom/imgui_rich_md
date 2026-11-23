@@ -1,12 +1,14 @@
-// The window of the examples: Dear ImGui with GLFW + OpenGL3, imgui_rich_md, and imgui_kit's touch layer (examples/minimal
-// shows the same setup in full, without the kit). The gui function draws inside an ImGui window that fills the application window.
+// The window of the examples: Dear ImGui with GLFW + OpenGL3, imgui_rich_md, imgui_touch's touch layer and imgui_kit's
+// wheel session (examples/minimal shows the same setup in full, without them). The gui function draws inside an ImGui
+// window that fills the application window.
 // IMGUI_RICHMD_SHOT=<file.ppm> in the environment: writes a screenshot after 60 frames and exits.
 #pragma once
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_rich_md/rich_md.h"
-#include "imgui_kit.h"  // a phone's gestures, the wheel session, the phone's keyboard
+#include "imgui_touch.h"  // a phone's gestures, the phone's keyboard
+#include "imgui_kit.h"    // the wheel session
 #if defined(__EMSCRIPTEN__)
 #include <GLES2/gl2.h>                 // WebGL, through the OpenGL ES 2 API
 #include "emscripten_mainloop_stub.h"  // from Dear ImGui's examples/libs/emscripten
